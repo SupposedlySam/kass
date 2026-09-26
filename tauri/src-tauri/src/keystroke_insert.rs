@@ -58,10 +58,15 @@ pub const HELD_MODIFIER_MASK: u64 =
 
 /// Pause between keystrokes. Posting as fast as possible has been reported
 /// to drop or reorder characters in some apps (Electron in particular) when
-/// events outrun the app's event loop. 2 ms keeps a 1000-character text
-/// (50 keystrokes) near 100 ms, well under the clipboard path's restore
-/// wait, while giving the app time to drain each event.
+/// events outrun the app's event loop.
 pub const KEYSTROKE_PACING: Duration = Duration::from_millis(2);
+
+/// Most keystrokes worth typing. Measured in TextEdit (`insert_bench.rs`):
+/// typed text lands in about 6 ms plus 2.7 ms per keystroke, and a paste in
+/// about 18 ms whatever the length. Past 4 keystrokes (about 80 characters
+/// on one line) the paste is faster, so typing declines and the chain moves
+/// on.
+pub const MAX_KEYSTROKES: usize = 4;
 
 /// How long to wait for held modifiers to be released, and how often to
 /// look. Past the timeout the method declines instead of typing.
@@ -343,6 +348,7 @@ pub enum Decline {
     NonAsciiInputSource,
     UnknownInputSource,
     ModifiersHeld,
+    SlowerThanPaste(usize),
     NoEventSource(String),
 }
 
@@ -362,6 +368,7 @@ impl fmt::Display for Decline {
             Decline::NonAsciiInputSource => write!(f, "input method active"),
             Decline::UnknownInputSource => write!(f, "input source unknown"),
             Decline::ModifiersHeld => write!(f, "modifier keys still held"),
+            Decline::SlowerThanPaste(n) => write!(f, "{n} keystrokes is slower than a paste"),
             Decline::NoEventSource(e) => write!(f, "no event source: {e}"),
         }
     }
@@ -395,6 +402,15 @@ pub fn check_request(req: &Request) -> Result<(), Decline> {
     check_text(req.text, req.bundle_id)?;
     if req.role == Some(SINGLE_LINE_ROLE) && req.text.contains('\n') {
         return Err(Decline::MultilineInSingleLineField);
+    }
+    Ok(())
+}
+
+/// Text needing more than [`MAX_KEYSTROKES`] is faster to paste.
+pub fn check_length(text: &str) -> Result<(), Decline> {
+    let keystrokes = plan(text).map_or(0, |p| p.len());
+    if keystrokes > MAX_KEYSTROKES {
+        return Err(Decline::SlowerThanPaste(keystrokes));
     }
     Ok(())
 }
@@ -538,12 +554,61 @@ impl Inserter for Keystrokes {
 
     fn attempt(&self, req: &Request) -> Attempt {
         // The text checks need no OS state; skip creating a source for them.
-        if let Err(d) = check_request(req) {
+        if let Err(d) = check_request(req).and_then(|()| check_length(req.text)) {
             return Attempt::Declined(d.to_string());
         }
         match live::LiveTarget::new() {
             Ok(target) => type_text(&target, req),
             Err(e) => Attempt::Declined(Decline::NoEventSource(e).to_string()),
+        }
+    }
+}
+
+/// For manual runs outside the app: the input-source cache is filled on the
+/// app's main thread, which a test does not run, so these assume a plain
+/// keyboard layout.
+#[cfg(test)]
+pub(crate) mod assume_ascii {
+    use super::*;
+
+    pub struct AssumeAscii(pub live::LiveTarget);
+
+    impl KeystrokeTarget for AssumeAscii {
+        fn environment(&self) -> Environment {
+            Environment {
+                ascii_capable: Some(true),
+                ..self.0.environment()
+            }
+        }
+        fn modifier_flags(&self) -> u64 {
+            self.0.modifier_flags()
+        }
+        fn post(&self, event: &KeyEvent) -> Result<(), String> {
+            self.0.post(event)
+        }
+        fn now(&self) -> Instant {
+            self.0.now()
+        }
+        fn sleep(&self, d: Duration) {
+            self.0.sleep(d)
+        }
+    }
+
+    /// [`Keystrokes`] with the ASCII input-source check assumed to pass.
+    pub struct KeystrokesAssumingAscii;
+
+    impl Inserter for KeystrokesAssumingAscii {
+        fn method(&self) -> Method {
+            Method::Keystrokes
+        }
+        fn attempt(&self, req: &Request) -> Attempt {
+            if let Err(d) = check_request(req) {
+                return Attempt::Declined(d.to_string());
+            }
+            match live::LiveTarget::new() {
+                Ok(target) => type_text(&AssumeAscii(target), req),
+                Err(e) => Attempt::Declined(e),
+            }
         }
     }
 }
@@ -1079,6 +1144,20 @@ mod tests {
     }
 
     #[test]
+    fn text_that_is_faster_to_paste_is_not_typed() {
+        let four = "a".repeat(20 * MAX_KEYSTROKES);
+        assert_eq!(check_length(&four), Ok(()));
+        let five = "a".repeat(20 * MAX_KEYSTROKES + 1);
+        assert_eq!(
+            check_length(&five),
+            Err(Decline::SlowerThanPaste(MAX_KEYSTROKES + 1))
+        );
+        // Each newline is a keystroke of its own.
+        assert_eq!(check_length("a\nb"), Ok(()));
+        assert_eq!(check_length("a\nb\nc"), Err(Decline::SlowerThanPaste(5)));
+    }
+
+    #[test]
     fn multiline_text_is_never_typed_into_a_single_line_field() {
         let field = |role, text| Request {
             role: Some(role),
@@ -1333,28 +1412,6 @@ mod tests {
         /// The live target, but with the input source assumed ASCII: the
         /// cache behind it is filled on the app's main thread, which a test
         /// does not run. Use a plain keyboard layout.
-        struct AssumeAscii(live::LiveTarget);
-        impl KeystrokeTarget for AssumeAscii {
-            fn environment(&self) -> Environment {
-                Environment {
-                    ascii_capable: Some(true),
-                    ..self.0.environment()
-                }
-            }
-            fn modifier_flags(&self) -> u64 {
-                self.0.modifier_flags()
-            }
-            fn post(&self, event: &KeyEvent) -> Result<(), String> {
-                self.0.post(event)
-            }
-            fn now(&self) -> Instant {
-                self.0.now()
-            }
-            fn sleep(&self, d: Duration) {
-                self.0.sleep(d)
-            }
-        }
-
         std::thread::sleep(Duration::from_secs(3));
         let pid = crate::focus_capture::frontmost_pid().expect("frontmost app");
         let r = Request {
@@ -1363,7 +1420,7 @@ mod tests {
             role: None,
             text: "Keystroke test 😀 naïve\nsecond line",
         };
-        let target = AssumeAscii(live::LiveTarget::new().expect("event source"));
+        let target = assume_ascii::AssumeAscii(live::LiveTarget::new().expect("event source"));
         println!("{:?}", type_text(&target, &r));
     }
 }

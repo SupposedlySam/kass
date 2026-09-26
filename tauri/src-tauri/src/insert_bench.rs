@@ -25,20 +25,25 @@ time to update the help articles and gives us a clean baseline for the retention
 Let me know if that works for you and I will tell the rest of the team this afternoon.";
 const MULTILINE: &str = "Thanks for the notes.\nI will send the revised draft tonight.\nTalk soon";
 
+/// Open a blank plain-text document in TextEdit (no Automation permission
+/// needed) and return TextEdit's pid.
 fn textedit_pid() -> i32 {
-    let script = r#"tell application "TextEdit"
-        activate
-        make new document
-    end tell
-    delay 0.5
-    tell application "System Events" to get unix id of process "TextEdit""#;
-    let out = Command::new("osascript")
-        .args(["-e", script])
+    let doc = std::env::temp_dir().join("voicebox-insert-bench.txt");
+    std::fs::write(&doc, "").expect("bench document");
+    Command::new("open")
+        .args(["-a", "TextEdit"])
+        .arg(&doc)
+        .status()
+        .expect("open TextEdit");
+    std::thread::sleep(Duration::from_secs(2));
+    let out = Command::new("pgrep")
+        .args(["-x", "TextEdit"])
         .output()
-        .expect("osascript");
+        .expect("pgrep");
     String::from_utf8_lossy(&out.stdout)
-        .trim()
-        .parse()
+        .lines()
+        .next()
+        .and_then(|l| l.trim().parse().ok())
         .expect("TextEdit pid")
 }
 
@@ -131,7 +136,8 @@ fn insert_bench() {
     );
     let pid = textedit_pid();
     let ax = crate::text_insert::Accessibility;
-    let keys = crate::keystroke_insert::Keystrokes::new();
+    // The real step, minus the input-source check (see `assume_ascii`).
+    let keys = crate::keystroke_insert::assume_ascii::KeystrokesAssumingAscii;
     let im = crate::input_method::InputMethod::new();
     let paste = crate::clipboard::Paste::new(None);
 
