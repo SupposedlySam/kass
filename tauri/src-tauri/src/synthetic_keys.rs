@@ -19,8 +19,18 @@
 //! `kVK_ANSI_V` (the QWERTY V position) would fire Cmd+. on Dvorak. The
 //! resolved keycode is read once per paste from an atomic; the cache is
 //! primed at startup and refreshed on layout change.
+//!
+//! [`KeySource`] posts the text-carrying key events of the keystroke
+//! inserter (`crate::keystroke_insert`). Every event it posts is tagged with
+//! [`SYNTHETIC_EVENT_TAG`] in `kCGEventSourceUserData`, so an event tap can
+//! tell Voicebox's typing apart from the user's.
 
 use std::ffi::c_void;
+
+/// Value written to `kCGEventSourceUserData` (field 42) on every event
+/// [`KeySource`] posts: ASCII "Voicebox". An event tap that reads the field
+/// can skip Voicebox's own typing.
+pub const SYNTHETIC_EVENT_TAG: i64 = 0x566F_6963_6562_6F78;
 
 mod ffi {
     use std::ffi::c_void;
@@ -41,6 +51,10 @@ mod ffi {
     pub type CGKeyCode = u16;
     pub type CGEventFlags = u64;
     pub type CGEventSourceStateID = i32;
+    pub type CGEventField = u32;
+
+    /// `kCGEventSourceUserData`.
+    pub const K_CG_EVENT_SOURCE_USER_DATA: CGEventField = 42;
 
     /// `kCGHIDEventTap` — posted events enter at the HID level so every
     /// downstream tap (including the target app) sees them exactly as if the
@@ -67,6 +81,14 @@ mod ffi {
         ) -> CGEventRef;
         pub fn CGEventSetFlags(event: CGEventRef, flags: CGEventFlags);
         pub fn CGEventPost(tap: CGEventTapLocation, event: CGEventRef);
+        pub fn CGEventKeyboardSetUnicodeString(
+            event: CGEventRef,
+            length: std::ffi::c_ulong,
+            string: *const u16,
+        );
+        pub fn CGEventSetIntegerValueField(event: CGEventRef, field: CGEventField, value: i64);
+        pub fn CGEventSourceSetUserData(source: CGEventSourceRef, user_data: i64);
+        pub fn CGEventSourceFlagsState(state_id: CGEventSourceStateID) -> CGEventFlags;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -139,5 +161,71 @@ pub fn send_paste() -> Result<(), String> {
 
         drop(guards);
         Ok(())
+    }
+}
+
+/// Modifier state of the keyboard hardware right now (`CGEventFlags` bits),
+/// independent of any app's view of it.
+pub fn hardware_modifier_flags() -> u64 {
+    unsafe { ffi::CGEventSourceFlagsState(ffi::K_CG_EVENT_SOURCE_STATE_HID_SYSTEM_STATE) }
+}
+
+/// A dedicated event source for typed text. Its events carry
+/// [`SYNTHETIC_EVENT_TAG`].
+pub struct KeySource(ffi::CGEventSourceRef);
+
+impl KeySource {
+    pub fn new() -> Result<Self, String> {
+        use ffi::*;
+        unsafe {
+            // HID system state, like `send_paste`: posted events look like
+            // hardware to the target app.
+            let source = CGEventSourceCreate(K_CG_EVENT_SOURCE_STATE_HID_SYSTEM_STATE);
+            if source.is_null() {
+                return Err("CGEventSourceCreate returned null".into());
+            }
+            CGEventSourceSetUserData(source, SYNTHETIC_EVENT_TAG);
+            Ok(Self(source))
+        }
+    }
+
+    /// Create and post one key event at the HID tap. `flags` is always set,
+    /// even when 0, so held-modifier state cannot leak into the event.
+    /// `text`, when given, replaces what the keycode would have typed; macOS
+    /// honours at most 20 UTF-16 units per event.
+    pub fn post(
+        &self,
+        keycode: u16,
+        down: bool,
+        flags: u64,
+        text: Option<&[u16]>,
+    ) -> Result<(), String> {
+        use ffi::*;
+        unsafe {
+            let event = CGEventCreateKeyboardEvent(self.0, keycode, down);
+            if event.is_null() {
+                return Err(format!(
+                    "CGEventCreateKeyboardEvent(key={keycode}, down={down}) returned null"
+                ));
+            }
+            let _guard = scopeguard::guard(event, |e| CFRelease(e as *const c_void));
+            CGEventSetFlags(event, flags);
+            if let Some(units) = text {
+                CGEventKeyboardSetUnicodeString(
+                    event,
+                    units.len() as std::ffi::c_ulong,
+                    units.as_ptr(),
+                );
+            }
+            CGEventSetIntegerValueField(event, K_CG_EVENT_SOURCE_USER_DATA, SYNTHETIC_EVENT_TAG);
+            CGEventPost(K_CG_HID_EVENT_TAP, event);
+            Ok(())
+        }
+    }
+}
+
+impl Drop for KeySource {
+    fn drop(&mut self) {
+        unsafe { ffi::CFRelease(self.0 as *const c_void) }
     }
 }

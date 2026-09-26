@@ -112,7 +112,7 @@ const SECURE_ROLE: &str = "AXSecureTextField";
 
 /// Apps whose focused AX text is not where typed input goes. Terminals expose
 /// their scrollback as an `AXTextArea`; input goes to the pty, not the view.
-const CLIPBOARD_ONLY_BUNDLES: &[&str] = &[
+pub(crate) const CLIPBOARD_ONLY_BUNDLES: &[&str] = &[
     "com.apple.Terminal",
     "com.googlecode.iterm2",
     "dev.warp.Warp-Stable",

@@ -13,8 +13,14 @@
 //! `kTISNotifySelectedKeyboardInputSourceChanged` distributed notification
 //! (delivered to the main runloop). The hot path ([`paste_keycode_v`])
 //! only reads an [`AtomicU16`], so paste latency is unchanged.
+//!
+//! The same main-thread refresh also caches whether the selected keyboard
+//! input source is ASCII-capable ([`input_source_is_ascii_capable`]), which
+//! the keystroke inserter reads off the main thread: with an IME such as
+//! Japanese or Chinese active, typed text is routed through the IME and can
+//! come out converted.
 
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 
 /// `kVK_ANSI_V` — the keycode for the physical V key on a US QWERTY
 /// layout. Used as the fallback whenever live resolution can't produce a
@@ -31,12 +37,27 @@ pub fn paste_keycode_v() -> u16 {
     V_KEYCODE.load(Ordering::Relaxed)
 }
 
+/// Whether the selected keyboard input source is ASCII-capable: 0 unknown
+/// (never resolved), 1 no, 2 yes.
+static ASCII_CAPABLE: AtomicU8 = AtomicU8::new(0);
+
+/// Whether the selected keyboard input source can type ASCII directly (a
+/// plain layout, or an IME in its Roman mode). `None` until [`init`] has run
+/// or when the property could not be read.
+pub fn input_source_is_ascii_capable() -> Option<bool> {
+    match ASCII_CAPABLE.load(Ordering::Relaxed) {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    }
+}
+
 pub fn init() {
     macos::init();
 }
 
 mod macos {
-    use super::{FALLBACK_V_KEYCODE, V_KEYCODE};
+    use super::{ASCII_CAPABLE, FALLBACK_V_KEYCODE, V_KEYCODE};
     use core_foundation_sys::base::CFRelease;
     use core_foundation_sys::data::{CFDataGetBytePtr, CFDataRef};
     use core_foundation_sys::dictionary::CFDictionaryRef;
@@ -45,6 +66,7 @@ mod macos {
         CFNotificationCenterRef, CFNotificationName,
         CFNotificationSuspensionBehaviorDeliverImmediately,
     };
+    use core_foundation_sys::number::{CFBooleanGetValue, CFBooleanRef};
     use core_foundation_sys::string::CFStringRef;
     use std::ffi::c_void;
     use std::ptr;
@@ -68,6 +90,7 @@ mod macos {
     #[link(name = "Carbon", kind = "framework")]
     extern "C" {
         fn TISCopyCurrentKeyboardLayoutInputSource() -> TISInputSourceRef;
+        fn TISCopyCurrentKeyboardInputSource() -> TISInputSourceRef;
         fn TISGetInputSourceProperty(source: TISInputSourceRef, key: CFStringRef) -> *mut c_void;
         fn LMGetKbdType() -> u8;
         fn UCKeyTranslate(
@@ -84,6 +107,7 @@ mod macos {
         ) -> i32;
 
         static kTISPropertyUnicodeKeyLayoutData: CFStringRef;
+        static kTISPropertyInputSourceIsASCIICapable: CFStringRef;
         static kTISNotifySelectedKeyboardInputSourceChanged: CFStringRef;
     }
 
@@ -95,6 +119,29 @@ mod macos {
     fn resolve_into_cache() {
         let kc = resolve_v_keycode().unwrap_or(FALLBACK_V_KEYCODE);
         V_KEYCODE.store(kc, Ordering::Relaxed);
+        let ascii = match resolve_ascii_capable() {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        };
+        ASCII_CAPABLE.store(ascii, Ordering::Relaxed);
+    }
+
+    /// Read `kTISPropertyInputSourceIsASCIICapable` of the selected input
+    /// source (the IME itself when one is active, not its underlying layout).
+    fn resolve_ascii_capable() -> Option<bool> {
+        unsafe {
+            let source = TISCopyCurrentKeyboardInputSource();
+            if source.is_null() {
+                return None;
+            }
+            let _src_guard = scopeguard::guard(source, |s| CFRelease(s as *const c_void));
+            let value = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsASCIICapable);
+            if value.is_null() {
+                return None;
+            }
+            Some(CFBooleanGetValue(value as CFBooleanRef))
+        }
     }
 
     fn resolve_v_keycode() -> Option<u16> {
