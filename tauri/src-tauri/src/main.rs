@@ -1053,8 +1053,11 @@ fn run_insert_chain(
     let input_method = input_method::InputMethod::new();
     let paste = clipboard::Paste::new(prepared);
     let (keys, input_method, paste) = (in_front(&keys), in_front(&input_method), in_front(&paste));
+    // Fastest first. In TextEdit a verified Accessibility write lands in
+    // 3-6 ms, the input method in 5-8 ms at any length, typing ~6 ms plus
+    // 2.7 ms per keystroke, and a paste ~20 ms (`insert_bench.rs`).
     let chain: [&dyn insert_chain::Inserter; 4] =
-        [&text_insert::Accessibility, &keys, &input_method, &paste];
+        [&text_insert::Accessibility, &input_method, &keys, &paste];
     insert_chain::deliver(
         &chain,
         &insert_chain::Request {

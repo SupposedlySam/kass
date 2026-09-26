@@ -1,7 +1,7 @@
 //! The ordered fallback chain that delivers dictated text into another app.
 //!
 //! Each [`Inserter`] is one way of getting text into the focused field:
-//! Accessibility write, typed keystrokes, the Voicebox input method, and
+//! Accessibility write, the Voicebox input method, typed keystrokes, and
 //! clipboard + ⌘V. [`deliver`] tries them in order and stops at the first
 //! one that inserted the text.
 //!
