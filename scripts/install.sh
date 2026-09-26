@@ -6,8 +6,10 @@
 #
 # Checks what the build needs and says how to install anything missing,
 # pulls the latest code, builds the server (only when it changed) and the
-# app, and replaces /Applications/Voicebox.app. Every build is signed with
-# the same identity, so updates keep the app's privacy permissions.
+# app, and replaces /Applications/Voicebox.app. It also builds the Voicebox
+# Input input method (only when it changed) into ~/Library/Input Methods.
+# Every build is signed with the same identity, so updates keep the app's
+# privacy permissions.
 #
 # Options:
 #   --no-pull          build the checkout as it is
@@ -210,6 +212,25 @@ VOICEBOX_APP="$app" ./scripts/build-local-app.sh
 built=tauri/src-tauri/target/release/bundle/macos/Voicebox.app
 ok "Built and signed with \"$(codesign -dvv "$built" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)\""
 
+step "Building the input method"
+im_built="tauri/input-method/build/Voicebox Input.app"
+im_inputs() {
+  git rev-parse HEAD:tauri/input-method
+  git diff HEAD -- tauri/input-method
+  git ls-files --others --exclude-standard tauri/input-method
+  cat scripts/build-input-method.sh scripts/test-input-method.sh
+  ./scripts/signing-identity.sh
+}
+im_stamp=$(stamp_of im_inputs)
+im_stamp_file=tauri/input-method/build/.voicebox-input-stamp
+if [ -d "$im_built" ] && [ -f "$im_stamp_file" ] && [ "$(cat "$im_stamp_file")" = "$im_stamp" ]; then
+  ok "Unchanged since the last build"
+else
+  ./scripts/build-input-method.sh
+  echo "$im_stamp" >"$im_stamp_file"
+  ok "Input method built"
+fi
+
 # ─── Install ──────────────────────────────────────────────────────────
 
 step "Installing to $app"
@@ -242,6 +263,26 @@ if [ -n "$old_requirement" ] && [ "$old_requirement" != "$new_requirement" ]; th
   warn "This build is signed differently from the one it replaced, so macOS"
   warn "will ask for Microphone, Accessibility and Input Monitoring again."
   warn "It's signed the same way from now on, so updates keep them."
+fi
+
+step "Installing the input method"
+im_app="$HOME/Library/Input Methods/Voicebox Input.app"
+if [ -d "$im_app" ] && diff -rq "$im_built" "$im_app" >/dev/null 2>&1; then
+  ok "Up to date"
+else
+  # macOS starts it again the next time it's needed, from the new copy.
+  pkill -f "$im_app/Contents/MacOS/" 2>/dev/null || true
+  mkdir -p "$(dirname "$im_app")"
+  rm -rf "$im_app"
+  ditto "$im_built" "$im_app"
+  ok "Installed to $im_app"
+fi
+if ! defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null |
+  grep -q "sh.voicebox.inputmethod.VoiceboxInput"; then
+  warn "To let Voicebox type through its input method, turn it on once:"
+  warn "System Settings → Keyboard → Input Sources → Edit → + → English →"
+  warn "\"Voicebox Input\", then select it as your keyboard (it types like ABC)."
+  warn "If it isn't listed yet, log out and back in."
 fi
 
 if [ "$launch" = 1 ]; then

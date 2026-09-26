@@ -76,6 +76,15 @@ build-server: _ensure-venv
 build-tauri:
     ./scripts/build-local-app.sh
 
+# Build the Voicebox Input input method (tests, then build and sign) into
+# tauri/input-method/build; `just install` installs it
+build-input-method:
+    ./scripts/build-input-method.sh
+
+# Run the Voicebox Input protocol and decision tests
+test-input-method:
+    ./scripts/test-input-method.sh
+
 # Check requirements, build, and install or update /Applications/Voicebox.app
 install:
     ./scripts/install.sh
