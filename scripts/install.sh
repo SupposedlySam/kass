@@ -279,10 +279,8 @@ else
 fi
 if ! defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null |
   grep -q "sh.voicebox.inputmethod.VoiceboxInput"; then
-  warn "To let Voicebox type through its input method, turn it on once:"
-  warn "System Settings → Keyboard → Input Sources → Edit → + → English →"
-  warn "\"Voicebox Input\", then select it as your keyboard (it types like ABC)."
-  warn "If it isn't listed yet, log out and back in."
+  warn "To let Voicebox type through its input method, click \"voicebox input\""
+  warn "in the status bar at the bottom of the Voicebox window (it types like ABC)."
 fi
 
 if [ "$launch" = 1 ]; then
