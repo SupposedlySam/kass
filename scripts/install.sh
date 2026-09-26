@@ -277,7 +277,7 @@ else
   ditto "$im_built" "$im_app"
   ok "Installed to $im_app"
 fi
-if ! defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null |
+if ! defaults read com.apple.inputsources AppleEnabledThirdPartyInputSources 2>/dev/null |
   grep -q "sh.voicebox.inputmethod.VoiceboxInput"; then
   warn "To let Voicebox type through its input method, click \"voicebox input\""
   warn "in the status bar at the bottom of the Voicebox window (it types like ABC)."
