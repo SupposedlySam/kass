@@ -13,7 +13,11 @@
   "nav": {
     "captures": "Captures",
     "models": "Models",
-    "settings": "Settings"
+    "settings": "Settings",
+    "alerts": {
+      "missing": "{{role}} model {{name}} isn't downloaded. Dictation can't start without it.",
+      "downloadFailed": "Downloading {{name}} failed."
+    }
   },
   "setup": {
     "title": "Set up dictation",

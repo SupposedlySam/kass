@@ -13,7 +13,7 @@ import { serverStats } from '@/lib/utils/serverStats';
 import { usePlatform } from '@/platform/PlatformContext';
 
 /**
- * The always-on status line at the bottom of the window: server, models,
+ * The always-on status line at the bottom of the window: server,
  * microphone, permissions and what Voicebox has learned. Each item opens
  * where it is configured, and says more on hover.
  */
@@ -31,7 +31,6 @@ export function StatusBar() {
   const micName =
     devices.find((d) => d.deviceId === settings?.input_device_id)?.label ?? 'system default';
   const examples = style?.example_count ?? 0;
-  const openModel = (model: string) => navigate({ to: '/models', search: { model } });
 
   return (
     <footer className="h-[30px] shrink-0 flex items-center gap-2.5 px-2 border-t border-border bg-sidebar font-mono text-[11px] text-muted-foreground">
@@ -51,22 +50,6 @@ export function StatusBar() {
           server {server}
         </span>
       </StatusItem>
-      {readiness.stt && (
-        <ModelStatus
-          use="Transcription"
-          name={readiness.stt.display_name}
-          ready={readiness.stt.ready}
-          onClick={() => openModel(readiness.stt!.model_name)}
-        />
-      )}
-      {readiness.autoRefine && readiness.llm && (
-        <ModelStatus
-          use="Refinement"
-          name={readiness.llm.display_name}
-          ready={readiness.llm.ready}
-          onClick={() => openModel(readiness.llm!.model_name)}
-        />
-      )}
       {isTauri && (
         <StatusItem
           title={`Microphone: ${micName}. Click to choose another.`}
@@ -129,31 +112,6 @@ function StatusItem({
     >
       {children}
     </button>
-  );
-}
-
-function ModelStatus({
-  use,
-  name,
-  ready,
-  onClick,
-}: {
-  /** What dictation uses the model for. */
-  use: string;
-  name: string;
-  ready: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <StatusItem
-      title={`${use}: ${name}, ${ready ? 'downloaded and ready' : 'not downloaded'}. Click to see it in Models.`}
-      onClick={onClick}
-    >
-      {name.toLowerCase()}{' '}
-      <span className={cn('ml-1', ready ? 'text-success' : 'text-warning')}>
-        {ready ? 'ready' : 'missing'}
-      </span>
-    </StatusItem>
   );
 }
 

@@ -37,8 +37,8 @@ These were in the mockups but the API had nothing to build them on.
 - **"Pasted into <app>".** Captures don't record which app received the text.
   The focus snapshot has the bundle id at paste time; it would need saving on
   the capture.
-- **Loaded vs downloaded.** The status bar says a model is `ready` (downloaded)
-  or `missing`. The mockup distinguished models loaded in memory. The readiness
+- **Loaded vs downloaded.** The Models tab only flags a model that isn't
+  downloaded. The mockup distinguished models loaded in memory. The readiness
   endpoint only reports downloaded.
 - **Queued downloads.** The setup flow can't show "queued": `/tasks/active`
   only lists downloads that are running.
