@@ -1,4 +1,6 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { invoke } from '@tauri-apps/api/core';
 import type { ReactNode } from 'react';
 import type { HealthResponse } from '@/lib/api/types';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
@@ -88,6 +90,7 @@ export function StatusBar() {
             purpose="Lets Voicebox hear the dictation shortcut in any app."
             onClick={readiness.openInputMonitoringSettings}
           />
+          <VoiceboxInput />
         </>
       )}
       <span className="flex-1" />
@@ -173,6 +176,52 @@ function Permission({
       {label}{' '}
       <span className={cn('ml-1', granted ? 'text-success' : 'text-destructive')}>
         {granted ? '✓' : '✗'}
+      </span>
+    </StatusItem>
+  );
+}
+
+type InputSourceState = 'not_installed' | 'disabled' | 'enabled' | 'selected';
+
+const VOICEBOX_INPUT_STATE = {
+  disabled: { mark: '✗', color: 'text-destructive', detail: 'Not in your input sources.' },
+  enabled: { mark: 'off', color: 'text-warning', detail: 'Another keyboard is selected.' },
+  selected: { mark: '✓', color: 'text-success', detail: 'Selected.' },
+} as const;
+
+/**
+ * The Voicebox Input keyboard, which can insert text where Accessibility
+ * can't, but only while it is the selected input source. One click enables
+ * and selects it. Polled, since the input menu can switch it away at any time.
+ */
+function VoiceboxInput() {
+  const queryClient = useQueryClient();
+  const { data: state } = useQuery({
+    queryKey: ['voicebox-input-state'],
+    queryFn: () => invoke<InputSourceState>('voicebox_input_state'),
+    refetchInterval: 5_000,
+  });
+  const activate = useMutation({
+    mutationFn: () => invoke<InputSourceState>('activate_voicebox_input'),
+    onSuccess: (next) => queryClient.setQueryData(['voicebox-input-state'], next),
+    onError: (err) => console.warn('[voicebox input] activate failed:', err),
+  });
+
+  if (!state || state === 'not_installed') return null;
+  const { mark, color, detail } = VOICEBOX_INPUT_STATE[state];
+  const error = activate.error ? ` ${String(activate.error)}` : '';
+  return (
+    <StatusItem
+      title={`Lets Voicebox type into apps that Accessibility can't reach. ${detail}${error}${
+        state === 'selected' ? '' : ' Click to enable and select it.'
+      }`}
+      onClick={() => {
+        if (state !== 'selected') activate.mutate();
+      }}
+    >
+      voicebox input{' '}
+      <span className={cn('ml-1', activate.isError ? 'text-destructive' : color)}>
+        {activate.isPending ? '…' : mark}
       </span>
     </StatusItem>
   );
