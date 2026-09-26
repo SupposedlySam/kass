@@ -1028,12 +1028,16 @@ fn run_insert_chain(
         std::thread::sleep(POST_ACTIVATE_SETTLE);
         Ok(())
     };
-    let paste = clipboard::Paste::new(prepared);
-    let paste = insert_chain::InFront {
-        inner: &paste,
+    let in_front = |inner| insert_chain::InFront {
+        inner,
         bring_front: &bring_front,
     };
-    let chain: [&dyn insert_chain::Inserter; 2] = [&text_insert::Accessibility, &paste];
+    let keys = keystroke_insert::Keystrokes::new();
+    let input_method = input_method::InputMethod::new();
+    let paste = clipboard::Paste::new(prepared);
+    let (keys, input_method, paste) = (in_front(&keys), in_front(&input_method), in_front(&paste));
+    let chain: [&dyn insert_chain::Inserter; 4] =
+        [&text_insert::Accessibility, &keys, &input_method, &paste];
     insert_chain::deliver(
         &chain,
         &insert_chain::Request {

@@ -23,7 +23,6 @@
 //! is [`Attempt::Uncertain`], since the text may have gone in.
 
 // Until the paste flow in main.rs builds its chain with this step.
-#![cfg_attr(not(test), allow(dead_code))]
 
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -127,6 +126,7 @@ impl InputMethod {
     }
 
     /// Talks to the input method at `socket`.
+    #[cfg(test)]
     pub fn with_socket(socket: impl Into<PathBuf>) -> Self {
         Self {
             socket: Some(socket.into()),
@@ -134,6 +134,7 @@ impl InputMethod {
         }
     }
 
+    #[cfg(test)]
     pub fn with_timeouts(mut self, write: Duration, reply: Duration) -> Self {
         self.write_timeout = write;
         self.reply_timeout = reply;
@@ -437,6 +438,7 @@ mod tests {
         Request {
             pid: 1,
             bundle_id: Some("com.tinyspeck.slackmacgap"),
+            role: None,
             text,
         }
     }
@@ -630,6 +632,7 @@ mod tests {
             let req = Request {
                 pid: 1,
                 bundle_id,
+                role: None,
                 text: "x",
             };
             assert_eq!(
