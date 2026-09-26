@@ -22,6 +22,7 @@
 //! unit-tested. The AX calls sit behind [`AxTextTarget`] so the orchestration
 //! ([`insert_into`]) runs against fakes in tests.
 
+use std::sync::Mutex;
 use std::time::Duration;
 
 use crate::insert_chain::{Attempt, Inserter, Method, Request};
@@ -594,7 +595,35 @@ impl Inserter for Accessibility {
     }
 
     fn attempt(&self, req: &Request) -> Attempt {
-        as_attempt(insert_focused(req.pid, req.bundle_id, req.text))
+        static IGNORED_BY: Mutex<IgnoredWrites> = Mutex::new(IgnoredWrites::new());
+        let Ok(mut ignored_by) = IGNORED_BY.lock() else {
+            return as_attempt(insert_focused(req.pid, req.bundle_id, req.text));
+        };
+        ignored_by.attempt(req.pid, || insert_focused(req.pid, req.bundle_id, req.text))
+    }
+}
+
+/// Apps (by pid) that accepted an Accessibility write that never appeared.
+/// Electron apps do this: the set succeeds, and the field stays unchanged
+/// through every verify poll, costing ~55 ms on each dictation. After the
+/// first time, the step declines at once for that running app and the chain
+/// moves straight on. A relaunched app gets a new pid and a fresh try.
+struct IgnoredWrites(Vec<i32>);
+
+impl IgnoredWrites {
+    const fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    fn attempt(&mut self, pid: i32, insert: impl FnOnce() -> Outcome) -> Attempt {
+        if self.0.contains(&pid) {
+            return Attempt::Declined("ignored Accessibility writes earlier".into());
+        }
+        let outcome = insert();
+        if outcome == Outcome::UseClipboard(FallbackReason::NotInserted) {
+            self.0.push(pid);
+        }
+        as_attempt(outcome)
     }
 }
 
@@ -1655,5 +1684,35 @@ mod tests {
         let calls = field.set_calls.get();
         finish_live(&field, &owned, "Done", |_| {}).unwrap();
         assert_eq!(field.set_calls.get(), calls);
+    }
+
+    #[test]
+    fn an_app_that_ignored_a_write_is_skipped_after() {
+        let mut ignored = IgnoredWrites::new();
+        let first = ignored.attempt(7, || Outcome::UseClipboard(FallbackReason::NotInserted));
+        assert!(matches!(first, Attempt::Declined(_)));
+        let second = ignored.attempt(7, || panic!("should not write again"));
+        assert!(matches!(second, Attempt::Declined(_)));
+    }
+
+    #[test]
+    fn other_declines_and_other_apps_are_still_tried() {
+        let mut ignored = IgnoredWrites::new();
+        ignored.attempt(7, || {
+            Outcome::UseClipboard(FallbackReason::NoFocusedElement)
+        });
+        ignored.attempt(8, || Outcome::UseClipboard(FallbackReason::NotInserted));
+        let again = ignored.attempt(7, || Outcome::Inserted { exact: true });
+        assert_eq!(again, Attempt::Inserted { verified: true });
+        let other = ignored.attempt(9, || Outcome::Inserted { exact: true });
+        assert_eq!(other, Attempt::Inserted { verified: true });
+    }
+
+    #[test]
+    fn uncertain_writes_are_not_remembered() {
+        let mut ignored = IgnoredWrites::new();
+        ignored.attempt(7, || Outcome::Uncertain("?".into()));
+        let again = ignored.attempt(7, || Outcome::Inserted { exact: true });
+        assert_eq!(again, Attempt::Inserted { verified: true });
     }
 }
