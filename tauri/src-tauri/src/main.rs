@@ -7,6 +7,7 @@ mod focus_capture;
 #[cfg(desktop)]
 mod hotkey_monitor;
 mod input_monitoring;
+mod insert_chain;
 #[cfg(desktop)]
 mod key_codes;
 mod keyboard_layout;
