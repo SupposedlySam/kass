@@ -42,6 +42,8 @@ pub enum Attempt {
 pub struct Request<'a> {
     pub pid: i32,
     pub bundle_id: Option<&'a str>,
+    /// AX role of the element focused at key-down, when known.
+    pub role: Option<&'a str>,
     pub text: &'a str,
 }
 
@@ -245,6 +247,7 @@ mod tests {
     const REQ: Request = Request {
         pid: 42,
         bundle_id: Some("com.example"),
+        role: None,
         text: "hello",
     };
 

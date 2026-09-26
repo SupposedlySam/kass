@@ -976,8 +976,9 @@ pub(crate) async fn paste_final_text_with(
     let already_front = focus_capture::frontmost_pid() == Some(focus.pid);
     let pid = focus.pid;
     let bundle_id = focus.bundle_id.clone();
+    let role = focus.role.clone();
     let report = tokio::task::spawn_blocking(move || {
-        run_insert_chain(pid, bundle_id.as_deref(), &text, prepared)
+        run_insert_chain(pid, bundle_id.as_deref(), role.as_deref(), &text, prepared)
     })
     .await
     .map_err(|e| {
@@ -1014,6 +1015,7 @@ const POST_ACTIVATE_SETTLE: std::time::Duration = std::time::Duration::from_mill
 fn run_insert_chain(
     pid: i32,
     bundle_id: Option<&str>,
+    role: Option<&str>,
     text: &str,
     prepared: Option<clipboard::ClipboardSnapshot>,
 ) -> insert_chain::Report {
@@ -1036,6 +1038,7 @@ fn run_insert_chain(
         &insert_chain::Request {
             pid,
             bundle_id,
+            role,
             text,
         },
     )

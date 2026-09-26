@@ -337,6 +337,7 @@ pub enum Decline {
     TerminalApp,
     RemoteSession,
     TriggerChar(char),
+    MultilineInSingleLineField,
     SecureInput,
     NotFrontmost,
     NonAsciiInputSource,
@@ -353,6 +354,9 @@ impl fmt::Display for Decline {
             Decline::TerminalApp => write!(f, "terminal app"),
             Decline::RemoteSession => write!(f, "remote desktop or VM"),
             Decline::TriggerChar(c) => write!(f, "{c:?} would open autocomplete"),
+            Decline::MultilineInSingleLineField => {
+                write!(f, "newline in a single-line field would submit it")
+            }
             Decline::SecureInput => write!(f, "Secure Event Input is on"),
             Decline::NotFrontmost => write!(f, "target is not frontmost"),
             Decline::NonAsciiInputSource => write!(f, "input method active"),
@@ -384,6 +388,18 @@ pub fn check_text(text: &str, bundle_id: Option<&str>) -> Result<(), Decline> {
     }
     Ok(())
 }
+
+/// [`check_text`], plus the focused field: in a single-line field
+/// (`AXTextField`) Shift+Return is still Return, which submits the form.
+pub fn check_request(req: &Request) -> Result<(), Decline> {
+    check_text(req.text, req.bundle_id)?;
+    if req.role == Some(SINGLE_LINE_ROLE) && req.text.contains('\n') {
+        return Err(Decline::MultilineInSingleLineField);
+    }
+    Ok(())
+}
+
+const SINGLE_LINE_ROLE: &str = "AXTextField";
 
 /// System state that decides whether posted events arrive as typed text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -440,7 +456,7 @@ pub fn wait_for_modifier_release<T: KeystrokeTarget>(target: &T) -> bool {
 /// part of the text has landed).
 pub fn type_text<T: KeystrokeTarget>(target: &T, req: &Request) -> Attempt {
     let declined = |d: Decline| Attempt::Declined(d.to_string());
-    if let Err(d) = check_text(req.text, req.bundle_id) {
+    if let Err(d) = check_request(req) {
         return declined(d);
     }
     let Some(keystrokes) = plan(req.text) else {
@@ -522,7 +538,7 @@ impl Inserter for Keystrokes {
 
     fn attempt(&self, req: &Request) -> Attempt {
         // The text checks need no OS state; skip creating a source for them.
-        if let Err(d) = check_text(req.text, req.bundle_id) {
+        if let Err(d) = check_request(req) {
             return Attempt::Declined(d.to_string());
         }
         match live::LiveTarget::new() {
@@ -1057,8 +1073,25 @@ mod tests {
         Request {
             pid: 42,
             bundle_id: Some("com.tinyspeck.slackmacgap"),
+            role: None,
             text,
         }
+    }
+
+    #[test]
+    fn multiline_text_is_never_typed_into_a_single_line_field() {
+        let field = |role, text| Request {
+            role: Some(role),
+            ..req(text)
+        };
+        assert_eq!(
+            check_request(&field("AXTextField", "one\ntwo")),
+            Err(Decline::MultilineInSingleLineField)
+        );
+        assert_eq!(check_request(&field("AXTextField", "one line")), Ok(()));
+        assert_eq!(check_request(&field("AXTextArea", "one\ntwo")), Ok(()));
+        // Unknown role: Shift+Return is the best guess.
+        assert_eq!(check_request(&req("one\ntwo")), Ok(()));
     }
 
     fn events_of(plan: &[Keystroke]) -> Vec<KeyEvent> {
@@ -1282,6 +1315,7 @@ mod tests {
         let r = Request {
             pid: 1,
             bundle_id: Some("com.apple.Terminal"),
+            role: None,
             text: "hi",
         };
         assert_eq!(
@@ -1326,6 +1360,7 @@ mod tests {
         let r = Request {
             pid,
             bundle_id: None,
+            role: None,
             text: "Keystroke test 😀 naïve\nsecond line",
         };
         let target = AssumeAscii(live::LiveTarget::new().expect("event source"));
