@@ -545,6 +545,27 @@ pub fn finish_live_focused(pid: i32, owned: &Owned, final_text: &str) -> Result<
     }
 }
 
+/// The whole text of `pid`'s focused element (benchmarks read it back).
+#[cfg(test)]
+pub fn focused_value(pid: i32) -> Option<String> {
+    macos::FocusedElement::of_app(pid)?.value()
+}
+
+/// Empty `pid`'s focused element (benchmarks start each run from a blank
+/// field).
+#[cfg(test)]
+pub fn clear_focused(pid: i32) -> bool {
+    let Some(element) = macos::FocusedElement::of_app(pid) else {
+        return false;
+    };
+    let length = element.observe().char_count.unwrap_or(0);
+    let range = TextRange {
+        location: 0,
+        length,
+    };
+    length == 0 || (element.set_selection(range).is_ok() && element.set_selected_text("").is_ok())
+}
+
 /// Insert `text` into the focused element of the app with `pid`, verifying
 /// the result. Blocking: every step is a synchronous AX message to the target.
 pub fn insert_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Outcome {

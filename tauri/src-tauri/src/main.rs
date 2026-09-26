@@ -9,6 +9,8 @@ mod hotkey_monitor;
 mod input_method;
 mod input_monitoring;
 mod insert_chain;
+#[cfg(test)]
+mod insert_bench;
 #[cfg(desktop)]
 mod key_codes;
 mod keyboard_layout;

@@ -22,8 +22,6 @@
 //! input method acts only on a complete line); anything that fails after it
 //! is [`Attempt::Uncertain`], since the text may have gone in.
 
-// Until the paste flow in main.rs builds its chain with this step.
-
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
