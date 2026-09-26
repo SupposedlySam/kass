@@ -140,6 +140,28 @@ fn ms(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
+/// Wraps a step that acts on the frontmost app (keystrokes, the input
+/// method, ⌘V) so the target is brought to the front first. `bring_front`
+/// must be cheap when the target is already in front: it runs before every
+/// wrapped step. If it fails, the step declines without running.
+pub struct InFront<'a, F: Fn() -> Result<(), String>> {
+    pub inner: &'a dyn Inserter,
+    pub bring_front: &'a F,
+}
+
+impl<F: Fn() -> Result<(), String>> Inserter for InFront<'_, F> {
+    fn method(&self) -> Method {
+        self.inner.method()
+    }
+
+    fn attempt(&self, req: &Request) -> Attempt {
+        match (self.bring_front)() {
+            Ok(()) => self.inner.attempt(req),
+            Err(e) => Attempt::Declined(format!("could not bring the target to the front: {e}")),
+        }
+    }
+}
+
 /// Try each inserter in order until one inserts the text or is uncertain.
 pub fn deliver(chain: &[&dyn Inserter], req: &Request) -> Report {
     deliver_with_clock(chain, req, Instant::now)
@@ -352,6 +374,45 @@ mod tests {
         let report = run(&[&ax, &paste], &clock);
         assert_eq!(report.fallback_cost(), Duration::ZERO);
         assert_eq!(report.total(), Duration::from_millis(4));
+    }
+
+    #[test]
+    fn in_front_brings_the_target_forward_before_the_step() {
+        let clock = Cell::new(Duration::ZERO);
+        let keys = Fake::new(Method::Keystrokes, inserted(), 1, &clock);
+        let fronted = Cell::new(0);
+        let bring = || {
+            fronted.set(fronted.get() + 1);
+            Ok(())
+        };
+        let wrapped = InFront {
+            inner: &keys,
+            bring_front: &bring,
+        };
+        let report = run(&[&wrapped], &clock);
+        assert_eq!(fronted.get(), 1);
+        assert_eq!(keys.called(), 1);
+        assert_eq!(report.steps[0].method, Method::Keystrokes);
+    }
+
+    #[test]
+    fn in_front_declines_without_running_when_activation_fails() {
+        let clock = Cell::new(Duration::ZERO);
+        let keys = Fake::new(Method::Keystrokes, inserted(), 1, &clock);
+        let paste = Fake::new(Method::Clipboard, inserted(), 1, &clock);
+        let bring = || Err("app quit".to_string());
+        let keys_front = InFront {
+            inner: &keys,
+            bring_front: &bring,
+        };
+        let paste_front = InFront {
+            inner: &paste,
+            bring_front: &bring,
+        };
+        let report = run(&[&keys_front, &paste_front], &clock);
+        assert_eq!(keys.called(), 0);
+        assert_eq!(paste.called(), 0);
+        assert_eq!(report.delivery(), Delivery::Exhausted);
     }
 
     #[test]

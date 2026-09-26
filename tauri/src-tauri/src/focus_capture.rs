@@ -188,6 +188,26 @@ unsafe fn app_for_pid(pid: i32) -> (Option<String>, Option<String>) {
     (ns_string_to_rust(bundle), ns_string_to_rust(name))
 }
 
+/// Filesystem path of the app bundle running as `pid`.
+pub fn app_bundle_path(pid: i32) -> Option<String> {
+    unsafe {
+        let _pool = AutoreleasePool::new();
+        let app: Id = msg_send![
+            class!(NSRunningApplication),
+            runningApplicationWithProcessIdentifier: pid
+        ];
+        if app.is_null() {
+            return None;
+        }
+        let url: Id = msg_send![app, bundleURL];
+        if url.is_null() {
+            return None;
+        }
+        let path: Id = msg_send![url, path];
+        ns_string_to_rust(path)
+    }
+}
+
 /// A snapshot of `pid` with no focused element to describe.
 unsafe fn app_snapshot(pid: i32) -> FocusSnapshot {
     let (bundle_id, app_name) = app_for_pid(pid);

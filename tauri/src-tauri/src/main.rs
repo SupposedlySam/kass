@@ -752,17 +752,6 @@ async fn restart_server(
 /// writes into `FocusSnapshot::bundle_id`.
 const VOICEBOX_BUNDLE_ID: &str = "sh.voicebox.app";
 
-/// Milliseconds to wait between activating the target app and firing the
-/// synthetic ⌘V, giving AppKit time to finish re-ordering windows and
-/// restoring its last-focused field.
-const POST_ACTIVATE_SETTLE_MS: u64 = 120;
-
-/// Milliseconds the staged text lives on the clipboard after the paste
-/// keystroke, before we restore the user's original clipboard contents.
-/// Too short and slow apps haven't consumed the paste yet; too long and
-/// the user sees our text if they look at their clipboard manager.
-const PASTE_CONSUME_MS: u64 = 400;
-
 /// The icon of the app with `bundle_id` as a PNG data URL, for Captures.
 #[command]
 fn app_icon(bundle_id: String) -> Option<String> {
@@ -944,32 +933,15 @@ fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
 
 /// Deliver `text` into the UI that had focus when the chord fired.
 ///
-/// Pipeline: activate the captured PID → settle → save the user's
-/// clipboard → write `text` → fire ⌘V → wait for the target to consume it
-/// → conditionally restore the original clipboard.
+/// Runs the insertion chain (`insert_chain.rs`): a verified Accessibility
+/// write first, then the steps that act on the frontmost app, ending with
+/// clipboard + ⌘V. Each step falls through only when it inserted nothing, and
+/// the log line shows what every step did and how long it took.
 ///
-/// The restore is conditional on `NSPasteboard.changeCount` matching the
-/// value captured right after `write_text`: if something else wrote to the
-/// clipboard during the paste-consume window — the user's own ⌘C in the target app, a
-/// clipboard history tool (Paste, Pastebot, Maccy), Universal Clipboard
-/// sync, 1Password inserting a secret — their newer content takes
-/// priority over our snapshot and is preserved. A
-/// [`clipboard::current_change_count`] read failure is treated the same
-/// way: unknown state is safer than an unconditional overwrite.
-///
-/// `send_paste` failure is isolated from the restore decision: we always
-/// attempt the conditional restore before propagating the paste error,
-/// so a failed `CGEventPost` never leaves the user's
-/// clipboard stuck on the transcript.
-///
-/// Skips (returns `false`) without touching anything when:
-/// - `focus.bundle_id` is Voicebox itself — native dictation inserts into
-///   our own webview through the DOM (`dictation::insert_in_app`).
-/// - Accessibility is not trusted — `CGEventPost` would silently drop the
-///   keystroke, leaving the user's clipboard clobbered with nothing to
-///   show for it.
-///
-/// Returns `true` when the paste sequence completed end-to-end.
+/// Skips (returns `false`) without touching anything when `focus.bundle_id`
+/// is Voicebox itself — native dictation inserts into our own webview
+/// through the DOM (`dictation::insert_in_app`). Errors when Accessibility
+/// is not trusted: every step needs it.
 #[command]
 async fn paste_final_text(
     text: String,
@@ -1001,62 +973,71 @@ pub(crate) async fn paste_final_text_with(
     // is a no-op; on macOS 26 fullscreen Spaces `activate` returns NO for an
     // already-frontmost app, which would otherwise abort the paste entirely.
     let already_front = focus_capture::frontmost_pid() == Some(focus.pid);
+    let pid = focus.pid;
+    let bundle_id = focus.bundle_id.clone();
+    let report = tokio::task::spawn_blocking(move || {
+        run_insert_chain(pid, bundle_id.as_deref(), &text, prepared)
+    })
+    .await
+    .map_err(|e| {
+        // A panic mid-step: we cannot know whether anything was inserted.
+        format!(
+            "Text insertion stopped unexpectedly ({e}). It was not pasted again; \
+             copy it from Captures if it is missing."
+        )
+    })?;
 
-    // Direct insertion into the target's focused field via Accessibility: no
-    // clipboard, no keystroke and no settle sleeps. Falls
-    // through to ⌘V only when nothing was inserted (see text_insert.rs).
-    match text_insert::try_insert(focus.pid, focus.bundle_id.clone(), text.clone()).await {
-        text_insert::Outcome::Inserted { .. } => {
-            if !already_front {
+    let app = focus.bundle_id.as_deref().unwrap_or("unknown app");
+    eprintln!("[voicebox] insert into {app}: {}", report.summary());
+    match report.delivery() {
+        insert_chain::Delivery::Inserted { method, .. } => {
+            // Accessibility writes without activating; bring the user back
+            // to the app they dictated into, as the other steps do.
+            if method == insert_chain::Method::Accessibility && !already_front {
                 let _ = focus_capture::activate_pid(focus.pid);
             }
-            return Ok(true);
+            Ok(true)
         }
-        text_insert::Outcome::Uncertain(msg) => return Err(msg),
-        text_insert::Outcome::UseClipboard(_) => {}
+        insert_chain::Delivery::Uncertain { message, .. } => Err(message),
+        insert_chain::Delivery::Exhausted => {
+            Err("Could not insert the dictated text into this app. Copy it from Captures.".into())
+        }
     }
+}
 
-    if !already_front {
-        focus_capture::activate_pid(focus.pid)?;
-        tokio::time::sleep(std::time::Duration::from_millis(POST_ACTIVATE_SETTLE_MS)).await;
-    }
+/// Settle time after activating the target, so AppKit finishes re-ordering
+/// windows and restoring its last-focused field before keys arrive.
+const POST_ACTIVATE_SETTLE: std::time::Duration = std::time::Duration::from_millis(120);
 
-    let started = std::time::Instant::now();
-    let reused = clipboard::reusable(prepared, clipboard::current_change_count().ok());
-    let was_reused = reused.is_some();
-    let snapshot = match reused {
-        Some(snapshot) => snapshot,
-        None => clipboard::save_clipboard()?,
+/// The insertion chain for a target app. Blocking.
+fn run_insert_chain(
+    pid: i32,
+    bundle_id: Option<&str>,
+    text: &str,
+    prepared: Option<clipboard::ClipboardSnapshot>,
+) -> insert_chain::Report {
+    let bring_front = || {
+        if focus_capture::frontmost_pid() == Some(pid) {
+            return Ok(());
+        }
+        focus_capture::activate_pid(pid)?;
+        std::thread::sleep(POST_ACTIVATE_SETTLE);
+        Ok(())
     };
-    let saved_ms = started.elapsed().as_millis();
-    let after_write = clipboard::write_text(&text)?;
-
-    let paste_result = synthetic_keys::send_paste();
-    eprintln!(
-        "[voicebox] clipboard paste: snapshot {} in {saved_ms} ms, ⌘V sent {} ms after start",
-        if was_reused {
-            "reused from key-down"
-        } else {
-            "taken at paste"
+    let paste = clipboard::Paste::new(prepared);
+    let paste = insert_chain::InFront {
+        inner: &paste,
+        bring_front: &bring_front,
+    };
+    let chain: [&dyn insert_chain::Inserter; 2] = [&text_insert::Accessibility, &paste];
+    insert_chain::deliver(
+        &chain,
+        &insert_chain::Request {
+            pid,
+            bundle_id,
+            text,
         },
-        started.elapsed().as_millis()
-    );
-    tokio::time::sleep(std::time::Duration::from_millis(PASTE_CONSUME_MS)).await;
-
-    let safe_to_restore = matches!(
-        clipboard::current_change_count(),
-        Ok(current) if current == after_write
-    );
-    if safe_to_restore {
-        clipboard::restore_clipboard(&snapshot)?;
-    } else {
-        eprintln!(
-            "[voicebox] clipboard mutated during paste window — skipping restore to preserve newer content"
-        );
-    }
-
-    paste_result?;
-    Ok(true)
+    )
 }
 
 /// Inspect the currently focused UI element. Returns the owning app's PID,

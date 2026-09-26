@@ -281,6 +281,11 @@ async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bo
 /// Record the paste target for a take (captured right after [`start`], so
 /// the microphone never waits on Accessibility calls).
 pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
+    // Turn on an Electron target's accessibility tree now, while the user
+    // speaks, so it is built by the time the text is inserted.
+    if let Some(pid) = focus.as_ref().map(|f| f.pid) {
+        tauri::async_runtime::spawn_blocking(move || crate::text_insert::wake_electron(pid));
+    }
     let state = app.state::<DictationState>();
     let Ok(active) = state.active.lock() else {
         return;

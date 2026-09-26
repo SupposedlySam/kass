@@ -24,6 +24,8 @@
 
 use std::time::Duration;
 
+use crate::insert_chain::{Attempt, Inserter, Method, Request};
+
 /// A range in the element's text, in UTF-16 code units (what AX reports).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextRange {
@@ -552,26 +554,67 @@ pub fn insert_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Outcome 
     }
 }
 
-/// [`insert_focused`] off the async runtime, with a log line saying which
-/// path was taken and how long the decision took.
-pub async fn try_insert(pid: i32, bundle_id: Option<String>, text: String) -> Outcome {
-    let started = std::time::Instant::now();
-    let app = bundle_id.clone().unwrap_or_else(|| format!("pid {pid}"));
-    let outcome =
-        tokio::task::spawn_blocking(move || insert_focused(pid, bundle_id.as_deref(), &text))
-            .await
-            .unwrap_or_else(|e| {
-                // A panic mid-attempt: we cannot know whether the set happened.
-                Outcome::Uncertain(format!(
-                    "Text insertion stopped unexpectedly ({e}). It was not pasted again; \
-                     copy it from Captures if it is missing."
-                ))
-            });
-    eprintln!(
-        "[voicebox] text insert into {app}: {outcome:?} in {} ms",
-        started.elapsed().as_millis()
-    );
-    outcome
+/// Map an Accessibility [`Outcome`] onto the fallback chain's [`Attempt`].
+pub fn as_attempt(outcome: Outcome) -> Attempt {
+    match outcome {
+        Outcome::Inserted { .. } => Attempt::Inserted { verified: true },
+        Outcome::UseClipboard(reason) => Attempt::Declined(format!("{reason:?}")),
+        Outcome::Uncertain(message) => Attempt::Uncertain(message),
+    }
+}
+
+/// The Accessibility step of the fallback chain: a verified write into the
+/// target's focused element. Works without bringing the target to the front.
+pub struct Accessibility;
+
+impl Inserter for Accessibility {
+    fn method(&self) -> Method {
+        Method::Accessibility
+    }
+
+    fn attempt(&self, req: &Request) -> Attempt {
+        as_attempt(insert_focused(req.pid, req.bundle_id, req.text))
+    }
+}
+
+/// Apps built on Electron keep their accessibility tree off until an
+/// assistive app asks for it, so their text fields look like plain groups
+/// and the Accessibility step declines. Setting `AXManualAccessibility` on
+/// the app turns the tree on (Electron's documented switch for non-VoiceOver
+/// tools). The tree builds lazily, so this is called at dictation key-down,
+/// seconds before the text is ready.
+///
+/// Chromium's own `AXEnhancedUserInterface` is never set: it breaks window
+/// moving in window managers and can replay typed keys.
+pub fn wake_electron(pid: i32) {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+    static WOKEN: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
+
+    let Ok(mut woken) = WOKEN.lock() else {
+        return;
+    };
+    let woken = woken.get_or_insert_with(HashSet::new);
+    if woken.contains(&pid) {
+        return;
+    }
+    let Some(path) = crate::focus_capture::app_bundle_path(pid) else {
+        return;
+    };
+    if !is_electron_bundle(&path) {
+        return;
+    }
+    let result = macos::set_manual_accessibility(pid);
+    eprintln!("[voicebox] AXManualAccessibility on {path}: {result:?}");
+    if result.is_ok() {
+        woken.insert(pid);
+    }
+}
+
+fn is_electron_bundle(path: &str) -> bool {
+    std::path::Path::new(path)
+        .join("Contents/Frameworks/Electron Framework.framework")
+        .exists()
 }
 
 /// The Accessibility-backed [`AxTextTarget`]: the target app's
@@ -723,6 +766,30 @@ mod macos {
             )
         };
         (!s.is_null()).then(|| Cf(s as CFTypeRef))
+    }
+
+    /// Set `AXManualAccessibility` on the app with `pid`. `Err` carries the
+    /// AX error code.
+    pub fn set_manual_accessibility(pid: i32) -> Result<(), i32> {
+        let app = unsafe { AXUIElementCreateApplication(pid) };
+        if app.is_null() {
+            return Err(-1);
+        }
+        let app = Cf(app);
+        unsafe { AXUIElementSetMessagingTimeout(app.0, AX_TIMEOUT_SECS) };
+        let key = key("AXManualAccessibility").ok_or(-1)?;
+        let err = unsafe {
+            AXUIElementSetAttributeValue(
+                app.0,
+                key.0 as CFStringRef,
+                core_foundation_sys::number::kCFBooleanTrue as CFTypeRef,
+            )
+        };
+        if err == AX_SUCCESS {
+            Ok(())
+        } else {
+            Err(err)
+        }
     }
 
     pub struct FocusedElement {
