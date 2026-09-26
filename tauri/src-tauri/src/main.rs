@@ -11,6 +11,7 @@ mod insert_chain;
 #[cfg(desktop)]
 mod key_codes;
 mod keyboard_layout;
+mod keystroke_insert;
 mod server_process;
 mod synthetic_keys;
 mod text_insert;
