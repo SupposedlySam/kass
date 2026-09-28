@@ -87,9 +87,28 @@ Target: text in place within ~1 s of release.
 
 No cleanup pass runs on the instruction, and there's no extra HTTP round trip: the rewrite runs inside the stream session.
 
+## Measurements
+
+M-series Mac, eight realistic selections, with instructions spoken through `say` into a real `/captures/stream` command session, streamed in real time. Timings run from release to `final` on the server; insertion adds 3–20 ms.
+
+| | 0.6B | 1.7B (default) | 4B |
+| --- | --- | --- | --- |
+| Rewrite after release, prefilled (short edits) | 0.06–0.25 s | 0.13–0.46 s | 0.25–0.95 s |
+| Same, without prefill | 0.23–0.35 s | 0.49–0.77 s | 1.0–1.7 s |
+| Prompt Engineer (~125 output tokens) | 1.1 s | 2.1 s | 4.7 s |
+| Quality | Translated a "more formal" request into Spanish | All eight right; "formal" stays mild | Barely shortened "concise"; mistranslated Thursday as *mercredi* |
+
+End to end with 1.7B: short edits take 0.70–1.03 s from release to final. About 0.6 s of that is Whisper recognizing the instruction, which is too short to be cut at a pause while it is spoken. The rest is the rewrite. Prompt Engineer takes 2.5–2.8 s, bound by output length.
+
+Two findings changed the design:
+
+- With the translation example last, every model translated "rewrite this more formally" into Spanish. Examples in another language now come first.
+- Commands and dictation use different models, so a dictation right after a command reloaded its model after release (1.4–1.6 s instead of 0.9 s). A dictation session now loads its cleanup model when it starts, bringing it back to 0.87–0.96 s.
+
 ## Open questions
 
-1. **Model size.** Cleanup is tuned for 0.6B. Following free-form instructions needs more model. Measure 0.6B / 1.7B / 4B, then decide whether Command Mode gets its own model setting.
+1. **Model size.** 1.7B is the default, with its own setting. Cleanup keeps 0.6B, so switching reloads the model; the reload is hidden while the user speaks. Keeping both models resident would remove it.
 2. **Long selections.** Generation time grows with output length. Selections are capped at 16k characters. A progress message for long rewrites could come later.
 3. **Read-only selections.** Text selected on a web page reads fine but can't be replaced. The insertion chain then reports "saved in Captures". Wispr answers questions about such text; that's out of scope.
 4. **Pill identity.** The pill looks the same for dictation and commands. A distinct recording tint could come later.
+5. **Recognition after release.** A short instruction is recognized whole after release (~0.6 s with Whisper turbo), the same cost as a short dictation. A speculative recognition at the pause before release would cut most of that, for dictation as well.
