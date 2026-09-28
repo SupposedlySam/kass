@@ -59,6 +59,11 @@ def get_capture_settings(db: Session) -> DBCaptureSettings:
 
 
 def update_capture_settings(db: Session, patch: dict[str, Any]) -> DBCaptureSettings:
+    """Apply ``patch``. Raises ValueError for transforms that can't be saved."""
+    if patch.get("command_transforms") is not None:
+        from .commands import normalize_transforms
+
+        patch = {**patch, "command_transforms": normalize_transforms(patch["command_transforms"])}
     row = _get_or_create_capture_row(db)
     _apply_patch(row, patch)
     db.commit()

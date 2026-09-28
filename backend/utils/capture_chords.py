@@ -7,6 +7,8 @@ import sys
 
 MAC_PUSH_TO_TALK = ["MetaRight", "AltGr"]
 MAC_TOGGLE_TO_TALK = ["MetaRight", "AltGr", "Space"]
+# Command Mode (docs/plans/COMMAND_MODE.md): shares no chord with dictation.
+MAC_COMMAND = ["MetaRight", "ShiftRight"]
 NON_MAC_PUSH_TO_TALK = ["ControlRight", "ShiftRight"]
 NON_MAC_TOGGLE_TO_TALK = ["ControlRight", "ShiftRight", "Space"]
 
@@ -21,3 +23,7 @@ def default_toggle_to_talk_chord() -> list[str]:
     if sys.platform == "darwin":
         return MAC_TOGGLE_TO_TALK.copy()
     return NON_MAC_TOGGLE_TO_TALK.copy()
+
+
+def default_command_chord() -> list[str]:
+    return MAC_COMMAND.copy()

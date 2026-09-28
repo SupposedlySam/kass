@@ -1,0 +1,423 @@
+"""Command Mode: prompt, transform names, rewrite post-processing, endpoint and stream session."""
+
+import asyncio
+import struct
+
+import numpy as np
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from backend import config
+from backend.database import get_db
+from backend.database.models import Base, Capture, CaptureSettings
+from backend.models import CaptureSettingsResponse, CaptureSettingsUpdate
+from backend.services import capture_stream, commands
+from backend.services.refinement import RefinementFlags, build_refinement_prompt
+
+
+class FakeLLM:
+    """Records generate calls and answers with a fixed reply."""
+
+    model_size = "1.7B"
+
+    def __init__(self, reply="Rewritten."):
+        self.reply = reply
+        self.calls = []
+
+    async def generate(self, **kwargs):
+        from backend.backends.qwen_llm_backend import generation_hint
+
+        self.calls.append({**kwargs, "hint": generation_hint.get()})
+        return self.reply
+
+
+# --- Prompt -------------------------------------------------------------------------
+
+
+def test_command_prompt_allows_translation_and_asks_for_the_edited_text_only():
+    prompt = commands.build_command_prompt()
+    assert "Translate only when the instruction asks" in prompt
+    assert "Do not translate" not in prompt
+    assert "edited passage only" in prompt
+
+
+def test_dictation_prompt_still_forbids_translation():
+    assert "Do not translate" in build_refinement_prompt(RefinementFlags())
+
+
+def test_selection_comes_first_so_it_can_be_prefilled_before_the_instruction():
+    message = commands.command_message("Hello there.", " make it formal ")
+    assert message.startswith(commands.selection_block("Hello there."))
+    assert message.endswith("Instruction: make it formal")
+
+
+def test_examples_nearest_the_request_are_in_the_passage_language():
+    # An example in another language right before the request pulled "more
+    # formal" into that language on every model size.
+    *_, (_, last_instruction, last_result) = commands.COMMAND_EXAMPLES
+    assert last_result.isascii()
+    assert "translate" not in last_instruction
+    examples = commands.command_examples()
+    assert len(examples) == len(commands.COMMAND_EXAMPLES)
+    assert all(user.startswith("<text>\n") and "\nInstruction: " in user for user, _ in examples)
+
+
+# --- Transforms ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    [
+        "polish",
+        "Polish.",
+        "polish this",
+        "Polish this, please.",
+        "please polish the text",
+        "Okay, run polish on this.",
+        "can you polish that",
+        "apply polish to the selection",
+    ],
+)
+def test_saying_a_transform_name_runs_its_instruction(spoken):
+    instruction, transform = commands.resolve_instruction(spoken, commands.default_transforms())
+    assert transform["name"] == "Polish"
+    assert instruction == commands.DEFAULT_TRANSFORMS[0]["instruction"]
+
+
+@pytest.mark.parametrize("spoken", ["prompt engineer", "Prompt engineer this.", "use prompt engineer"])
+def test_multi_word_names_match_whatever_their_case_and_punctuation(spoken):
+    _, transform = commands.resolve_instruction(spoken, commands.default_transforms())
+    assert transform["name"] == "Prompt Engineer"
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    [
+        "make this more concise",
+        "polish this and translate it to French",
+        "polishing",
+        "don't polish this",
+        "",
+    ],
+)
+def test_anything_else_is_a_free_form_instruction(spoken):
+    instruction, transform = commands.resolve_instruction(spoken, commands.default_transforms())
+    assert transform is None
+    assert instruction == spoken.strip()
+
+
+def test_a_name_ending_in_a_reference_to_the_selection_still_matches():
+    transforms = [{"id": "x", "name": "Fix this", "instruction": "Fix it."}]
+    assert commands.match_transform("fix this", transforms)["id"] == "x"
+    assert commands.match_transform("please fix this", transforms)["id"] == "x"
+
+
+def test_transforms_are_validated_before_they_are_saved():
+    saved = commands.normalize_transforms([{"name": " Shorten ", "instruction": " Make it shorter. "}])
+    assert saved[0]["name"] == "Shorten"
+    assert saved[0]["instruction"] == "Make it shorter."
+    assert saved[0]["id"]
+    with pytest.raises(ValueError, match="called"):
+        commands.normalize_transforms([{"name": "Polish", "instruction": "a"}, {"name": "polish!", "instruction": "b"}])
+    with pytest.raises(ValueError, match="name and an instruction"):
+        commands.normalize_transforms([{"name": "Empty", "instruction": " "}])
+    with pytest.raises(ValueError, match="said aloud"):
+        commands.normalize_transforms([{"name": "!!!", "instruction": "x"}])
+
+
+def test_settings_reject_unsaveable_transforms():
+    from backend.services.settings import update_capture_settings
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        patch = CaptureSettingsUpdate(
+            command_transforms=[{"name": "A", "instruction": "x"}, {"name": "a", "instruction": "y"}]
+        )
+        with pytest.raises(ValueError, match="called"):
+            update_capture_settings(db, patch.model_dump(exclude_unset=True))
+        row = update_capture_settings(db, {"command_transforms": [], "chord_command_keys": []})
+        assert row.command_transforms == []
+        assert row.chord_command_keys == []
+
+
+def test_new_installs_get_the_default_transforms_and_command_chord():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        from backend.services.settings import get_capture_settings
+
+        response = CaptureSettingsResponse.model_validate(get_capture_settings(db))
+    assert [t.name for t in response.command_transforms] == ["Polish", "Prompt Engineer"]
+    assert response.chord_command_keys == ["MetaRight", "ShiftRight"]
+    assert response.command_llm_model == commands.DEFAULT_COMMAND_MODEL
+
+
+def test_existing_installs_are_migrated_with_the_defaults(tmp_path):
+    import json
+
+    from sqlalchemy import text
+
+    from backend.database.migrations import run_migrations
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE capture_settings (id INTEGER PRIMARY KEY, stt_model VARCHAR)"))
+        connection.execute(text("INSERT INTO capture_settings (id, stt_model) VALUES (1, 'turbo')"))
+        connection.execute(text("CREATE TABLE captures (id VARCHAR PRIMARY KEY, audio_path VARCHAR)"))
+    run_migrations(engine)
+    run_migrations(engine)
+    with engine.connect() as connection:
+        transforms, chord = connection.execute(
+            text("SELECT command_transforms, chord_command_keys FROM capture_settings")
+        ).one()
+        columns = [row[1] for row in connection.execute(text("PRAGMA table_info(captures)"))]
+    # The defaults' apostrophes ("don't") survive the SQL literal.
+    assert json.loads(transforms) == commands.default_transforms()
+    assert json.loads(chord) == ["MetaRight", "ShiftRight"]
+    assert {"command_selection", "command_instruction", "command_transform"} <= set(columns)
+
+
+# --- Rewrite ------------------------------------------------------------------------
+
+
+def test_the_selection_keeps_its_surrounding_whitespace():
+    assert commands.finish_rewrite("\n  hello there \n", "Hi.") == "\n  Hi. \n"
+
+
+def test_echoed_markup_and_fences_the_selection_lacked_are_removed():
+    assert commands.finish_rewrite("hi", "<text>\nHello.\n</text>") == "Hello."
+    assert commands.finish_rewrite("hi", "```\nHello.\n```") == "Hello."
+    fenced = "```py\nprint(1)\n```"
+    assert commands.finish_rewrite(fenced, fenced) == fenced
+
+
+def test_markdown_hard_breaks_are_dropped_unless_the_selection_has_them():
+    assert commands.finish_rewrite("a, b", "- a  \n- b") == "- a\n- b"
+    assert commands.finish_rewrite("a  \nb", "a  \nc") == "a  \nc"
+
+
+@pytest.mark.asyncio
+async def test_rewrite_uses_the_command_prompt_with_lookup_decoding():
+    llm = FakeLLM("  The rewrite.  ")
+    text, model = await commands.rewrite("the text", "make it better", "1.7B", backend_override=llm)
+    assert (text, model) == ("The rewrite.", "1.7B")
+    call = llm.calls[0]
+    assert call["system"] == commands.build_command_prompt()
+    assert call["prompt"] == commands.command_message("the text", "make it better")
+    assert call["model_size"] == "1.7B"
+    assert call["hint"] == ""
+
+
+@pytest.mark.asyncio
+async def test_prefill_shares_the_rewrites_prompt_up_to_the_instruction():
+    llm = FakeLLM()
+    await commands.prefill("the text", "1.7B", backend_override=llm)
+    await commands.rewrite("the text", "shorter", "1.7B", backend_override=llm)
+    warm, real = llm.calls
+    assert warm["max_tokens"] == 1
+    assert (warm["system"], warm["examples"]) == (real["system"], real["examples"])
+    assert real["prompt"].startswith(warm["prompt"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("selection", "instruction", "error"),
+    [("  ", "shorter", "Select text"), ("x", " ", "No instruction"), ("x" * 16_001, "shorter", "too long")],
+)
+async def test_bad_requests_never_reach_the_model(selection, instruction, error):
+    llm = FakeLLM()
+    with pytest.raises(ValueError, match=error):
+        await commands.rewrite(selection, instruction, "1.7B", backend_override=llm)
+    assert not llm.calls
+
+
+@pytest.mark.asyncio
+async def test_an_empty_rewrite_is_an_error_not_an_empty_replacement():
+    with pytest.raises(ValueError, match="empty"):
+        await commands.rewrite("text", "delete the filler", "1.7B", backend_override=FakeLLM("<text>\n\n</text>"))
+
+
+# --- Endpoint -----------------------------------------------------------------------
+
+
+@pytest.fixture
+def api(monkeypatch):
+    from backend.routes.commands import router
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    make = sessionmaker(bind=engine)
+
+    def override():
+        with make() as db:
+            yield db
+
+    llm = FakeLLM("Hola.")
+    monkeypatch.setattr(commands, "_llm", lambda: llm)
+    monkeypatch.setattr(commands, "ensure_model_ready", lambda size: None)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = override
+    client = TestClient(app)
+    client.llm, client.db = llm, make
+    return client
+
+
+def test_endpoint_rewrites_and_saves_a_command_capture(api):
+    response = api.post(
+        "/commands/run",
+        json={"selection": "Hello.", "instruction": "translate to Spanish", "app_name": "Notes"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "command"
+    assert body["transcript_refined"] == "Hola."
+    assert body["command_selection"] == "Hello."
+    assert body["command_instruction"] == "translate to Spanish"
+    assert body["command_transform"] is None
+    assert body["app_name"] == "Notes"
+    assert body["llm_model"] == commands.DEFAULT_COMMAND_MODEL
+    with api.db() as db:
+        assert db.query(Capture).one().audio_path == ""
+
+
+def test_endpoint_runs_a_transform_by_name(api):
+    body = api.post("/commands/run", json={"selection": "hi", "instruction": "Polish"}).json()
+    assert body["command_transform"] == "Polish"
+    assert body["command_instruction"] == commands.DEFAULT_TRANSFORMS[0]["instruction"]
+    assert api.llm.calls[0]["prompt"].endswith(commands.DEFAULT_TRANSFORMS[0]["instruction"])
+
+
+def test_endpoint_uses_the_users_own_transforms(api):
+    with api.db() as db:
+        db.add(
+            CaptureSettings(
+                id=1, command_transforms=[{"id": "t", "name": "Pirate", "instruction": "Talk like a pirate."}]
+            )
+        )
+        db.commit()
+    body = api.post("/commands/run", json={"selection": "hi", "instruction": "pirate this"}).json()
+    assert body["command_instruction"] == "Talk like a pirate."
+
+
+def test_endpoint_turns_an_uploaded_command_recording_into_its_rewrite(api):
+    with api.db() as db:
+        db.add(Capture(id="rec", audio_path="captures/rec.wav", source="command", transcript_raw="make it Spanish"))
+        db.commit()
+    body = api.post("/commands/run", json={"selection": "Hello.", "capture_id": "rec"}).json()
+    assert body["id"] == "rec"
+    assert body["transcript_raw"] == "make it Spanish"
+    assert body["transcript_refined"] == "Hola."
+    assert api.post("/commands/run", json={"selection": "x", "capture_id": "missing"}).status_code == 404
+
+
+def test_endpoint_reports_bad_requests(api):
+    response = api.post("/commands/run", json={"selection": "", "instruction": "shorter"})
+    assert response.status_code == 400
+    assert "Select text" in response.json()["detail"]
+    assert not api.llm.calls
+
+
+# --- Stream session -----------------------------------------------------------------
+
+
+@pytest.fixture
+def stream(tmp_path, monkeypatch):
+    from backend.tests.test_capture_stream import HeardWhenLoud
+
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    monkeypatch.setattr(capture_stream, "SpeechDetector", HeardWhenLoud)
+    llm = FakeLLM("Hola.")
+    monkeypatch.setattr(commands, "_llm", lambda: llm)
+    monkeypatch.setattr(capture_stream, "ensure_model_ready", lambda size: None)
+    events = []
+
+    async def send(event):
+        events.append(event)
+
+    session = capture_stream.StreamingCapture(
+        dict(
+            type="start",
+            protocol_version=1,
+            sample_rate=16000,
+            channels=1,
+            encoding="pcm_s16le",
+            source="command",
+        ),
+        CaptureSettingsResponse(auto_refine=True),
+        send,
+    )
+    session.recognize = _recognized("translate to Spanish")
+    session.llm = llm
+    yield session
+    session.close()
+
+
+def _recognized(text):
+    async def recognize(pcm, start=None):
+        return text
+
+    return recognize
+
+
+def _speak(session, seconds):
+    pcm = np.full(round(seconds * session.rate), 1000, dtype="<i2").tobytes()
+    session.append(struct.pack("<II", session.sequence, session.samples) + pcm)
+
+
+@pytest.mark.asyncio
+async def test_a_command_session_prefills_while_speaking_and_rewrites_at_finish(stream, monkeypatch):
+    async def refine(*args, **kwargs):
+        raise AssertionError("dictation cleanup ran on a command's instruction")
+
+    monkeypatch.setattr(capture_stream, "refine_transcript", refine)
+    worker = asyncio.create_task(stream.run())
+    stream.set_selection("Hello.")
+    _speak(stream, 1)
+    await stream.prefilling
+    assert stream.llm.calls[0]["max_tokens"] == 1
+    stream.finish()
+    await worker
+    assert stream.refined == "Hola."
+    rewrite_call = stream.llm.calls[-1]
+    assert rewrite_call["prompt"] == commands.command_message("Hello.", "translate to Spanish")
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        result = stream.persist(db)
+    assert result.source == "command"
+    assert result.transcript_raw == "translate to Spanish"
+    assert result.transcript_refined == "Hola."
+    assert result.command_selection == "Hello."
+    assert result.allow_auto_paste
+    assert result.auto_refine
+    assert result.refinement_flags is None
+
+
+@pytest.mark.asyncio
+async def test_a_command_without_a_selection_fails_without_rewriting(stream):
+    worker = asyncio.create_task(stream.run())
+    _speak(stream, 1)
+    stream.finish()
+    await worker
+    assert stream.refinement_error == "Select text to rewrite first"
+    assert not stream.llm.calls
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        result = stream.persist(db)
+    # Saved, so the instruction isn't lost, but with no rewrite to paste.
+    assert result.transcript_refined is None
+
+
+def test_only_command_sessions_take_a_bounded_selection(stream, tmp_path, monkeypatch):
+    with pytest.raises(ValueError, match="too long"):
+        stream.set_selection("x" * (commands.MAX_SELECTION_CHARS + 1))
+    stream.source = "dictation"
+    with pytest.raises(ValueError, match="Only command"):
+        stream.set_selection("x")

@@ -120,7 +120,7 @@ async def _preview(db: Session) -> tuple[str, str]:
     """
     rows = (
         db.query(Capture.transcript_raw, Capture.transcript_refined)
-        .filter(Capture.transcript_raw != "")
+        .filter(Capture.transcript_raw != "", Capture.source != "command")
         .order_by(Capture.created_at.desc())
         .limit(PREVIEW_CANDIDATES)
         .all()

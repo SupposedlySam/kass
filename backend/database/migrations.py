@@ -26,7 +26,9 @@ import logging
 
 from sqlalchemy import inspect, text
 
+from ..services.commands import DEFAULT_COMMAND_MODEL, default_transforms
 from ..utils.capture_chords import (
+    default_command_chord,
     default_push_to_talk_chord,
     default_toggle_to_talk_chord,
 )
@@ -68,6 +70,13 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "app_name"):
         if column not in columns:
             _add_column(engine, "captures", f"{column} VARCHAR", column)
+    for column, kind in (("command_selection", "TEXT"), ("command_instruction", "TEXT"), ("command_transform", "VARCHAR")):
+        if column not in columns:
+            _add_column(engine, "captures", f"{column} {kind}", column)
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
@@ -117,6 +126,27 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             "live_text BOOLEAN NOT NULL DEFAULT 0",
             "live_text",
+        )
+    if "chord_command_keys" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            f"chord_command_keys TEXT NOT NULL DEFAULT {_sql_literal(json.dumps(default_command_chord()))}",
+            "chord_command_keys",
+        )
+    if "command_llm_model" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            f"command_llm_model VARCHAR NOT NULL DEFAULT {_sql_literal(DEFAULT_COMMAND_MODEL)}",
+            "command_llm_model",
+        )
+    if "command_transforms" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            f"command_transforms TEXT NOT NULL DEFAULT {_sql_literal(json.dumps(default_transforms()))}",
+            "command_transforms",
         )
     if "punctuation_style" not in columns:
         _add_column(

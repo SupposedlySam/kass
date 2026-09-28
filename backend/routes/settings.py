@@ -1,6 +1,6 @@
 """User settings endpoints — capture/refine defaults."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -20,4 +20,7 @@ async def update_capture_settings_endpoint(
     patch: models.CaptureSettingsUpdate,
     db: Session = Depends(get_db),
 ):
-    return settings_service.update_capture_settings(db, patch.model_dump(exclude_unset=True))
+    try:
+        return settings_service.update_capture_settings(db, patch.model_dump(exclude_unset=True))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

@@ -41,6 +41,8 @@ def _recent_texts() -> list[str]:
         refined = (
             db.query(Capture.transcript_refined)
             .filter(Capture.transcript_refined.isnot(None))
+            # A command's output may be a translation, not the user's writing.
+            .filter(Capture.source != "command")
             .order_by(Capture.created_at.desc())
             .limit(_RECENT)
             .all()

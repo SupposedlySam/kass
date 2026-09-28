@@ -109,10 +109,13 @@ async def create_capture_endpoint(
         logger.exception("Failed to create capture")
         raise HTTPException(status_code=500, detail=str(e))
 
+    # A command recording always goes on to its rewrite (POST /commands/run),
+    # which replaces the selection whatever the paste setting says.
+    is_command = source == "command"
     return models.CaptureCreateResponse(
         **capture.model_dump(),
-        auto_refine=bool(saved.auto_refine),
-        allow_auto_paste=bool(saved.allow_auto_paste),
+        auto_refine=is_command or bool(saved.auto_refine),
+        allow_auto_paste=is_command or bool(saved.allow_auto_paste),
     )
 
 

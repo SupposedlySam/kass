@@ -9,6 +9,7 @@ def register_routers(app: FastAPI) -> None:
     from .transcription import router as transcription_router
     from .llm import router as llm_router
     from .captures import router as captures_router
+    from .commands import router as commands_router
     from .capture_stream import router as capture_stream_router
     from .models import router as models_router
     from .settings import router as settings_router
@@ -20,6 +21,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(llm_router)
     app.include_router(capture_stream_router)
     app.include_router(captures_router)
+    app.include_router(commands_router)
     app.include_router(models_router)
     app.include_router(settings_router)
     app.include_router(tasks_router)

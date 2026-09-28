@@ -29,7 +29,7 @@ from .transcribe import get_whisper_model
 logger = logging.getLogger(__name__)
 
 
-VALID_SOURCES = {"dictation", "recording", "file"}
+VALID_SOURCES = {"dictation", "recording", "file", "command"}
 # Suffixes whisper's miniaudio loader can read directly. Anything outside
 # this set has to go through librosa for decode + a soundfile transcode
 # before whisper sees it.
@@ -79,6 +79,9 @@ def _to_response(row: DBCapture) -> CaptureResponse:
         refinement_review=review,
         app_bundle_id=row.app_bundle_id,
         app_name=row.app_name,
+        command_selection=row.command_selection,
+        command_instruction=row.command_instruction,
+        command_transform=row.command_transform,
         created_at=row.created_at,
     )
 
