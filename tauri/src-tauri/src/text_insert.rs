@@ -298,17 +298,47 @@ fn side<T: AxTextTarget>(target: &T, from: i64, to: i64, caret_at_end: bool) -> 
     })
 }
 
-/// The text around the caret in `target`, where dictated text may be
-/// fitted to it: not in secure fields, and not in apps whose AX text is not
-/// the input (terminals).
-pub fn caret_context<T: AxTextTarget>(target: &T, bundle_id: Option<&str>) -> join::Context {
+/// Whether the text around the caret in `target` may be read: not in
+/// secure fields, and not in apps whose AX text is not the input (terminals).
+fn context_readable<T: AxTextTarget>(target: &T, bundle_id: Option<&str>) -> bool {
     let secure = [target.role(), target.subrole()]
         .iter()
         .any(|r| r.as_deref() == Some(SECURE_ROLE));
-    if secure || bundle_id.is_some_and(|id| CLIPBOARD_ONLY_BUNDLES.contains(&id)) {
+    !secure && !bundle_id.is_some_and(|id| CLIPBOARD_ONLY_BUNDLES.contains(&id))
+}
+
+/// The text around the caret in `target`, where dictated text may be
+/// fitted to it ([`context_readable`]).
+pub fn caret_context<T: AxTextTarget>(target: &T, bundle_id: Option<&str>) -> join::Context {
+    if !context_readable(target, bundle_id) {
         return join::Context::default();
     }
     context_at(target, target.observe())
+}
+
+/// UTF-16 units read before the caret at key-down, for recognition: the
+/// sentence the dictation may continue, and the names in it.
+pub const SENTENCE_BEFORE: i64 = 600;
+
+/// Up to `units` of the text before the caret (or selection) in `target`,
+/// where it may be read ([`context_readable`]).
+pub fn text_before_caret<T: AxTextTarget>(
+    target: &T,
+    bundle_id: Option<&str>,
+    units: i64,
+) -> Option<String> {
+    if !context_readable(target, bundle_id) {
+        return None;
+    }
+    let sel = target.observe().selection?;
+    side(target, (sel.location - units).max(0), sel.location, true)
+}
+
+/// [`text_before_caret`] in `pid`'s focused element, [`SENTENCE_BEFORE`]
+/// units of it. Blocking.
+pub fn sentence_before_focused(pid: i32, bundle_id: Option<&str>) -> Option<String> {
+    let element = macos::FocusedElement::of_app(pid)?;
+    text_before_caret(&element, bundle_id, SENTENCE_BEFORE)
 }
 
 /// `text` fitted to the text around the caret in `pid`'s focused element,
@@ -1674,6 +1704,23 @@ mod tests {
         let mut field = FakeField::new("abc", range(1, 0));
         field.ranges_unreadable = true;
         assert_eq!(caret_context(&field, None), join::Context::default());
+    }
+
+    #[test]
+    fn text_before_the_caret_is_read_up_to_a_limit() {
+        let field = FakeField::new("Hello there. I think we should", range(30, 0));
+        assert_eq!(
+            text_before_caret(&field, None, 600).as_deref(),
+            Some("Hello there. I think we should")
+        );
+        assert_eq!(
+            text_before_caret(&field, None, 9).as_deref(),
+            Some("we should")
+        );
+        assert_eq!(
+            text_before_caret(&field, Some("com.apple.Terminal"), 600),
+            None
+        );
     }
 
     #[test]

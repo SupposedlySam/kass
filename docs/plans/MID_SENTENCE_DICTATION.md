@@ -18,7 +18,7 @@ Nothing in the pipeline knows what is around the caret. `focus_capture::capture_
 
 Read a few characters on each side of the caret, then use them in two places:
 
-1. **Refinement (text).** Tell the model whether the take continues a sentence, so it decides the first word's case. The model can tell "move" from "Morgan", and a rule can't.
+1. **Recognition (text).** Tell the server whether the take continues a sentence, so the first word keeps a capital only where it is a name (section 2).
 2. **Insertion (characters at the join).** Fix the spacing and punctuation where the text meets its neighbors with deterministic rules at the moment of insertion. This is exact and free, and it doesn't depend on the model following instructions.
 
 Where context can't be read (no Accessibility text access, as in some Electron and terminal fields), keep today's behavior. A field we can't see is treated like an empty one, which is what we do now.
@@ -34,18 +34,33 @@ Read it twice:
 
 Send the key-down `before` text to the backend with the take, the same way `TargetApp` goes (`dictation/protocol.rs`, then `capture_stream.py` or the `/captures` form). Store it on the capture so re-refining and model improvement see the same input.
 
-## 2. Refinement: the continuation hint
+## 2. Capitals: continuing the field's sentence
 
-Derive `continues_sentence` from `before`. It is false when `before` is empty or only whitespace, or when it ends in `.`, `!`, `?`, or a newline, optionally followed by closing quotes or brackets and whitespace. Otherwise it is true.
+**Built.** The planned prompt hint was dropped. The transcript decides the case instead, so the cleanup prompt is unchanged.
 
-When true, `refine_transcript` adds one short instruction: *"This text continues a sentence already in progress. Start with a lowercase letter unless the first word is a proper noun, acronym, or 'I'."* Pass the last few words of `before` as well, so the model sees what it is continuing.
+- **Key-down.** `dictation::set_focus` reads up to 600 UTF-16 units before the caret on a blocking task, after the mic and the focus snapshot (`text_insert::sentence_before_focused`). Terminals and secure fields are skipped. The stream client sends it as a `{"type": "context", "before": ...}` message with the first audio after it is known, or ahead of `finish` (`StreamClient::with_field_before`). The text is never saved.
+- **Continues or not.** `phrase_seams.continues_sentence(before)` is true when the last character before the caret (ignoring trailing spaces and closing quotes or brackets) is a letter, a digit, a comma, a semicolon or a dash, with no line break after it.
+- **Whisper.** When the take continues, the field text is the first phrase's `initial_prompt`, as earlier phrases already are for later ones.
+- **The first word's case.** `phrase_seams.continue_phrase` runs on the first phrase, the same rule as after a pause. It lowercases a capital only for a common word: Whisper's BPE vocabulary has the lowercase word (with a leading space) as a more frequent token than the capitalized one ("move" 1286 < "Move" 10475; "Sarah" has no lowercase token). For words with no token either way it falls back to the system word list. "I", acronyms, words like "GitHub", and names the user capitalizes mid-sentence keep their capital. Those names come from the field text, the phrase itself, and `known_names`: 500 recent cleaned dictations and corrections, cached for five minutes. This also stops pause seams from lowercasing names.
+- **Cleanup.** Cleanup capitalizes every start, so `match_raw_start` gives the cleaned text's first word the casing of the same word in the transcript (`StreamingCapture.start_like_raw`, applied in `compose` and to whole-dictation cleanups).
 
-- Add it as a `RefinementFlags` field, so the prompt only changes for takes that need it and the usual prompt stays byte-identical for caching.
-- Add few-shot examples of continuation takes to `refinement_examples` only when the flag is set.
-- `prepare_refinement` and the structured-edit bypass in `dictation_edits.py` skip the LLM. They need a small deterministic lowercase of their own when the first word is plain title case, i.e. not "I", not all caps, and with no inner capital as in "GitHub".
-- With refinement turned off, apply the same deterministic lowercase to the raw transcript. Whisper capitalizes the first word too.
+These were measured with `say`-generated phrases, whisper-large-v3-turbo and the 4B cleanup model through a real `StreamingCapture`:
 
-The period at the end stays the model's decision. Ending in the middle of a sentence is decided at the join below.
+| Field | Without context | With context |
+| --- | --- | --- |
+| `I think we should ` | Move the meeting to Friday. | move the meeting to Friday. |
+| `Please ask ` | Morgan about the budget. | Morgan about the budget. |
+| `The problem is ` | That nobody tested it. | that nobody tested it. |
+| `I talked to ` | Sarah and she agreed. | Sarah and she agreed. |
+| `It depends on ` | Whether GitHub is down. | whether GitHub is down. |
+
+Rejected along the way:
+- Whisper's casing alone lowercased only 3 of 6 ordinary words.
+- The old `continue_phrase` lowercased the names.
+- Whisper's decoder `prefix` broke recognition: most phrases came back as `!`.
+- The word list alone has noisy capitalized entries ("For", "Part") and no plurals.
+
+Still ambiguous: words that are both common and names ("Grace", "Mark", "Bill"). As first words they are lowercased unless the user has written them capitalized mid-sentence. The batch upload fallback, used when the stream fails before `finish`, does not get the context yet.
 
 ## 3. Insertion: fitting the join
 
@@ -86,7 +101,7 @@ If the user fixes a join that came out wrong, the difference between refined and
 ## Order
 
 1. `join.rs` plus reading the context at insertion. This fixes all the spacing and doubled punctuation, needs no backend change, and ships by itself. **Done.** `text_insert::fit_to_focused` runs once before the insertion chain in `run_insert_chain`, and live insertion reads the context in `begin_live` and keeps it on `Owned`. Insertion into Voicebox's own window, which goes through the DOM, is not fitted yet. `insert_bench::caret_context_bench` measures the extra AX read in TextEdit.
-2. Reading the context at key-down plus the refinement hint. This fixes capitals.
+2. Reading the context at key-down, and the first word's case. This fixes capitals. **Done** (section 2).
 3. Capture fields and the correction and learning changes.
 
 ## Open questions

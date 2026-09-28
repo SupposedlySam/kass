@@ -51,6 +51,8 @@ pub struct StreamClient {
     outcome: Option<Outcome>,
     on_provisional: Option<Box<dyn Fn(String) + Send>>,
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
+    field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
+    context_sent: bool,
 }
 
 impl StreamClient {
@@ -72,6 +74,8 @@ impl StreamClient {
             outcome: None,
             on_provisional: None,
             target_app: None,
+            field_before: None,
+            context_sent: false,
         }
     }
 
@@ -89,6 +93,28 @@ impl StreamClient {
     ) -> Self {
         self.target_app = Some(Box::new(target_app));
         self
+    }
+
+    /// Send the field's text before the caret once it is known. Read just
+    /// after key-down, it goes out with the next audio (or `finish`), before
+    /// the server recognizes the first phrase.
+    pub fn with_field_before(
+        mut self,
+        field_before: impl Fn() -> Option<String> + Send + 'static,
+    ) -> Self {
+        self.field_before = Some(Box::new(field_before));
+        self
+    }
+
+    /// The `context` message, the first time the text is known. Only once
+    /// the server is ready: it expects the start message first.
+    fn context_action(&mut self) -> Option<Action> {
+        if self.context_sent || !self.ready {
+            return None;
+        }
+        let before = self.field_before.as_ref().and_then(|f| f())?;
+        self.context_sent = true;
+        Some(Action::Text(protocol::context_message(&before)))
     }
 
     fn finish_message(&self) -> String {
@@ -145,7 +171,7 @@ impl StreamClient {
         if self.outcome.is_some() || self.finish_requested {
             return Vec::new();
         }
-        let mut actions = Vec::new();
+        let mut actions: Vec<Action> = self.context_action().into_iter().collect();
         for chunk in pcm.chunks(protocol::MAX_SAMPLES_PER_MESSAGE) {
             let frame = protocol::encode_frame(self.sequence, self.sample_offset, chunk);
             self.sequence = self.sequence.wrapping_add(1);
@@ -172,7 +198,9 @@ impl StreamClient {
         self.finish_requested = true;
         if self.ready {
             self.finish_sent = true;
-            vec![Action::Text(self.finish_message())]
+            let mut actions: Vec<Action> = self.context_action().into_iter().collect();
+            actions.push(Action::Text(self.finish_message()));
+            actions
         } else {
             Vec::new()
         }
@@ -188,7 +216,8 @@ impl StreamClient {
                 self.ready = true;
                 self.session_id = Some(session_id);
                 self.pending_bytes = 0;
-                let mut actions: Vec<Action> = self.pending.drain(..).map(Action::Binary).collect();
+                let mut actions: Vec<Action> = self.context_action().into_iter().collect();
+                actions.extend(self.pending.drain(..).map(Action::Binary));
                 if self.finish_requested {
                     self.finish_sent = true;
                     actions.push(Action::Text(self.finish_message()));
@@ -386,6 +415,58 @@ mod tests {
                 "app": { "bundle_id": "com.apple.Notes", "name": "Notes" },
             })]
         );
+    }
+
+    #[test]
+    fn field_text_goes_out_once_with_the_first_audio_after_it_is_known() {
+        let known = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let read = known.clone();
+        let mut client =
+            StreamClient::new(1 << 20).with_field_before(move || read.lock().unwrap().clone());
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        // Not read yet: audio goes alone.
+        assert!(texts(&client.push_audio(&[1])).is_empty());
+        *known.lock().unwrap() = Some("I think we should".into());
+        let actions = client.push_audio(&[2]);
+        assert_eq!(
+            texts(&actions),
+            vec![serde_json::json!({"type": "context", "before": "I think we should"})]
+        );
+        // Ahead of the audio it came with.
+        assert!(matches!(actions[0], Action::Text(_)));
+        assert_eq!(frames(&actions).len(), 1);
+        assert!(texts(&client.push_audio(&[3])).is_empty());
+        assert_eq!(texts(&client.request_finish()).len(), 1);
+    }
+
+    #[test]
+    fn field_text_waits_for_ready_and_precedes_buffered_audio() {
+        let mut client = StreamClient::new(1 << 20).with_field_before(|| Some("Can you".into()));
+        client.set_format(48_000);
+        client.on_open();
+        assert!(texts(&client.push_audio(&[1])).is_empty());
+        let actions = ready(&mut client);
+        assert!(matches!(&actions[0], Action::Text(t) if t.contains("\"context\"")));
+        assert_eq!(frames(&actions).len(), 1);
+    }
+
+    #[test]
+    fn field_text_known_only_at_release_precedes_finish() {
+        let known = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let read = known.clone();
+        let mut client =
+            StreamClient::new(1 << 20).with_field_before(move || read.lock().unwrap().clone());
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        *known.lock().unwrap() = Some("Can you".into());
+        let sent: Vec<String> = texts(&client.request_finish())
+            .iter()
+            .map(|v| v["type"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(sent, ["context", "finish"]);
     }
 
     #[test]

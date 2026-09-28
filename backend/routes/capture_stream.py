@@ -97,8 +97,12 @@ async def stream_capture(websocket: WebSocket):
                 raise ValueError("Expected a command object")
             if command.get("type") == "cancel":
                 return
+            if command.get("type") == "context":
+                # The field's text before the caret, read just after key-down.
+                session.set_context(command.get("before"))
+                continue
             if command.get("type") != "finish":
-                raise ValueError("Expected finish or cancel")
+                raise ValueError("Expected context, finish or cancel")
             if not session.samples:
                 raise ValueError("Cannot finish empty audio")
             app = command.get("app")

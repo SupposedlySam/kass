@@ -10,6 +10,11 @@ its first word says whether the speaker continued the sentence. A capitalized
 first word is only treated as a new sentence when it is a common sentence
 opener; anything else is assumed to be a name continuing the sentence.
 
+A lowercase first word from Whisper reliably continues the sentence; a capital
+does not reliably start one. ``continue_phrase`` lowercases it only for a
+common word (``_common_word``). Names stay capitalized, including any the user
+capitalizes mid-sentence elsewhere.
+
 Streaming cleanup now sees a whole open sentence at a time
 (sentence_tail.py), so joins happen only where a long tail is settled
 mid-sentence. Before cleanup, ``strip_pause_mark``, ``continue_after_seam``
@@ -17,6 +22,9 @@ and ``continue_phrase`` remove the ending and capital Whisper gives a phrase
 only because the audio paused.
 """
 
+import functools
+import itertools
+import json
 import re
 
 # fmt: off
@@ -37,6 +45,73 @@ _SENTENCE_OPENERS = frozenset((
 
 _TERMINAL = ".?!:;"
 
+# macOS's word list: common words in lowercase, names capitalized.
+_WORD_LIST = "/usr/share/dict/words"
+_SUFFIXES = ("'s", "\u2019s", "ies", "es", "s", "ed", "d", "ing", "ly")
+# The byte-level BPE marker for a leading space.
+_SPACE = "\u0120"
+
+
+@functools.cache
+def _vocabulary() -> dict[str, int]:
+    """Whisper's BPE vocabulary, whose ids rise roughly as tokens get rarer.
+
+    Empty when no Whisper model is downloaded; the word list decides then.
+    """
+    from huggingface_hub import try_to_load_from_cache
+
+    from ..backends import WHISPER_HF_REPOS
+
+    for repo in WHISPER_HF_REPOS.values():
+        try:
+            path = try_to_load_from_cache(repo, "vocab.json")
+            if isinstance(path, str):
+                with open(path, encoding="utf-8") as vocab:
+                    return json.load(vocab)
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
+@functools.cache
+def _lexicon() -> tuple[frozenset[str], frozenset[str]]:
+    """Words the word list has in lowercase, and words it has capitalized."""
+    try:
+        with open(_WORD_LIST, encoding="utf-8") as words:
+            entries = words.read().split()
+    except OSError:
+        return frozenset(), frozenset()
+    return (
+        frozenset(w for w in entries if w.islower()),
+        frozenset(w.casefold() for w in entries if w[:1].isupper()),
+    )
+
+
+def load_word_data() -> None:
+    """Read the vocabulary and word list now, so the first dictation doesn't wait. Blocking."""
+    _vocabulary()
+    _lexicon()
+
+
+def _common_word(word: str) -> bool:
+    """Whether ``word`` is mostly written in lowercase mid-sentence, so not a name.
+
+    Whisper's vocabulary says which casing is the more frequent word after a
+    space: " move" comes long before " Move", and " Sarah" has no lowercase
+    token at all. A word with neither is looked up in the system word list
+    (and "tests" as "test"), which lists names capitalized.
+    """
+    vocab = _vocabulary()
+    lower, capital = vocab.get(_SPACE + word.lower()), vocab.get(_SPACE + word[0].upper() + word[1:].lower())
+    if lower is not None or capital is not None:
+        return lower is not None and (capital is None or lower < capital)
+    words, capitalized = _lexicon()
+    key = word.casefold()
+    stems = [key] + [
+        key[: -len(s)] + ("y" if s == "ies" else "") for s in _SUFFIXES if key.endswith(s) and len(key) > len(s) + 2
+    ]
+    return any(stem in words and stem not in capitalized for stem in stems)
+
 
 def _first_word(text: str) -> str:
     match = re.match(r"\W*([^\W\d_][\w']*)", text)
@@ -51,10 +126,14 @@ def _starts_sentence(raw: str) -> bool:
     return key in _SENTENCE_OPENERS or key.split("'")[0] in _SENTENCE_OPENERS
 
 
+def _keeps_capital(word: str) -> bool:
+    """ "I" and its contractions, acronyms, and words like "GitHub" or "iPhone"."""
+    return word == "I" or word.startswith(("I'", "I\u2019")) or any(c.isupper() for c in word[1:])
+
+
 def _lower_first(text: str) -> str:
     word = _first_word(text)
-    # "I" and its contractions stay capitalized; so do acronyms.
-    if not word or word == "I" or word.startswith(("I'", "I\u2019")) or (len(word) > 1 and word.isupper()):
+    if not word or _keeps_capital(word):
         return text
     index = text.index(word)
     return text[:index] + word[0].lower() + text[index + 1 :]
@@ -91,33 +170,73 @@ def strip_pause_mark(text: str) -> str:
     return stripped
 
 
-def _mid_sentence_capitals(text: str) -> set[str]:
-    """Words ``text`` capitalizes where no sentence starts: names and the like."""
-    words = text.split()
+def mid_sentence_capitals(text: str) -> set[str]:
+    """Words ``text`` capitalizes where no sentence starts: names and the like.
+
+    Each line starts a sentence of its own.
+    """
     kept = set()
-    for before, word in zip(words, words[1:], strict=False):
-        first = _first_word(word)
-        if first and first[0].isupper() and not re.search(r"[.?!:\u2026-]$", before):
-            kept.add(first)
+    for line in text.splitlines():
+        words = line.split()
+        for before, word in itertools.pairwise(words):
+            first = _first_word(word)
+            if first and first[0].isupper() and not re.search(r"[.?!:\u2026-]$", before):
+                kept.add(first)
     return kept
 
 
-def continue_phrase(phrase: str, earlier: str) -> str:
-    """Lowercase the capital Whisper gives a phrase only because it began after a pause.
+def continue_phrase(phrase: str, earlier: str, names: frozenset[str] = frozenset()) -> str:
+    """Lowercase the capital Whisper gives a phrase that continues a sentence.
 
-    ``I``, acronyms and words capitalized mid-sentence in ``earlier`` (the
-    dictation before this phrase) or later in the phrase itself keep their
-    capitals: those are names, not sentence starts.
+    Whisper capitalizes a phrase cut off at a pause, or started in the middle
+    of someone's sentence, as if it began a sentence. Only a common word
+    (``_common_word``, or a sentence opener) is lowercased. ``I``, acronyms,
+    ``names`` and words capitalized mid-sentence in ``earlier`` (the text
+    before this phrase) or later in the phrase itself keep their capitals:
+    those are names, not sentence starts.
     """
     word = _first_word(phrase)
     if not word or not word[0].isupper():
         return phrase
-    if word in _mid_sentence_capitals(earlier) | _mid_sentence_capitals(phrase):
+    if word in names | mid_sentence_capitals(earlier) | mid_sentence_capitals(phrase):
         return phrase
-    return _lower_first(phrase)
+    key = word.casefold().replace("\u2019", "'")
+    if key in _SENTENCE_OPENERS or key.split("'")[0] in _SENTENCE_OPENERS or _common_word(word):
+        return _lower_first(phrase)
+    return phrase
 
 
-def continue_after_seam(before: str, phrase: str, earlier: str) -> tuple[str, str]:
+def continues_sentence(before: str) -> bool:
+    """Whether text inserted after ``before`` (the field up to the caret) is mid-sentence.
+
+    An empty field, a line break, or a finished sentence (``.``, ``?``, ``!``,
+    ``:``) start a new one. So does anything that isn't a word, a comma or a
+    dash, such as a list bullet.
+    """
+    trailing = before[len(before.rstrip()) :]
+    text = before.rstrip().rstrip("\"'\u201d\u2019)]")
+    if not text or "\n" in trailing:
+        return False
+    return text[-1].isalnum() or text[-1] in ",;\u2014\u2013"
+
+
+def match_raw_start(text: str, raw: str) -> str:
+    """Give ``text``, cleaned up from ``raw``, the casing of raw's first word.
+
+    Cleanup writes every text as the start of a sentence. Where ``raw``
+    continues one, the same word must stay lowercase. The word is looked for
+    among raw's first few words, since cleanup drops fillers ("um").
+    """
+    word = _first_word(text)
+    if not word or not word[0].isupper():
+        return text
+    for heard in re.findall(r"[^\W\d_][\w'\u2019]*", raw)[:4]:
+        if heard.casefold() == word.casefold():
+            return _lower_first(text) if heard[0].islower() else text
+    return text
+
+
+def continue_after_seam(before: str, phrase: str, earlier: str, names: frozenset[str] = frozenset()) -> tuple[str, str]:
     """Join ``phrase`` after ``before``, text that ended where the audio paused.
 
     Returns both, adjusted. Whisper ends a phrase cut at a pause as if it were
@@ -130,9 +249,9 @@ def continue_after_seam(before: str, phrase: str, earlier: str) -> tuple[str, st
     mark the phrase continues as ``continue_phrase`` decides.
     """
     if not re.search(r"[\w)\"'”][?!]$", before):
-        return before, continue_phrase(phrase, earlier)
+        return before, continue_phrase(phrase, earlier, names)
     word = _first_word(phrase)
-    if word and word[0].isupper() and continue_phrase(phrase, earlier) == phrase:
+    if word and word[0].isupper() and continue_phrase(phrase, earlier, names) == phrase:
         return before, phrase
     return before[:-1], phrase
 

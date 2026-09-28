@@ -118,3 +118,74 @@ def test_continue_after_seam(before, phrase, earlier, expected):
     from backend.services.phrase_seams import continue_after_seam
 
     assert continue_after_seam(before, phrase, earlier) == expected
+
+
+@pytest.mark.parametrize(
+    ("phrase", "earlier", "names", "expected"),
+    [
+        # Common words lose the capital Whisper gave them.
+        ("Move the meeting to Friday", "I think we should", frozenset(), "move the meeting to Friday"),
+        ("The tests pass", "Let's ship it once", frozenset(), "the tests pass"),
+        ("Unfortunately not", "and", frozenset(), "unfortunately not"),
+        # Names keep theirs.
+        ("Morgan about the budget", "Please ask", frozenset(), "Morgan about the budget"),
+        ("Sarah and she agreed", "I talked to", frozenset(), "Sarah and she agreed"),
+        ("Kubernetes broke", "and then", frozenset(), "Kubernetes broke"),
+        ("GitHub is down", "and", frozenset(), "GitHub is down"),
+        # A word the user capitalizes mid-sentence is a name to them.
+        ("Slack is down", "and", frozenset({"Slack"}), "Slack is down"),
+        ("Slack is down", "we use Slack daily and", frozenset(), "Slack is down"),
+    ],
+)
+def test_continue_phrase_keeps_names(phrase, earlier, names, expected):
+    from backend.services.phrase_seams import continue_phrase
+
+    assert continue_phrase(phrase, earlier, names) == expected
+
+
+@pytest.mark.parametrize(
+    ("before", "expected"),
+    [
+        ("I think we should", True),
+        ("I think we should ", True),
+        ("Well, ", True),
+        ('He said "no" ', True),
+        ("We could — ", True),
+        ("", False),
+        ("   ", False),
+        ("Done. ", False),
+        ("Really?", False),
+        ("Note: ", False),
+        ("Hi,\n", False),
+        ("Intro\n- ", False),
+    ],
+)
+def test_continues_sentence(before, expected):
+    from backend.services.phrase_seams import continues_sentence
+
+    assert continues_sentence(before) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "raw", "expected"),
+    [
+        ("Move the meeting to Friday.", "move the meeting to friday", "move the meeting to Friday."),
+        # Cleanup dropped a filler; the word is still found.
+        ("Move it.", "um, move it", "move it."),
+        ("Morgan agreed.", "Morgan agreed", "Morgan agreed."),
+        ("I agree.", "i agree", "I agree."),
+        # A word raw doesn't start with is left alone.
+        ("Totally different.", "something else", "Totally different."),
+        ("already lower", "already lower", "already lower"),
+    ],
+)
+def test_match_raw_start(text, raw, expected):
+    from backend.services.phrase_seams import match_raw_start
+
+    assert match_raw_start(text, raw) == expected
+
+
+def test_mid_sentence_capitals_treats_each_line_as_a_start():
+    from backend.services.phrase_seams import mid_sentence_capitals
+
+    assert mid_sentence_capitals("Hi,\nThanks for asking Morgan") == {"Morgan"}

@@ -57,6 +57,13 @@ pub fn finish_message(app: Option<&TargetApp>) -> String {
     finish.to_string()
 }
 
+/// The field's text before the caret, read just after key-down, so the
+/// server can tell whether the take continues its sentence
+/// (docs/plans/MID_SENTENCE_DICTATION.md).
+pub fn context_message(before: &str) -> String {
+    serde_json::json!({ "type": "context", "before": before }).to_string()
+}
+
 pub fn cancel_message() -> String {
     r#"{"type":"cancel"}"#.to_string()
 }
@@ -164,6 +171,13 @@ mod tests {
                 "source": "dictation",
             })
         );
+    }
+
+    #[test]
+    fn context_message_carries_the_text_before_the_caret() {
+        let value: Value = serde_json::from_str(&context_message("we \"should\"\n")).unwrap();
+        assert_eq!(value["type"], "context");
+        assert_eq!(value["before"], "we \"should\"\n");
     }
 
     #[test]

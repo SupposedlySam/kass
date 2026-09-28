@@ -76,6 +76,8 @@ struct ActiveTake {
     origin: TakeOrigin,
     stop: std_mpsc::Sender<()>,
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
+    /// The focused field's text before the caret, read after key-down.
+    field_before: Arc<Mutex<Option<String>>>,
     /// Key-up time, for the release-to-final log.
     released: Arc<OnceLock<Instant>>,
 }
@@ -117,6 +119,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
     let live_text = config.live_text;
     let take_id = state.next_take.fetch_add(1, Ordering::Relaxed) + 1;
     let focus: Arc<Mutex<Option<FocusSnapshot>>> = Arc::new(Mutex::new(None));
+    let field_before: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let released: Arc<OnceLock<Instant>> = Arc::new(OnceLock::new());
     let live = Live::new(AxLive {
         take_id,
@@ -179,6 +182,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
 
     let (out_tx, in_rx) = transport::spawn(&config.server_url, config.origin.clone());
     let released_for_task = released.clone();
+    let field_before_task = field_before.clone();
 
     let learning_env = env.clone();
     let learning_flag = recording.clone();
@@ -191,8 +195,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
 
     tauri::async_runtime::spawn(async move {
         let app_focus = env.focus.clone();
-        let client =
-            StreamClient::new(MAX_PENDING_BYTES).with_target_app(move || target_app(&app_focus));
+        let client = StreamClient::new(MAX_PENDING_BYTES)
+            .with_target_app(move || target_app(&app_focus))
+            .with_field_before(move || field_before_task.lock().ok()?.clone());
         let client = if live_text {
             let offer = live.clone();
             client.with_provisional(move |text| offer.offer(text))
@@ -228,6 +233,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
         origin,
         stop,
         focus,
+        field_before,
         released,
     });
     Some(take_id)
@@ -281,20 +287,35 @@ async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bo
 /// Record the paste target for a take (captured right after [`start`], so
 /// the microphone never waits on Accessibility calls).
 pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
-    // Turn on an Electron target's accessibility tree now, while the user
-    // speaks, so it is built by the time the text is inserted.
-    if let Some(pid) = focus.as_ref().map(|f| f.pid) {
-        tauri::async_runtime::spawn_blocking(move || crate::text_insert::wake_electron(pid));
-    }
     let state = app.state::<DictationState>();
     let Ok(active) = state.active.lock() else {
         return;
     };
-    if let Some(take) = active.as_ref().filter(|t| t.id == take_id) {
-        if let Ok(mut slot) = take.focus.lock() {
-            *slot = focus;
-        }
+    let Some(take) = active.as_ref().filter(|t| t.id == take_id) else {
+        return;
+    };
+    if let Some(focus) = focus.as_ref() {
+        let (pid, bundle_id) = (focus.pid, focus.bundle_id.clone());
+        let in_voicebox = bundle_id.as_deref() == Some(crate::VOICEBOX_BUNDLE_ID);
+        let field_before = take.field_before.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            // Turn on an Electron target's accessibility tree now, while the
+            // user speaks, so it is built by the time the text is inserted.
+            crate::text_insert::wake_electron(pid);
+            // Whether the take continues a sentence already in the field
+            // (docs/plans/MID_SENTENCE_DICTATION.md).
+            if in_voicebox {
+                return;
+            }
+            let before = crate::text_insert::sentence_before_focused(pid, bundle_id.as_deref());
+            if let (Some(before), Ok(mut slot)) = (before, field_before.lock()) {
+                *slot = Some(before);
+            }
+        });
     }
+    if let Ok(mut slot) = take.focus.lock() {
+        *slot = focus;
+    };
 }
 
 /// End the recording take. Finalization continues in the background, so a

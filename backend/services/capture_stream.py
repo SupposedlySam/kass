@@ -40,7 +40,18 @@ from ..backends.qwen_llm_backend import generation_hint, generation_listener, ge
 from ..database import Capture
 from .captures import _to_response
 from .content_check import Verdict, check_refinement, summarize_reviews
-from .phrase_seams import close_phrase, continue_after_seam, join_phrases, open_phrase, strip_pause_mark
+from .known_names import known_names
+from .phrase_seams import (
+    close_phrase,
+    continue_after_seam,
+    continue_phrase,
+    continues_sentence,
+    join_phrases,
+    load_word_data,
+    match_raw_start,
+    open_phrase,
+    strip_pause_mark,
+)
 from .refinement import RefinementFlags, prepare_refinement, refine_transcript
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
@@ -55,6 +66,9 @@ MAX_FRAME_BYTES = 65536
 MAX_SECONDS = 3600
 # Whisper keeps at most ~224 prompt tokens; this stays comfortably inside it.
 PHRASE_CONTEXT_CHARS = 600
+# The field's text kept from before the caret: enough for a sentence and the
+# names in it.
+FIELD_CONTEXT_CHARS = 600
 _CORRECTION_CUE = re.compile(r"\b(actually|no wait|no actually|make that|I mean|scratch that)\b", re.I)
 
 
@@ -116,6 +130,14 @@ class StreamingCapture:
         # Set from the finish command, once the client knows the focused app.
         self.app_bundle_id = None
         self.app_name = None
+        # The field's text before the caret, from the context command, and
+        # whether the dictation continues its sentence
+        # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
+        self.field_before = ""
+        self.continues = False
+        # Words the user capitalizes mid-sentence, loaded when the run starts.
+        self.names = frozenset()
+        self.names_loading = None
         self.source = start.get("source", "dictation")
         if not isinstance(self.source, str) or self.source not in {"dictation", "recording"}:
             raise ValueError("Invalid streaming capture source")
@@ -248,6 +270,21 @@ class StreamingCapture:
             self.last_cut = self.samples
         self.wake.set()
 
+    def set_context(self, before) -> None:
+        """The field's text before the caret, known shortly after the take starts."""
+        if not isinstance(before, str):
+            raise ValueError("Context must be text")
+        self.field_before = before[-FIELD_CONTEXT_CHARS:]
+        self.continues = continues_sentence(self.field_before)
+
+    def start_like_raw(self, text: str) -> str:
+        """``text`` with the first word cased as in the raw transcript.
+
+        Cleanup capitalizes the start of every text; where the dictation
+        continues the field's sentence, the transcript decided its case.
+        """
+        return match_raw_start(text, self.raw) if self.continues else text
+
     def _spent(self, stage: str, started: float) -> None:
         if self.finished_at is not None:
             self.after_release[stage] += time.monotonic() - max(started, self.finished_at)
@@ -256,7 +293,9 @@ class StreamingCapture:
         # Earlier phrases give Whisper the sentence it is continuing, so a
         # phrase cut at a pause neither trails off with "..." nor restarts
         # with a capital letter.
-        previous_text = self.heard[-PHRASE_CONTEXT_CHARS:]
+        # The first phrase continues the field's sentence, when it does.
+        earlier = self.heard or (self.field_before if self.continues else "")
+        previous_text = earlier[-PHRASE_CONTEXT_CHARS:]
         samples = np.frombuffer(pcm, dtype="<i2")
         start = self.offset if start is None else start
         if not len(samples) or not self.speech.heard(start, start + len(samples)):
@@ -295,7 +334,7 @@ class StreamingCapture:
     def compose(self, settled, text, raw, learned=None):
         """``text``, cleaned from ``raw``, after the settled text."""
         if not settled.strip():
-            return text
+            return self.start_like_raw(text)
         if not text:
             return settled
         if self.settled_gap is not None:
@@ -408,9 +447,15 @@ class StreamingCapture:
                 phrase = text
                 if earlier:
                     before = self.tail_raw if self.paused else ""
-                    tail, phrase = continue_after_seam(before, text, earlier)
+                    tail, phrase = continue_after_seam(before, text, earlier, self.names)
                     if tail != before:
                         self.raw, self.tail_raw = self.raw[: len(tail) - len(before)], tail
+                elif self.continues:
+                    # Whisper capitalizes the start of the audio as if it
+                    # began a sentence. The names loaded while it listened.
+                    if self.names_loading:
+                        await asyncio.shield(self.names_loading)
+                    phrase = continue_phrase(text, self.field_before, self.names)
                 phrase = strip_pause_mark(phrase) if paused else phrase
                 self.raw = f"{self.raw} {phrase}".strip()
                 self.tail_raw = f"{self.tail_raw} {phrase}".strip()
@@ -427,7 +472,7 @@ class StreamingCapture:
             # "scratch that" can revise a previously accepted phrase.
             _, correction = prepare_refinement(self.raw, self.flags)
             if correction is not None:
-                self.refined = correction
+                self.refined = self.start_like_raw(correction)
                 self.cleanup_closed = True
                 self.llm_model = self.settings.llm_model
                 # Resolved as a whole; later phrases continue after it.
@@ -520,7 +565,9 @@ class StreamingCapture:
             if self.needs_final_refinement:
                 await self.reconcile_refinement()
                 return
-            text = apply_learned_corrections(self.compose(self.settled, self.tail_cleaned, self.tail_raw), self.language)
+            text = apply_learned_corrections(
+                self.compose(self.settled, self.tail_cleaned, self.tail_raw), self.language
+            )
         except Exception as error:
             logger.exception("Streaming refinement failed")
             self.refinement_error = str(error)
@@ -530,6 +577,21 @@ class StreamingCapture:
             await self.emit("refined", text=self.refined)
 
     async def run(self):
+        # Read while the first phrase is still being spoken; recognition never
+        # waits for it.
+        self.names_loading = asyncio.create_task(self.load_names())
+        try:
+            await self._run()
+        finally:
+            self.names_loading.cancel()
+
+    async def load_names(self):
+        try:
+            self.names = await asyncio.to_thread(lambda: (load_word_data(), known_names())[1])
+        except Exception:
+            logger.exception("Could not read the user's names; names in the word lists still count")
+
+    async def _run(self):
         while True:
             if self.abort:
                 return
@@ -594,9 +656,14 @@ class StreamingCapture:
         """Use the established batch path when a forced seam cannot be proven."""
         self.archive.close()
         if self.speech.heard(0, self.samples):
+            before = self.field_before if self.continues else None
             self.raw = (
-                await get_whisper_model().transcribe(str(self.path), self.language, self.stt_model, check_speech=False)
+                await get_whisper_model().transcribe(
+                    str(self.path), self.language, self.stt_model, previous_text=before, check_speech=False
+                )
             ).strip()
+            if self.continues:
+                self.raw = continue_phrase(self.raw, self.field_before, self.names)
         else:
             self.raw = ""
         if self.abort:
@@ -617,6 +684,7 @@ class StreamingCapture:
                 # The whole dictation was cleaned up again, so earlier phrase
                 # verdicts no longer describe the result.
                 self.refined, verdict = guard_phrase_refinement(self.raw, refined, self.flags)
+                self.refined = self.start_like_raw(self.refined)
                 self.reviews = [verdict]
                 from .correction_learning import apply_learned_corrections
 
@@ -661,7 +729,9 @@ class StreamingCapture:
             transcript_refined=self.refined if self.settings.auto_refine and not self.refinement_error else None,
             llm_model=self.llm_model,
             refinement_flags=json.dumps(self.flags.to_dict()) if self.settings.auto_refine else None,
-            refinement_review=json.dumps(review) if self.settings.auto_refine and (review := summarize_reviews(self.reviews)) else None,
+            refinement_review=json.dumps(review)
+            if self.settings.auto_refine and (review := summarize_reviews(self.reviews))
+            else None,
             app_bundle_id=self.app_bundle_id,
             app_name=self.app_name,
         )
