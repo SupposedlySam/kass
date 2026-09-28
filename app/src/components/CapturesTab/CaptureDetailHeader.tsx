@@ -10,10 +10,17 @@ import { formatDetailStamp } from './captureFormat';
 
 /**
  * The detail pane's header: the app the capture went to and when, its audio,
- * and a link to the dictation settings. Everything else about the capture is
- * in the inspector beside it.
+ * and a link to the settings of the style its app uses (Command Mode's, for
+ * a command). Everything else about the capture is in the inspector beside it.
  */
-export function CaptureDetailHeader({ capture }: { capture: CaptureResponse | null }) {
+export function CaptureDetailHeader({
+  capture,
+  styleId,
+}: {
+  capture: CaptureResponse | null;
+  /** The style the capture's app uses now. */
+  styleId?: string;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -45,12 +52,19 @@ export function CaptureDetailHeader({ capture }: { capture: CaptureResponse | nu
         <span className="flex-1" />
       )}
       <Button variant="ghost" size="icon" asChild>
-        <Link
-          to={capture?.source === 'command' ? '/settings/command-mode' : '/settings/dictation'}
-          aria-label={t('captures.actions.configure')}
-        >
-          <Settings2 />
-        </Link>
+        {capture?.source === 'command' ? (
+          <Link to="/settings/command-mode" aria-label={t('captures.actions.configureCommand')}>
+            <Settings2 />
+          </Link>
+        ) : (
+          <Link
+            to="/settings/writing-style"
+            search={styleId ? { style: styleId } : {}}
+            aria-label={t('captures.actions.configure')}
+          >
+            <Settings2 />
+          </Link>
+        )}
       </Button>
     </header>
   );

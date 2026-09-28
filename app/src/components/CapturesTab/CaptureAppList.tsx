@@ -14,6 +14,9 @@ interface AppListRow {
   name: string;
   count: number;
   icon: ReactNode;
+  /** An app's writing style, and whether it's new: not confirmed yet. */
+  style?: string;
+  isNew?: boolean;
 }
 
 /** An app's icon at `size`, or its initial when the app isn't installed. */
@@ -63,18 +66,22 @@ export function appDisplayName(app: { app_name?: string | null; app_bundle_id: s
 
 /**
  * The Captures app list between the main rail and the capture list: "All
- * apps", then every app with captures, most first. Counts come from the
- * server, since the list below only loads the newest captures. Captures with
- * no app recorded (uploads, dictation from before apps were saved) get an
- * "Unknown app" row at the end. The header button shrinks it to icons, with
- * each icon's name and count in its tooltip.
+ * apps", then every app with captures, most first, with its writing style
+ * underneath. An app whose style the user hasn't confirmed shows New (a dot
+ * when collapsed). Counts come from the server, since the list below only
+ * loads the newest captures. Captures with no app recorded (uploads,
+ * dictation from before apps were saved) get an "Unknown app" row at the
+ * end. The header button shrinks it to icons, with each icon's name, style
+ * and count in its tooltip.
  */
 export function CaptureAppList({
   apps,
+  styleNames,
   filter,
   onFilterChange,
 }: {
   apps: CaptureAppsResponse | undefined;
+  styleNames: Map<string, string>;
   filter: CaptureAppFilter;
   onFilterChange: (filter: CaptureAppFilter) => void;
 }) {
@@ -98,6 +105,8 @@ export function CaptureAppList({
       name: appDisplayName(app),
       count: app.count,
       icon: <AppTile bundleId={app.app_bundle_id} name={appDisplayName(app)} />,
+      style: app.confirmed ? styleNames.get(app.style_id ?? '') : undefined,
+      isNew: !app.confirmed,
     })),
     ...(apps?.unknown_count
       ? [
@@ -152,15 +161,17 @@ export function CaptureAppList({
           const active = sameAppFilter(row.filter, filter);
           const key = row.filter.kind === 'app' ? row.filter.bundleId : row.filter.kind;
           const count = row.count.toLocaleString();
+          const style = row.isNew ? t('captures.apps.noStyle') : row.style;
+          const label = [row.name, style, count].filter(Boolean).join(' · ');
           return (
             <li key={key}>
               {collapsed ? (
                 <button
                   type="button"
                   aria-current={active ? 'true' : undefined}
-                  aria-label={t('captures.apps.rowLabel', { name: row.name, count })}
+                  aria-label={label}
                   // A native tooltip, since a drawn one would be clipped by the scrolling list.
-                  title={`${row.name} · ${count}`}
+                  title={label}
                   onClick={() => onFilterChange(row.filter)}
                   className={cn(
                     'relative size-11 grid place-items-center rounded-[7px] transition-colors',
@@ -169,6 +180,9 @@ export function CaptureAppList({
                   )}
                 >
                   {row.icon}
+                  {row.isNew && (
+                    <span className="absolute top-[7px] right-[7px] size-[7px] rounded-full bg-accent ring-2 ring-sidebar" />
+                  )}
                 </button>
               ) : (
                 <button
@@ -184,10 +198,21 @@ export function CaptureAppList({
                   )}
                 >
                   {row.icon}
-                  <span className="min-w-0 truncate leading-tight">{row.name}</span>
-                  <span className="text-right text-[11.5px] tabular-nums text-muted-foreground">
-                    {count}
+                  <span className="min-w-0 flex flex-col leading-tight">
+                    <span className="truncate">{row.name}</span>
+                    {style && (
+                      <span className="truncate text-[11px] text-muted-foreground">{style}</span>
+                    )}
                   </span>
+                  {row.isNew ? (
+                    <span className="text-right text-[10.5px] font-semibold text-accent">
+                      {t('captures.apps.new')}
+                    </span>
+                  ) : (
+                    <span className="text-right text-[11.5px] tabular-nums text-muted-foreground">
+                      {count}
+                    </span>
+                  )}
                 </button>
               )}
             </li>

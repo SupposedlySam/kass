@@ -6,9 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
-import type { WritingStyleCalibrationResult, WritingStyleCalibrationStep } from '@/lib/api/types';
-import { useCaptureSettings } from '@/lib/hooks/useSettings';
-import { WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
+import type {
+  WritingStyle,
+  WritingStyleCalibrationResult,
+  WritingStyleCalibrationStep,
+} from '@/lib/api/types';
+import {
+  defaultStyle,
+  useWritingStyles,
+  WRITING_STYLE_KEY,
+  WRITING_STYLES_KEY,
+} from '@/lib/hooks/useWritingStyle';
 import { CalibrationStepView } from './CalibrationStepView';
 import { CalibrationSummary } from './CalibrationSummary';
 import { PERSONAL_EXAMPLES_KEY } from './PersonalExamples';
@@ -24,18 +32,22 @@ type Stage =
 /**
  * Five paragraphs, one at a time: the user rewrites each the way they would
  * type it, and the next arrives already styled with what Voicebox learned.
+ * It teaches `style`, or the default style.
  */
 export function StyleCalibrationDialog({
   open,
   onOpenChange,
+  style: given,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  style?: WritingStyle;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { settings, update } = useCaptureSettings();
+  const styles = useWritingStyles();
+  const style = given ?? defaultStyle(styles.data);
   const [stage, setStage] = useState<Stage>({ kind: 'intro' });
   const [draft, setDraft] = useState('');
   const sessionRef = useRef<string | null>(null);
@@ -51,6 +63,13 @@ export function StyleCalibrationDialog({
       variant: 'destructive',
     });
 
+  const matchWriting = useMutation({
+    mutationFn: (styleId: string) =>
+      apiClient.updateWritingStyle(styleId, { punctuation_style: 'learned' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: WRITING_STYLES_KEY }),
+    onError: fail,
+  });
+
   const showStep = (step: WritingStyleCalibrationStep) => {
     sessionRef.current = step.session_id;
     setDraft(step.paragraph ?? '');
@@ -58,7 +77,7 @@ export function StyleCalibrationDialog({
   };
 
   const start = useMutation({
-    mutationFn: () => apiClient.startStyleCalibration(),
+    mutationFn: () => apiClient.startStyleCalibration(style?.id),
     onSuccess: showStep,
     onError: fail,
   });
@@ -78,7 +97,8 @@ export function StyleCalibrationDialog({
       }
       const result = await finish.mutateAsync(step.session_id);
       sessionRef.current = null;
-      queryClient.setQueryData(WRITING_STYLE_KEY, result.status);
+      queryClient.setQueryData([...WRITING_STYLE_KEY, style?.id ?? 'default'], result.status);
+      queryClient.invalidateQueries({ queryKey: WRITING_STYLE_KEY });
       queryClient.invalidateQueries({ queryKey: PERSONAL_EXAMPLES_KEY });
       setStage({ kind: 'summary', changes: step.changes, result });
     },
@@ -153,11 +173,11 @@ export function StyleCalibrationDialog({
           <CalibrationSummary
             changes={stage.changes}
             result={stage.result}
-            learnedStyleOn={settings?.punctuation_style === 'learned'}
+            learnedStyleOn={style?.punctuation_style === 'learned'}
             restarting={start.isPending}
             onRunAgain={() => start.mutate()}
             onUseLearned={() => {
-              update({ punctuation_style: 'learned' });
+              if (style) matchWriting.mutate(style.id);
               close();
             }}
             onClose={close}

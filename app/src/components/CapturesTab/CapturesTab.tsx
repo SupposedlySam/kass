@@ -15,6 +15,7 @@ import { CaptureList } from './CaptureList';
 import { ALL_APPS, CAPTURE_APPS_KEY, capturesKey, matchesAppFilter } from './captureApps';
 import { isInOverlay, isTypingTarget, matchesSearch, wentIntoVoicebox } from './captureFormat';
 import { EmptyDetail } from './EmptyDetail';
+import { useAppStyles } from './useAppStyles';
 
 /**
  * The Captures screen: the app list, the capture list (all apps' or one
@@ -31,6 +32,11 @@ export function CapturesTab() {
   const [search, setSearch] = useState('');
   const [appFilter, setAppFilter] = useState<CaptureAppFilter>(ALL_APPS);
   const appsCollapsed = useUIStore((s) => s.capturesAppsCollapsed);
+  const appStyles = useAppStyles();
+  const styleNames = useMemo(
+    () => new Map(appStyles.styles.map((style) => [style.id, style.name])),
+    [appStyles],
+  );
 
   const {
     data: capturesData,
@@ -198,6 +204,7 @@ export function CapturesTab() {
     <div className="h-full flex overflow-hidden">
       <CaptureAppList
         apps={apps}
+        styleNames={styleNames}
         filter={appFilter}
         onFilterChange={(filter) => {
           setAppFilter(filter);
@@ -220,13 +227,18 @@ export function CapturesTab() {
               bundleId={filteredApp.app_bundle_id}
               name={appDisplayName(filteredApp)}
               count={filteredApp.count}
+              appStyles={appStyles}
             />
           )
         }
+        appStyles={appStyles}
         narrow={!appsCollapsed}
       />
       <div className="flex-1 min-w-0 flex flex-col">
-        <CaptureDetailHeader capture={selected} />
+        <CaptureDetailHeader
+          capture={selected}
+          styleId={selected ? appStyles.forApp(selected.app_bundle_id)?.style.id : undefined}
+        />
         {selected ? (
           <CaptureDetail key={selected.id} capture={selected} />
         ) : (

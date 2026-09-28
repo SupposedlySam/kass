@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { PersonalExample } from '@/lib/api/types';
+import { AppIcon } from '@/components/CapturesTab/AppIcon';
+import type { PersonalExample, WritingStyle } from '@/lib/api/types';
 import { usePersonalExamples, useRemovePersonalExample } from './PersonalExamples';
 
 /** How many corrections the settings page lists; the rest are under Your examples. */
@@ -13,12 +14,12 @@ function newestFirst(a: PersonalExample, b: PersonalExample): number {
 }
 
 /**
- * The latest examples that came from correcting a capture, said → meant, each
- * removable so Voicebox stops learning from it.
+ * The latest examples that came from correcting a capture in one of a style's
+ * apps, said → meant, each removable so Voicebox stops learning from it.
  */
-export function RecentCorrections() {
+export function RecentCorrections({ style }: { style: WritingStyle }) {
   const { t } = useTranslation();
-  const examples = usePersonalExamples();
+  const examples = usePersonalExamples(style.id);
   const remove = useRemovePersonalExample();
   const corrections = (examples.data ?? [])
     .filter((example) => example.source === 'correction')
@@ -37,7 +38,7 @@ export function RecentCorrections() {
   return (
     <section className="mb-7">
       <h2 className="mb-2 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {t('writingStyle.settings.recent.title')}
+        {t('writingStyle.settings.recent.title', { style: style.name })}
       </h2>
       {corrections.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t('writingStyle.settings.recent.empty')}</p>
@@ -48,6 +49,7 @@ export function RecentCorrections() {
               key={example.id}
               className="flex items-center gap-3 px-3.5 py-2.5 font-mono text-xs"
             >
+              <AppIcon bundleId={example.app_bundle_id} />
               <span className="min-w-0 truncate text-destructive line-through" title={example.said}>
                 {example.said}
               </span>
@@ -58,7 +60,9 @@ export function RecentCorrections() {
                 {example.meant}
               </span>
               <span className="flex-1" />
-              <span className="shrink-0 text-muted-foreground">{when(example.created_at)}</span>
+              <span className="shrink-0 text-muted-foreground">
+                {[example.app_name, when(example.created_at)].filter(Boolean).join(' · ')}
+              </span>
               <button
                 type="button"
                 aria-label={t('writingStyle.settings.recent.remove')}

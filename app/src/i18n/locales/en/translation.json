@@ -193,8 +193,16 @@
       "unknown": "Unknown app",
       "collapse": "Collapse app list",
       "expand": "Expand app list",
-      "rowLabel": "{{name}}, {{count}}",
       "listLabel": "{{app}} captures",
+      "new": "New",
+      "noStyle": "No style yet",
+      "styleFor": "Style for {{app}}",
+      "suggested": "{{style}}?",
+      "prompt": "New app. Use {{style}} for {{app}}?",
+      "use": "Use {{style}}",
+      "pickAnother": "Pick another",
+      "dictationsTeach_one": "{{formatted}} dictation · corrections teach {{style}}",
+      "dictationsTeach_other": "{{formatted}} dictations · corrections teach {{style}}",
       "searchPlaceholder": "Search {{app}} captures",
       "dictations_one": "{{formatted}} dictation",
       "dictations_other": "{{formatted}} dictations"
@@ -238,7 +246,8 @@
       "heard": "Heard"
     },
     "actions": {
-      "configure": "Dictation settings",
+      "configure": "Style settings",
+      "configureCommand": "Command Mode settings",
       "delete": "Delete"
     },
     "empty": {
@@ -574,6 +583,11 @@
         "preserveTechnical": {
           "title": "Preserve technical terms",
           "description": "Keep code identifiers, command names, and acronyms exactly as spoken. Turn on when you dictate into a code prompt."
+        },
+        "styles": {
+          "title": "Punctuation, filler and technical terms",
+          "description": "Each writing style has its own, so every app gets text written its way.",
+          "open": "Writing style…"
         }
       },
       "storage": {
@@ -769,29 +783,30 @@
       "title": "Writing style",
       "description": "Teach Voicebox how you write so dictation comes out ready to send, in your own words. Everything stays on this device.",
       "calibrate": {
-        "title": "Teach Voicebox how you write",
+        "title": "Teach Voicebox how you write in {{style}}",
         "description": "Rewrite 5 things said out loud the way you'd send them. About 3 minutes.",
+        "descriptionApps": "Rewrite 5 things said out loud the way you'd send them in {{apps}}. About 3 minutes.",
         "lastRun_one": "Last run {{date}} · {{count}} run so far",
         "lastRun_other": "Last run {{date}} · {{count}} runs so far",
-        "habitsLabel": "Learned habits",
+        "habitsLabel": "Learned in {{style}}",
         "start": "Start",
         "again": "Run again"
       },
-      "learnsFrom": "What Voicebox learns from",
+      "learnsFrom": "What {{style}} learns from",
       "export": {
         "title": "Export corrections",
         "description": "Save every correction you've made as a JSON file.",
         "action": "Export…"
       },
       "reset": {
-        "title": "Reset writing style",
-        "description": "Forget your calibration rewrites and the punctuation habits learned from them and from corrections. Match my writing switches back to Standard.",
+        "title": "Reset {{style}}",
+        "description": "Forget {{style}}'s calibration rewrites, the punctuation habits learned from them and from corrections, and its rules. Other styles keep theirs. Match my writing switches back to Standard.",
         "action": "Reset…",
-        "confirmTitle": "Reset writing style?",
+        "confirmTitle": "Reset {{style}}?",
         "confirm": "Reset"
       },
       "recent": {
-        "title": "Recent corrections",
+        "title": "Recent corrections in {{style}}",
         "empty": "No corrections yet. Use Teach Voicebox on a capture to fix what it got wrong.",
         "today": "today",
         "yesterday": "yesterday",
@@ -874,6 +889,43 @@
     },
     "learningPanel": {
       "title": "Your writing style"
+    },
+    "styles": {
+      "title": "Styles and their apps",
+      "description": "Each style has its own punctuation and learns only from corrections made in its apps. Drag an app to another style. Click a style to edit it below.",
+      "columnLabel": "{{style}} apps",
+      "edit": "Edit the {{style}} style",
+      "count_one": "{{count}} app",
+      "count_other": "{{count}} apps",
+      "countDefault_one": "{{count}} app · default",
+      "countDefault_other": "{{count}} apps · default",
+      "move": "Move {{app}} to another style",
+      "moveTo": "Style for {{app}}",
+      "new": "New style",
+      "newHint": "Starts with the default style's settings and nothing learned. Press Enter to add it.",
+      "nameLabel": "Style name",
+      "namePlaceholder": "Name",
+      "createFailed": "Could not add the style",
+      "assignFailed": "Could not change the app's style",
+      "settings": {
+        "title": "{{style}} settings",
+        "name": "Name",
+        "punctuationDescription": "How thoughts join and how the text ends. Match my writing follows the habits this style learned from you.",
+        "capitalize": "Capitalize the first word",
+        "capitalizeDescription": "Off starts dictation in lowercase. Names, \"I\" and acronyms keep their capitals.",
+        "filler": "Remove filler",
+        "technical": "Keep technical terms exact",
+        "default": "Default for new apps",
+        "defaultOn": "Apps you haven't put in a style use this one.",
+        "defaultDescription": "Apps you haven't put in a style would use {{style}}.",
+        "makeDefault": "Make default",
+        "delete": "Delete {{style}}",
+        "deleteDescription": "Forgets what this style learned. Its apps move to the default style.",
+        "deleteAction": "Delete…",
+        "deleteConfirmTitle": "Delete {{style}}?",
+        "saveFailed": "Could not save the style",
+        "deleteFailed": "Could not delete the style"
+      }
     },
     "habits": {
       "boundary_period": "You end one thought and start the next as a new sentence",

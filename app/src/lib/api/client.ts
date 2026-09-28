@@ -21,10 +21,18 @@ import type {
   ModelStatusListResponse,
   PersonalExample,
   WhisperModelSize,
+  WritingStyle,
   WritingStyleCalibrationResult,
   WritingStyleCalibrationStep,
   WritingStyleStatus,
+  WritingStylesResponse,
+  WritingStyleUpdate,
 } from './types';
+
+/** `?style=<id>` for the per-style writing style endpoints; none is the default style. */
+function styleQuery(style?: string | null): string {
+  return style ? `?style=${encodeURIComponent(style)}` : '';
+}
 
 function formatErrorDetail(detail: unknown, fallback: string): string {
   if (typeof detail === 'string') return detail;
@@ -171,26 +179,69 @@ class ApiClient {
     return `${this.getBaseUrl()}/captures/${captureId}/audio`;
   }
 
-  // Writing style
-  async getWritingStyle(): Promise<WritingStyleStatus> {
-    return this.request<WritingStyleStatus>('/writing-style');
+  // Writing styles and the apps assigned to them
+  async listWritingStyles(): Promise<WritingStylesResponse> {
+    return this.request<WritingStylesResponse>('/writing-styles');
   }
 
-  async resetWritingStyle(): Promise<WritingStyleStatus> {
-    return this.request<WritingStyleStatus>('/writing-style', { method: 'DELETE' });
+  async createWritingStyle(name: string): Promise<WritingStyle> {
+    return this.request<WritingStyle>('/writing-styles', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
   }
 
-  async listPersonalExamples(): Promise<PersonalExample[]> {
-    return this.request<PersonalExample[]>('/writing-style/examples');
+  async updateWritingStyle(styleId: string, patch: WritingStyleUpdate): Promise<WritingStyle> {
+    return this.request<WritingStyle>(`/writing-styles/${encodeURIComponent(styleId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
   }
 
-  async getCorrectionNotes(): Promise<CorrectionNotesStatus> {
-    return this.request<CorrectionNotesStatus>('/writing-style/notes');
-  }
-
-  async removeCorrectionNote(noteId: string): Promise<void> {
+  async deleteWritingStyle(styleId: string): Promise<void> {
     const response = await fetch(
-      `${this.getBaseUrl()}/writing-style/notes/${encodeURIComponent(noteId)}`,
+      `${this.getBaseUrl()}/writing-styles/${encodeURIComponent(styleId)}`,
+      { method: 'DELETE' },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`));
+    }
+  }
+
+  async assignAppStyle(
+    bundleId: string,
+    styleId: string,
+    appName?: string | null,
+  ): Promise<WritingStylesResponse> {
+    return this.request<WritingStylesResponse>(
+      `/writing-styles/apps/${encodeURIComponent(bundleId)}`,
+      { method: 'PUT', body: JSON.stringify({ style_id: styleId, app_name: appName ?? null }) },
+    );
+  }
+
+  // Writing style: everything below is per style; none is the default style.
+  async getWritingStyle(style?: string | null): Promise<WritingStyleStatus> {
+    return this.request<WritingStyleStatus>(`/writing-style${styleQuery(style)}`);
+  }
+
+  async resetWritingStyle(style?: string | null): Promise<WritingStyleStatus> {
+    return this.request<WritingStyleStatus>(`/writing-style${styleQuery(style)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listPersonalExamples(style?: string | null): Promise<PersonalExample[]> {
+    return this.request<PersonalExample[]>(`/writing-style/examples${styleQuery(style)}`);
+  }
+
+  async getCorrectionNotes(style?: string | null): Promise<CorrectionNotesStatus> {
+    return this.request<CorrectionNotesStatus>(`/writing-style/notes${styleQuery(style)}`);
+  }
+
+  async removeCorrectionNote(noteId: string, style?: string | null): Promise<void> {
+    const response = await fetch(
+      `${this.getBaseUrl()}/writing-style/notes/${encodeURIComponent(noteId)}${styleQuery(style)}`,
       { method: 'DELETE' },
     );
     if (!response.ok) {
@@ -208,10 +259,11 @@ class ApiClient {
     }
   }
 
-  async startStyleCalibration(): Promise<WritingStyleCalibrationStep> {
-    return this.request<WritingStyleCalibrationStep>('/writing-style/calibration', {
-      method: 'POST',
-    });
+  async startStyleCalibration(style?: string | null): Promise<WritingStyleCalibrationStep> {
+    return this.request<WritingStyleCalibrationStep>(
+      `/writing-style/calibration${styleQuery(style)}`,
+      { method: 'POST' },
+    );
   }
 
   async submitStyleCalibrationStep(

@@ -52,7 +52,44 @@ export interface PersonalExample {
   said: string;
   meant: string;
   created_at: string | null;
+  /** The app a correction was made in. */
+  app_bundle_id?: string | null;
+  app_name?: string | null;
 }
+
+/** A named writing style that apps are assigned to (docs/plans/PER_APP_STYLE.md). */
+export interface WritingStyle {
+  id: string;
+  name: string;
+  position: number;
+  /** The style of every app the user hasn't assigned. */
+  is_default: boolean;
+  punctuation_style: PunctuationStyle;
+  capitalize_first: boolean;
+  smart_cleanup: boolean;
+  preserve_technical: boolean;
+}
+
+/** An app and the style its dictation uses; `confirmed` once the user chose it. */
+export interface StyledApp {
+  bundle_id: string;
+  name?: string | null;
+  style_id: string;
+  confirmed: boolean;
+  count: number;
+}
+
+export interface WritingStylesResponse {
+  styles: WritingStyle[];
+  apps: StyledApp[];
+}
+
+export type WritingStyleUpdate = Partial<
+  Pick<
+    WritingStyle,
+    'name' | 'punctuation_style' | 'capitalize_first' | 'smart_cleanup' | 'preserve_technical'
+  >
+> & { is_default?: true };
 
 export interface CorrectionNote {
   id: string;
@@ -92,6 +129,9 @@ export interface RefinementFlags {
   self_correction: boolean;
   preserve_technical: boolean;
   punctuation_style?: PunctuationStyle;
+  capitalize_first?: boolean;
+  /** The writing style whose habits, examples and rules cleanup used. */
+  style?: string | null;
 }
 
 /** Why a capture's cleanup is flagged for the user to check. */
@@ -124,6 +164,8 @@ export interface CaptureResponse {
   command_selection?: string | null;
   command_instruction?: string | null;
   command_transform?: string | null;
+  /** The writing style the capture was cleaned up with. */
+  style_id?: string | null;
   created_at: string;
 }
 
@@ -138,6 +180,9 @@ export interface CaptureAppCount {
   app_name?: string | null;
   count: number;
   last_captured_at?: string | null;
+  /** The style the app's dictation uses; the default until the user chooses. */
+  style_id?: string | null;
+  confirmed: boolean;
 }
 
 /**

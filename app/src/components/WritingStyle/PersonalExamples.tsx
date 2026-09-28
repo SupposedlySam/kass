@@ -13,13 +13,14 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 
+/** Per style: `[...PERSONAL_EXAMPLES_KEY, styleId]`. */
 export const PERSONAL_EXAMPLES_KEY = ['personal-examples'] as const;
 
-/** Every "what you said, what you meant" example, from calibration and corrections. */
-export function usePersonalExamples() {
+/** A style's "what you said, what you meant" examples, from calibration and corrections. */
+export function usePersonalExamples(styleId?: string | null) {
   return useQuery({
-    queryKey: PERSONAL_EXAMPLES_KEY,
-    queryFn: () => apiClient.listPersonalExamples(),
+    queryKey: [...PERSONAL_EXAMPLES_KEY, styleId ?? 'default'],
+    queryFn: () => apiClient.listPersonalExamples(styleId),
   });
 }
 
@@ -40,11 +41,11 @@ export function useRemovePersonalExample() {
   });
 }
 
-/** The "what you said, what you meant" examples cleanup learns from. */
-export function PersonalExamples() {
+/** The "what you said, what you meant" examples cleanup in a style learns from. */
+export function PersonalExamples({ styleId }: { styleId?: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const examples = usePersonalExamples();
+  const examples = usePersonalExamples(styleId);
   const remove = useRemovePersonalExample();
   const count = examples.data?.length ?? 0;
 

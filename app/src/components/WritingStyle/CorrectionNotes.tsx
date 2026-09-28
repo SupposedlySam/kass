@@ -15,18 +15,18 @@ import { apiClient } from '@/lib/api/client';
 
 export const CORRECTION_NOTES_KEY = ['correction-notes'] as const;
 
-/** Rules summarized from examples too old to show the cleanup model. */
-export function CorrectionNotes() {
+/** A style's rules summarized from examples too old to show the cleanup model. */
+export function CorrectionNotes({ styleId }: { styleId?: string }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const status = useQuery({
-    queryKey: CORRECTION_NOTES_KEY,
-    queryFn: () => apiClient.getCorrectionNotes(),
+    queryKey: [...CORRECTION_NOTES_KEY, styleId ?? 'default'],
+    queryFn: () => apiClient.getCorrectionNotes(styleId),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => apiClient.removeCorrectionNote(id),
+    mutationFn: (id: string) => apiClient.removeCorrectionNote(id, styleId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CORRECTION_NOTES_KEY }),
     onError: (error: Error) =>
       toast({

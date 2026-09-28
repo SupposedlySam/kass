@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Loader2, Search } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Kbd } from '@/components/ui/kbd';
 import { StyleCalibrationPrompt } from '@/components/WritingStyle/StyleCalibrationPrompt';
@@ -14,17 +14,25 @@ import {
   formatRowTime,
   snippetParts,
 } from './captureFormat';
+import { NewAppPrompt } from './NewAppPrompt';
+import type { AppStyles } from './useAppStyles';
 
 function CaptureRow({
   capture,
   active,
   showApp,
+  styleLabel,
+  prompt,
   onSelect,
 }: {
   capture: CaptureResponse;
   active: boolean;
   /** Off in one app's list, where every row is that app. */
   showApp: boolean;
+  /** The style the capture was cleaned up with; "Work?" while its app's style is unconfirmed. */
+  styleLabel?: string;
+  /** The new-app prompt, under the newest capture of an app without a confirmed style. */
+  prompt?: ReactNode;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
@@ -32,74 +40,84 @@ function CaptureRow({
   const text = deliveredText(capture).trim();
   const parts = text ? snippetParts(text, capture.refinement_review?.added ?? []) : [];
   return (
-    <button
-      type="button"
-      data-capture-id={capture.id}
-      aria-current={active ? 'true' : undefined}
-      onClick={onSelect}
+    <div
       className={cn(
-        'w-full flex flex-col gap-2 p-3 rounded-lg text-left transition-colors',
-        'focus-visible:outline-none focus-visible:bg-muted',
+        'rounded-lg transition-colors has-[>button:focus-visible]:bg-muted',
         active ? 'bg-muted' : 'hover:bg-muted/50',
       )}
     >
-      <span className="text-[14px] leading-normal text-foreground line-clamp-2 [overflow-wrap:anywhere]">
-        {text
-          ? parts.map((part, i) =>
-              part.changed ? (
-                <mark
-                  // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
-                  key={i}
-                  className="rounded-[2px] px-0.5 bg-warning/10 text-warning border-b-[1.5px] border-dashed border-warning/70"
-                >
-                  {part.text}
-                </mark>
-              ) : (
-                part.text
-              ),
-            )
-          : t('captures.snippetEmpty')}
-      </span>
-      <span className="flex items-center gap-[7px] min-w-0 text-[11.5px] text-muted-foreground">
-        {showApp && <AppIcon bundleId={capture.app_bundle_id} />}
-        {showApp && capture.app_name && (
-          <>
-            <span className="min-w-0 truncate">{capture.app_name}</span>
-            <span className="shrink-0 text-muted-foreground/50">·</span>
-          </>
-        )}
-        <span className="shrink-0 whitespace-nowrap">
-          {formatRowTime(capture.created_at, t('captures.list.yesterday'))}
+      <button
+        type="button"
+        data-capture-id={capture.id}
+        aria-current={active ? 'true' : undefined}
+        onClick={onSelect}
+        className="w-full flex flex-col gap-2 p-3 rounded-lg text-left focus-visible:outline-none"
+      >
+        <span className="text-[14px] leading-normal text-foreground line-clamp-2 [overflow-wrap:anywhere]">
+          {text
+            ? parts.map((part, i) =>
+                part.changed ? (
+                  <mark
+                    // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
+                    key={i}
+                    className="rounded-[2px] px-0.5 bg-warning/10 text-warning border-b-[1.5px] border-dashed border-warning/70"
+                  >
+                    {part.text}
+                  </mark>
+                ) : (
+                  part.text
+                ),
+              )
+            : t('captures.snippetEmpty')}
         </span>
-        <span className="shrink-0 text-muted-foreground/50">·</span>
-        <span className="shrink-0 tabular-nums">{formatDuration(capture.duration_ms)}</span>
-        <span className="flex-1" />
-        {tag === 'review' && (
-          <span className="shrink-0 flex items-center gap-1.5 font-semibold text-warning">
-            <span className="size-1.5 rounded-full bg-warning" />
-            {t('captures.tag.review')}
+        <span className="flex items-center gap-[7px] min-w-0 text-[11.5px] text-muted-foreground">
+          {showApp && <AppIcon bundleId={capture.app_bundle_id} />}
+          {showApp && capture.app_name && (
+            <>
+              <span className="min-w-0 truncate">{capture.app_name}</span>
+              <span className="shrink-0 text-muted-foreground/50">·</span>
+            </>
+          )}
+          <span className="shrink-0 whitespace-nowrap">
+            {formatRowTime(capture.created_at, t('captures.list.yesterday'))}
           </span>
-        )}
-        {(tag === 'command' || tag === 'commandFailed') && (
-          <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
-            <span
-              className={cn(
-                'size-1.5 rounded-full',
-                tag === 'command' ? 'bg-accent' : 'border-[1.5px] border-accent',
-              )}
-            />
-            {capture.command_transform ??
-              t(tag === 'command' ? 'captures.tag.command' : 'captures.tag.commandFailed')}
-          </span>
-        )}
-        {tag === 'raw' && (
-          <span className="shrink-0 flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full border-[1.5px] border-muted-foreground/70" />
-            {t('captures.tag.raw')}
-          </span>
-        )}
-      </span>
-    </button>
+          <span className="shrink-0 text-muted-foreground/50">·</span>
+          <span className="shrink-0 tabular-nums">{formatDuration(capture.duration_ms)}</span>
+          <span className="flex-1" />
+          {styleLabel && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
+              <span className="size-1.5 rounded-full bg-accent" />
+              {styleLabel}
+            </span>
+          )}
+          {tag === 'review' && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-warning">
+              <span className="size-1.5 rounded-full bg-warning" />
+              {t('captures.tag.review')}
+            </span>
+          )}
+          {(tag === 'command' || tag === 'commandFailed') && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  tag === 'command' ? 'bg-accent' : 'border-[1.5px] border-accent',
+                )}
+              />
+              {capture.command_transform ??
+                t(tag === 'command' ? 'captures.tag.command' : 'captures.tag.commandFailed')}
+            </span>
+          )}
+          {tag === 'raw' && (
+            <span className="shrink-0 flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full border-[1.5px] border-muted-foreground/70" />
+              {t('captures.tag.raw')}
+            </span>
+          )}
+        </span>
+      </button>
+      {prompt}
+    </div>
   );
 }
 
@@ -119,6 +137,7 @@ export function CaptureList({
   allReady,
   appName,
   appHeader,
+  appStyles,
   narrow,
 }: {
   captures: CaptureResponse[];
@@ -134,6 +153,7 @@ export function CaptureList({
   appName?: string;
   /** The filtered app's card, above search. */
   appHeader?: ReactNode;
+  appStyles: AppStyles;
   narrow: boolean;
 }) {
   const { t } = useTranslation();
@@ -141,6 +161,34 @@ export function CaptureList({
   const searchLabel = appName
     ? t('captures.apps.searchPlaceholder', { app: appName })
     : t('captures.searchPlaceholder');
+
+  const rowStyle = (capture: CaptureResponse) => {
+    const used = capture.style_id ? appStyles.byId.get(capture.style_id) : undefined;
+    if (!used) return undefined;
+    return appStyles.forApp(capture.app_bundle_id)?.confirmed ? used.name : `${used.name}?`;
+  };
+  // One prompt per app without a confirmed style, under its newest capture.
+  const prompted = useMemo(() => {
+    const prompts = new Map<string, ReactNode>();
+    const seen = new Set<string>();
+    for (const capture of visible) {
+      const bundleId = capture.app_bundle_id;
+      if (!bundleId || capture.source === 'command' || seen.has(bundleId)) continue;
+      seen.add(bundleId);
+      const current = appStyles.forApp(bundleId);
+      if (!current || current.confirmed) continue;
+      prompts.set(
+        capture.id,
+        <NewAppPrompt
+          bundleId={bundleId}
+          name={capture.app_name || bundleId}
+          suggested={current.style}
+          styles={appStyles.styles}
+        />,
+      );
+    }
+    return prompts;
+  }, [visible, appStyles]);
 
   // Keep the selected row in view as the arrow keys move through the list.
   useEffect(() => {
@@ -210,6 +258,8 @@ export function CaptureList({
                 capture={capture}
                 active={capture.id === selectedId}
                 showApp={!appName}
+                styleLabel={rowStyle(capture)}
+                prompt={prompted.get(capture.id)}
                 onSelect={() => onSelect(capture.id)}
               />
             ))}

@@ -10,9 +10,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Toggle } from '@/components/ui/toggle';
-import type { PunctuationStyle, Qwen3ModelSize, WhisperModelSize } from '@/lib/api/types';
+import type { Qwen3ModelSize, WhisperModelSize } from '@/lib/api/types';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
-import { useWritingStyle } from '@/lib/hooks/useWritingStyle';
 
 const P = 'settings.captures.transcription';
 const R = 'settings.captures.refinement';
@@ -49,20 +48,20 @@ function ModelInUse({ label, model }: { label: string; model: string }) {
   );
 }
 
-/** Transcription (Whisper) and refinement (Qwen3) settings. Models are chosen in the Models tab. */
+/**
+ * Transcription (Whisper) and refinement (Qwen3) settings. Models are chosen
+ * in the Models tab; punctuation, filler and technical terms belong to each
+ * writing style, on the Writing style page.
+ */
 export function TranscriptionSettingsPage() {
   const { t } = useTranslation();
   const { settings, update } = useCaptureSettings();
-  const { data: writingStyle } = useWritingStyle();
   const sttModel = settings?.stt_model ?? 'turbo';
   const language = settings?.language ?? 'auto';
   const autoRefine = settings?.auto_refine ?? true;
   const llmModel = settings?.llm_model ?? '0.6B';
   const qwen = QWEN_MODELS.find((m) => m.value === llmModel) ?? QWEN_MODELS[0];
-  const smartCleanup = settings?.smart_cleanup ?? true;
   const selfCorrection = settings?.self_correction ?? true;
-  const preserveTechnical = settings?.preserve_technical ?? true;
-  const punctuationStyle = settings?.punctuation_style ?? 'standard';
 
   return (
     <>
@@ -128,20 +127,6 @@ export function TranscriptionSettingsPage() {
         />
 
         <SettingRow
-          title={t(`${R}.smartCleanup.title`)}
-          description={t(`${R}.smartCleanup.description`)}
-          htmlFor="smartCleanup"
-          action={
-            <Toggle
-              id="smartCleanup"
-              checked={smartCleanup}
-              onCheckedChange={(v) => update({ smart_cleanup: v })}
-              disabled={!autoRefine}
-            />
-          }
-        />
-
-        <SettingRow
           title={t(`${R}.selfCorrection.title`)}
           description={t(`${R}.selfCorrection.description`)}
           htmlFor="selfCorrection"
@@ -156,44 +141,12 @@ export function TranscriptionSettingsPage() {
         />
 
         <SettingRow
-          title={t(`${R}.preserveTechnical.title`)}
-          description={t(`${R}.preserveTechnical.description`)}
-          htmlFor="preserveTechnical"
+          title={t(`${R}.styles.title`)}
+          description={t(`${R}.styles.description`)}
           action={
-            <Toggle
-              id="preserveTechnical"
-              checked={preserveTechnical}
-              onCheckedChange={(v) => update({ preserve_technical: v })}
-              disabled={!autoRefine}
-            />
-          }
-        />
-
-        {/* Not tied to auto-refine: pause joins in raw dictation follow it too. */}
-        <SettingRow
-          title={t(`${R}.punctuationStyle.title`)}
-          description={t(`${R}.punctuationStyle.description`)}
-          action={
-            <Select
-              value={punctuationStyle}
-              onValueChange={(v) => update({ punctuation_style: v as PunctuationStyle })}
-            >
-              <SelectTrigger
-                className="h-8 w-[300px]"
-                aria-label={t(`${R}.punctuationStyle.title`)}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="casual">{t(`${R}.punctuationStyle.casual`)}</SelectItem>
-                <SelectItem value="standard">{t(`${R}.punctuationStyle.standard`)}</SelectItem>
-                <SelectItem value="learned" disabled={!writingStyle?.ready}>
-                  {writingStyle?.ready
-                    ? t(`${R}.punctuationStyle.learned`)
-                    : t(`${R}.punctuationStyle.learnedLocked`)}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/settings/writing-style">{t(`${R}.styles.open`)}</Link>
+            </Button>
           }
         />
       </SettingSection>
