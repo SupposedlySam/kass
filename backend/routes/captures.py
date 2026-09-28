@@ -123,15 +123,27 @@ async def create_capture_endpoint(
 async def list_captures_endpoint(
     limit: int = 50,
     offset: int = 0,
+    app_bundle_id: str | None = None,
+    unknown_app: bool = False,
     db: Session = Depends(get_db),
 ):
+    """The newest captures first. ``app_bundle_id`` keeps one app's;
+    ``unknown_app`` keeps those with no app recorded."""
     if limit < 1 or limit > 200:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 200")
     if offset < 0:
         raise HTTPException(status_code=400, detail="offset must be >= 0")
 
-    items, total = captures_service.list_captures(db, limit=limit, offset=offset)
+    items, total = captures_service.list_captures(
+        db, limit=limit, offset=offset, app_bundle_id=app_bundle_id, unknown_app=unknown_app,
+    )
     return models.CaptureListResponse(items=items, total=total)
+
+
+@router.get("/captures/apps", response_model=models.CaptureAppsResponse)
+async def list_capture_apps_endpoint(db: Session = Depends(get_db)):
+    """Capture counts per app for the Captures app list."""
+    return captures_service.list_capture_apps(db)
 
 
 @router.get("/captures/{capture_id}", response_model=models.CaptureResponse)

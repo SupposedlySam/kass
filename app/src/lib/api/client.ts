@@ -2,6 +2,8 @@ import type { LanguageCode } from '@/lib/constants/languages';
 import { SERVER_URL } from '@/stores/serverStore';
 import type {
   ActiveTasksResponse,
+  CaptureAppFilter,
+  CaptureAppsResponse,
   CaptureCreateResponse,
   CaptureFeedbackCreate,
   CaptureFeedbackResponse,
@@ -108,8 +110,19 @@ class ApiClient {
   }
 
   // Captures
-  async listCaptures(limit = 50, offset = 0): Promise<CaptureListResponse> {
-    return this.request<CaptureListResponse>(`/captures?limit=${limit}&offset=${offset}`);
+  async listCaptures(
+    limit = 50,
+    offset = 0,
+    app: CaptureAppFilter = { kind: 'all' },
+  ): Promise<CaptureListResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (app.kind === 'app') params.set('app_bundle_id', app.bundleId);
+    if (app.kind === 'unknown') params.set('unknown_app', 'true');
+    return this.request<CaptureListResponse>(`/captures?${params}`);
+  }
+
+  async listCaptureApps(): Promise<CaptureAppsResponse> {
+    return this.request<CaptureAppsResponse>('/captures/apps');
   }
 
   async getCapture(captureId: string): Promise<CaptureResponse> {

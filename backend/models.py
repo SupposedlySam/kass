@@ -79,6 +79,27 @@ class CaptureListResponse(BaseModel):
     total: int
 
 
+class CaptureAppCount(BaseModel):
+    """One app in the Captures app list: how many captures went to it."""
+
+    app_bundle_id: str
+    app_name: Optional[str] = None
+    count: int
+    last_captured_at: Optional[datetime] = None
+
+
+class CaptureAppsResponse(BaseModel):
+    """``GET /captures/apps``: capture counts per app, most first.
+
+    ``unknown_count`` is the captures with no app recorded: uploads, and
+    dictation from before the target app was saved.
+    """
+
+    total: int
+    unknown_count: int
+    apps: List[CaptureAppCount]
+
+
 class CaptureCreateResponse(CaptureResponse):
     """
     Response model for ``POST /captures``.

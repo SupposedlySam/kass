@@ -16,11 +16,18 @@ from pathlib import Path
 from typing import Optional
 
 import soundfile as sf
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..database import Capture as DBCapture
-from ..models import CaptureResponse, RefinementFlagsModel, RefinementReviewModel
+from ..models import (
+    CaptureAppCount,
+    CaptureAppsResponse,
+    CaptureResponse,
+    RefinementFlagsModel,
+    RefinementReviewModel,
+)
 from ..utils.audio import load_audio
 from .content_check import check_refinement, summarize_reviews
 from .refinement import RefinementFlags, refine_transcript
@@ -194,16 +201,67 @@ async def create_capture(
     return _to_response(row)
 
 
-def list_captures(db: Session, limit: int = 50, offset: int = 0) -> tuple[list[CaptureResponse], int]:
-    total = db.query(DBCapture).count()
+def list_captures(
+    db: Session,
+    limit: int = 50,
+    offset: int = 0,
+    app_bundle_id: str | None = None,
+    unknown_app: bool = False,
+) -> tuple[list[CaptureResponse], int]:
+    """The newest captures first, optionally only one app's, or only those
+    with no app recorded (uploads, and dictation from before apps were saved)."""
+    query = db.query(DBCapture)
+    if unknown_app:
+        query = query.filter(DBCapture.app_bundle_id.is_(None))
+    elif app_bundle_id:
+        query = query.filter(DBCapture.app_bundle_id == app_bundle_id)
+    total = query.count()
     rows = (
-        db.query(DBCapture)
+        query
         .order_by(DBCapture.created_at.desc())
         .limit(limit)
         .offset(offset)
         .all()
     )
     return [_to_response(r) for r in rows], total
+
+
+def list_capture_apps(db: Session) -> CaptureAppsResponse:
+    """How many captures each app has, most first, counted over every row
+    rather than the page the list loads. An app is its bundle id; its name is
+    the one on its newest capture, since an app can be renamed."""
+    counts: dict[str, list] = {}
+    unknown = 0
+    rows = (
+        db.query(
+            DBCapture.app_bundle_id,
+            DBCapture.app_name,
+            func.count(DBCapture.id),
+            func.max(DBCapture.created_at),
+        )
+        .group_by(DBCapture.app_bundle_id, DBCapture.app_name)
+        .all()
+    )
+    for bundle_id, name, count, latest in rows:
+        if bundle_id is None:
+            unknown += count
+            continue
+        entry = counts.setdefault(bundle_id, [None, 0, None])
+        if name and (entry[2] is None or (latest and latest > entry[2])):
+            entry[0] = name
+        entry[1] += count
+        if latest and (entry[2] is None or latest > entry[2]):
+            entry[2] = latest
+    apps = [
+        CaptureAppCount(app_bundle_id=bundle_id, app_name=name, count=count, last_captured_at=latest)
+        for bundle_id, (name, count, latest) in counts.items()
+    ]
+    apps.sort(key=lambda app: (-app.count, (app.app_name or app.app_bundle_id).lower()))
+    return CaptureAppsResponse(
+        total=sum(app.count for app in apps) + unknown,
+        unknown_count=unknown,
+        apps=apps,
+    )
 
 
 def get_capture(capture_id: str, db: Session) -> Optional[CaptureResponse]:

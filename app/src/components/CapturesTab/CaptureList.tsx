@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Loader2, Search } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Kbd } from '@/components/ui/kbd';
 import { StyleCalibrationPrompt } from '@/components/WritingStyle/StyleCalibrationPrompt';
@@ -18,10 +18,13 @@ import {
 function CaptureRow({
   capture,
   active,
+  showApp,
   onSelect,
 }: {
   capture: CaptureResponse;
   active: boolean;
+  /** Off in one app's list, where every row is that app. */
+  showApp: boolean;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
@@ -58,8 +61,8 @@ function CaptureRow({
           : t('captures.snippetEmpty')}
       </span>
       <span className="flex items-center gap-[7px] min-w-0 text-[11.5px] text-muted-foreground">
-        <AppIcon bundleId={capture.app_bundle_id} />
-        {capture.app_name && (
+        {showApp && <AppIcon bundleId={capture.app_bundle_id} />}
+        {showApp && capture.app_name && (
           <>
             <span className="min-w-0 truncate">{capture.app_name}</span>
             <span className="shrink-0 text-muted-foreground/50">·</span>
@@ -101,8 +104,9 @@ function CaptureRow({
 }
 
 /**
- * The 440px capture list: search (⌘K hint), the not-set-up
- * banner, the style calibration prompt, and one row per capture.
+ * The capture list: the selected app's card, search (⌘K hint), the
+ * not-set-up banner, the style calibration prompt, and one row per capture.
+ * It narrows from 440px to 400px while the app list beside it is open.
  */
 export function CaptureList({
   captures,
@@ -113,6 +117,9 @@ export function CaptureList({
   search,
   onSearchChange,
   allReady,
+  appName,
+  appHeader,
+  narrow,
 }: {
   captures: CaptureResponse[];
   /** The captures left after search, in display order. */
@@ -123,9 +130,17 @@ export function CaptureList({
   search: string;
   onSearchChange: (value: string) => void;
   allReady: boolean;
+  /** The app the list is filtered to, if any. */
+  appName?: string;
+  /** The filtered app's card, above search. */
+  appHeader?: ReactNode;
+  narrow: boolean;
 }) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const searchLabel = appName
+    ? t('captures.apps.searchPlaceholder', { app: appName })
+    : t('captures.searchPlaceholder');
 
   // Keep the selected row in view as the arrow keys move through the list.
   useEffect(() => {
@@ -137,18 +152,22 @@ export function CaptureList({
 
   return (
     <section
-      aria-label={t('captures.title')}
-      className="w-[440px] shrink-0 flex flex-col border-r border-border"
+      aria-label={appName ? t('captures.apps.listLabel', { app: appName }) : t('captures.title')}
+      className={cn(
+        'shrink-0 flex flex-col border-r border-border',
+        narrow ? 'w-[400px]' : 'w-[440px]',
+      )}
     >
-      <div className="p-4 border-b border-border">
+      <div className="flex flex-col gap-2 p-4 border-b border-border">
+        {appHeader}
         <label className="flex items-center gap-2.5 h-10 px-3 rounded-lg border border-input bg-popover focus-within:border-ring">
           <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
           <input
             type="search"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t('captures.searchPlaceholder')}
-            aria-label={t('captures.searchPlaceholder')}
+            placeholder={searchLabel}
+            aria-label={searchLabel}
             className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
           />
           <Kbd>⌘K</Kbd>
@@ -190,6 +209,7 @@ export function CaptureList({
                 key={capture.id}
                 capture={capture}
                 active={capture.id === selectedId}
+                showApp={!appName}
                 onSelect={() => onSelect(capture.id)}
               />
             ))}

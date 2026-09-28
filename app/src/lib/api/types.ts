@@ -132,6 +132,30 @@ export interface CaptureListResponse {
   total: number;
 }
 
+/** One app in the Captures app list. */
+export interface CaptureAppCount {
+  app_bundle_id: string;
+  app_name?: string | null;
+  count: number;
+  last_captured_at?: string | null;
+}
+
+/**
+ * Response of ``GET /captures/apps``. ``unknown_count`` is the captures with
+ * no app recorded: uploads, and dictation from before apps were saved.
+ */
+export interface CaptureAppsResponse {
+  total: number;
+  unknown_count: number;
+  apps: CaptureAppCount[];
+}
+
+/** Which captures the list shows: every app's, one app's, or those with no app. */
+export type CaptureAppFilter =
+  | { kind: 'all' }
+  | { kind: 'app'; bundleId: string }
+  | { kind: 'unknown' };
+
 /**
  * Response of ``POST /captures``. Adds ``auto_refine`` and ``allow_auto_paste``
  * — the server's current settings captured at request time — so the client

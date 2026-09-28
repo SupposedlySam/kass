@@ -18,6 +18,9 @@ interface UIStore {
   // Theme
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  // The Captures app list, shrunk to icons.
+  capturesAppsCollapsed: boolean;
+  setCapturesAppsCollapsed: (collapsed: boolean) => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -28,11 +31,14 @@ export const useUIStore = create<UIStore>()(
         set({ theme });
         applyTheme(theme);
       },
+      capturesAppsCollapsed: false,
+      setCapturesAppsCollapsed: (capturesAppsCollapsed) => set({ capturesAppsCollapsed }),
     }),
     {
       name: 'voicebox-ui',
       partialize: (state) => ({
         theme: state.theme,
+        capturesAppsCollapsed: state.capturesAppsCollapsed,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.theme);

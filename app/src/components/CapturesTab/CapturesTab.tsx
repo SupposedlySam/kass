@@ -1,31 +1,65 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
-import type { CaptureListResponse, CaptureResponse } from '@/lib/api/types';
+import type { CaptureAppFilter, CaptureListResponse, CaptureResponse } from '@/lib/api/types';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
+import { useUIStore } from '@/stores/uiStore';
+import { CaptureAppHeader } from './CaptureAppHeader';
+import { appDisplayName, CaptureAppList } from './CaptureAppList';
 import { CaptureDetail } from './CaptureDetail';
 import { CaptureDetailHeader } from './CaptureDetailHeader';
 import { CaptureList } from './CaptureList';
+import { ALL_APPS, CAPTURE_APPS_KEY, capturesKey, matchesAppFilter } from './captureApps';
 import { isInOverlay, isTypingTarget, matchesSearch, wentIntoVoicebox } from './captureFormat';
 import { EmptyDetail } from './EmptyDetail';
 
-/** The Captures screen: the capture list on the left, the selected capture on the right. */
+/**
+ * The Captures screen: the app list, the capture list (all apps' or one
+ * app's), and the selected capture on the right.
+ */
 export function CapturesTab() {
   const queryClient = useQueryClient();
   const navigate = useNavigate({ from: '/captures' });
   const { capture: linkedId } = useSearch({ from: '/captures' });
   const readiness = useDictationReadiness();
+  const { t } = useTranslation();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [appFilter, setAppFilter] = useState<CaptureAppFilter>(ALL_APPS);
+  const appsCollapsed = useUIStore((s) => s.capturesAppsCollapsed);
 
-  const { data: capturesData, isLoading: capturesLoading } = useQuery({
-    queryKey: ['captures'],
-    queryFn: () => apiClient.listCaptures(200, 0),
+  const {
+    data: capturesData,
+    isLoading: capturesLoading,
+    isPlaceholderData: capturesPlaceholder,
+  } = useQuery({
+    queryKey: capturesKey(appFilter),
+    queryFn: () => apiClient.listCaptures(200, 0, appFilter),
+    // Switching apps keeps the last list up until the new one lands.
+    placeholderData: keepPreviousData,
   });
   const captures = capturesData?.items ?? [];
+  const { data: apps } = useQuery({
+    queryKey: CAPTURE_APPS_KEY,
+    queryFn: () => apiClient.listCaptureApps(),
+  });
+  const filteredApp =
+    appFilter.kind === 'app'
+      ? apps?.apps.find((app) => app.app_bundle_id === appFilter.bundleId)
+      : undefined;
+
+  // An app whose captures were all deleted leaves the list; show every app's.
+  useEffect(() => {
+    if (!apps) return;
+    const gone =
+      (appFilter.kind === 'app' && !filteredApp) ||
+      (appFilter.kind === 'unknown' && !apps.unknown_count);
+    if (gone) setAppFilter(ALL_APPS);
+  }, [apps, appFilter, filteredApp]);
 
   const visible = useMemo(
     () => captures.filter((c) => matchesSearch(c, search)),
@@ -51,6 +85,12 @@ export function CapturesTab() {
   useEffect(() => {
     if (!linkedId || !capturesData) return;
     if (!captures.some((c) => c.id === linkedId)) {
+      // Show every app's captures first; the capture may be another app's.
+      if (appFilter.kind !== 'all') {
+        setAppFilter(ALL_APPS);
+        return;
+      }
+      if (capturesPlaceholder) return;
       let cancelled = false;
       apiClient
         .getCapture(linkedId)
@@ -72,7 +112,7 @@ export function CapturesTab() {
     setSelectedId(linkedId);
     setSearch('');
     navigate({ search: {}, replace: true });
-  }, [linkedId, capturesData, captures, navigate, queryClient]);
+  }, [linkedId, capturesData, capturesPlaceholder, captures, appFilter, navigate, queryClient]);
 
   // Live sync from sibling Tauri webviews (the floating dictate window).
   // ``capture:created`` carries the full row so we can seed the cache before
@@ -83,20 +123,30 @@ export function CapturesTab() {
   //
   // A capture dictated into a field on this screen (e.g. a correction on the
   // selected capture) leaves the selection put. It is recorded with
-  // Voicebox as its app; the focus check covers captures without one.
+  // Voicebox as its app; the focus check covers captures without one. A
+  // capture for another app than the one shown isn't selected either: it
+  // isn't in the list.
+  const appFilterRef = useRef(appFilter);
+  appFilterRef.current = appFilter;
   useEffect(() => {
     const unlistens: Promise<UnlistenFn>[] = [];
     unlistens.push(
       listen<{ capture: CaptureResponse }>('capture:created', (event) => {
         const capture = event.payload?.capture;
         if (capture) {
-          queryClient.setQueryData<CaptureListResponse>(['captures'], (prev) => {
+          const filter = appFilterRef.current;
+          const seed = (prev: CaptureListResponse | undefined) => {
             if (!prev) return prev;
             if (prev.items.some((c) => c.id === capture.id)) return prev;
             return { ...prev, items: [capture, ...prev.items], total: prev.total + 1 };
-          });
+          };
+          queryClient.setQueryData<CaptureListResponse>(['captures'], seed);
+          const shown = matchesAppFilter(capture, filter);
+          if (shown && filter.kind !== 'all') {
+            queryClient.setQueryData<CaptureListResponse>(capturesKey(filter), seed);
+          }
           const typingHere = document.hasFocus() && isTypingTarget(document.activeElement);
-          if (!wentIntoVoicebox(capture) && !typingHere) {
+          if (shown && !wentIntoVoicebox(capture) && !typingHere) {
             setSelectedId(capture.id);
           }
         }
@@ -138,9 +188,22 @@ export function CapturesTab() {
   }, []);
 
   const selected = captures.find((c) => c.id === selectedId) ?? null;
+  const appName = filteredApp
+    ? appDisplayName(filteredApp)
+    : appFilter.kind === 'unknown'
+      ? t('captures.apps.unknown')
+      : undefined;
 
   return (
     <div className="h-full flex overflow-hidden">
+      <CaptureAppList
+        apps={apps}
+        filter={appFilter}
+        onFilterChange={(filter) => {
+          setAppFilter(filter);
+          setSearch('');
+        }}
+      />
       <CaptureList
         captures={captures}
         visible={visible}
@@ -150,6 +213,17 @@ export function CapturesTab() {
         search={search}
         onSearchChange={setSearch}
         allReady={readiness.isLoading || readiness.allReady}
+        appName={appName}
+        appHeader={
+          filteredApp && (
+            <CaptureAppHeader
+              bundleId={filteredApp.app_bundle_id}
+              name={appDisplayName(filteredApp)}
+              count={filteredApp.count}
+            />
+          )
+        }
+        narrow={!appsCollapsed}
       />
       <div className="flex-1 min-w-0 flex flex-col">
         <CaptureDetailHeader capture={selected} />

@@ -187,6 +187,18 @@
     },
     "title": "Captures",
     "searchPlaceholder": "Search captures",
+    "apps": {
+      "title": "Apps",
+      "all": "All apps",
+      "unknown": "Unknown app",
+      "collapse": "Collapse app list",
+      "expand": "Expand app list",
+      "rowLabel": "{{name}}, {{count}}",
+      "listLabel": "{{app}} captures",
+      "searchPlaceholder": "Search {{app}} captures",
+      "dictations_one": "{{formatted}} dictation",
+      "dictations_other": "{{formatted}} dictations"
+    },
     "snippetEmpty": "(no transcript)",
     "captureCardLabel": "Capture · {{when}}",
     "tag": {
