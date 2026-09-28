@@ -41,6 +41,15 @@ generation_stop: ContextVar[Optional[threading.Event]] = ContextVar("generation_
 # still sampled from the model's own distribution, so the output is unchanged.
 generation_hint: ContextVar[Optional[str]] = ContextVar("generation_hint", default=None)
 
+# Calls with the same system prompt share hundreds of tokens; calls with
+# different ones share only the chat template's first few. Below this, the
+# previous call's cache is parked for its own prompt instead of trimmed.
+SAME_PROMPT_TOKENS = 64
+# Parked caches: one per other prompt in use (Command Mode's, while dictation
+# is current). Longer ones, from long selections, aren't worth their memory.
+PARKED_CACHES = 1
+PARKED_CACHE_TOKENS = 4096
+
 # Off only to compare against plain decoding.
 LOOKUP_DECODING = True
 # Longest proposal checked in one model call. A call over a few dozen tokens
@@ -131,6 +140,11 @@ class MLXQwenLLMBackend:
         # reusing them keeps a warm 4B dictation cleanup well under a second.
         self._prompt_cache = None
         self._cached_tokens: list[int] = []
+        # Caches of earlier calls with a different prompt, most recent first.
+        # Dictation cleanup and Command Mode share the model but not their
+        # prompts; each keeps its own cache, so switching between them
+        # doesn't process a ~1k-token prompt again after release.
+        self._parked: list[tuple[object, list[int]]] = []
         self._listener: Optional[Callable[[str], None]] = None
         self._stop: Optional[threading.Event] = None
         self._hint: Optional[str] = None
@@ -212,6 +226,7 @@ class MLXQwenLLMBackend:
         self._current_model_size = None
         self._prompt_cache = None
         self._cached_tokens = []
+        self._parked = []
         clear_mlx_cache()
         logger.info("Qwen3 (MLX) unloaded")
 
@@ -405,15 +420,36 @@ class MLXQwenLLMBackend:
         return text.strip()
 
     def _reusable_cache(self, tokens: list[int]):
-        """Trim the previous call's KV cache to the prefix it shares with ``tokens``."""
+        """The KV cache sharing the longest prefix with ``tokens``, trimmed to that prefix.
+
+        A current cache with a different system prompt is parked for that
+        prompt's next call rather than trimmed away.
+        """
         from mlx_lm.models.cache import can_trim_prompt_cache, make_prompt_cache, trim_prompt_cache
 
-        previous = self._cached_tokens
         # Leave at least one prompt token to feed the model.
-        limit = min(len(previous), len(tokens) - 1)
-        shared = 0
-        while shared < limit and previous[shared] == tokens[shared]:
-            shared += 1
+        limit = len(tokens) - 1
+
+        def shared_with(cached: list[int]) -> int:
+            end = min(len(cached), limit)
+            count = 0
+            while count < end and cached[count] == tokens[count]:
+                count += 1
+            return count
+
+        current = shared_with(self._cached_tokens)
+        best = max(range(len(self._parked)), key=lambda i: shared_with(self._parked[i][1]), default=None)
+        if best is not None and shared_with(self._parked[best][1]) > current:
+            cache, cached = self._parked.pop(best)
+            self._park(self._prompt_cache, self._cached_tokens)
+            self._prompt_cache, self._cached_tokens = cache, cached
+        elif current < min(SAME_PROMPT_TOKENS, len(self._cached_tokens)):
+            # A different prompt: keep this one's cache for its next call.
+            self._park(self._prompt_cache, self._cached_tokens)
+            self._prompt_cache, self._cached_tokens = None, []
+
+        previous = self._cached_tokens
+        shared = shared_with(previous)
         if self._prompt_cache is None or not shared or not can_trim_prompt_cache(self._prompt_cache):
             self._prompt_cache = make_prompt_cache(self.model)
             self._cached_tokens = []
@@ -421,3 +457,8 @@ class MLXQwenLLMBackend:
         trim_prompt_cache(self._prompt_cache, len(previous) - shared)
         self._cached_tokens = previous[:shared]
         return self._prompt_cache
+
+    def _park(self, cache, cached: list[int]) -> None:
+        if cache is None or not cached or len(cached) > PARKED_CACHE_TOKENS:
+            return
+        self._parked = [(cache, cached), *self._parked][:PARKED_CACHES]
