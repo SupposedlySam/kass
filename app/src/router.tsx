@@ -12,6 +12,7 @@ import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
 import { SettingsLayout } from '@/components/ServerTab/ServerTab';
+import { CommandModePage } from '@/components/Settings/CommandModePage';
 import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPage';
 import { TranscriptionSettingsPage } from '@/components/Settings/TranscriptionSettingsPage';
 import { WritingStylePage } from '@/components/Settings/WritingStylePage';
@@ -134,6 +135,12 @@ const settingsDictationRoute = createRoute({
   component: DictationSettingsPage,
 });
 
+const settingsCommandModeRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: '/command-mode',
+  component: CommandModePage,
+});
+
 const settingsTranscriptionRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: '/transcription',
@@ -185,6 +192,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute.addChildren([
     settingsGeneralRoute,
     settingsDictationRoute,
+    settingsCommandModeRoute,
     settingsTranscriptionRoute,
     settingsWritingStyleRoute,
     settingsCapturesRedirectRoute,

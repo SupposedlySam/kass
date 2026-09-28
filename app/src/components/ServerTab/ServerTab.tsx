@@ -6,6 +6,7 @@ import { usePlatform } from '@/platform/PlatformContext';
 type SettingsPath =
   | '/settings'
   | '/settings/dictation'
+  | '/settings/command-mode'
   | '/settings/transcription'
   | '/settings/writing-style'
   | '/settings/logs';
@@ -13,6 +14,7 @@ type SettingsPath =
 const tabs: Array<{ labelKey: string; path: SettingsPath; tauriOnly?: boolean }> = [
   { labelKey: 'settings.tabs.general', path: '/settings' },
   { labelKey: 'settings.tabs.dictation', path: '/settings/dictation' },
+  { labelKey: 'settings.tabs.commandMode', path: '/settings/command-mode' },
   { labelKey: 'settings.tabs.transcription', path: '/settings/transcription' },
   { labelKey: 'settings.tabs.writingStyle', path: '/settings/writing-style' },
   { labelKey: 'settings.tabs.logs', path: '/settings/logs', tauriOnly: true },

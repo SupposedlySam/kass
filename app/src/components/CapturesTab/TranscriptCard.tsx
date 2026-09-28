@@ -46,7 +46,7 @@ function textSize(words: number): string {
   return 'text-base leading-[1.6]';
 }
 
-function CopyButton({
+export function CopyButton({
   text,
   label,
   className,

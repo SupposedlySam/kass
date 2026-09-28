@@ -77,6 +77,18 @@ function CaptureRow({
             {t('captures.tag.review')}
           </span>
         )}
+        {(tag === 'command' || tag === 'commandFailed') && (
+          <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
+            <span
+              className={cn(
+                'size-1.5 rounded-full',
+                tag === 'command' ? 'bg-accent' : 'border-[1.5px] border-accent',
+              )}
+            />
+            {capture.command_transform ??
+              t(tag === 'command' ? 'captures.tag.command' : 'captures.tag.commandFailed')}
+          </span>
+        )}
         {tag === 'raw' && (
           <span className="shrink-0 flex items-center gap-1.5">
             <span className="size-1.5 rounded-full border-[1.5px] border-muted-foreground/70" />
