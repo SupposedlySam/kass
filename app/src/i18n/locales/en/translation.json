@@ -451,6 +451,14 @@
           "title": "HUD preview",
           "description": "What appears on screen while you're holding the shortcut."
         },
+        "soundCues": {
+          "title": "Sound cues",
+          "description": "Chime when recording starts and stops, and when a dictation is canceled or fails."
+        },
+        "soundCueVolume": {
+          "title": "Sound cue volume",
+          "description": "Plays the start chime when you let go of the slider."
+        },
         "copyToClipboard": {
           "title": "Copy transcript to clipboard",
           "description": "The cleaned transcript lands on your clipboard when the capture finishes."

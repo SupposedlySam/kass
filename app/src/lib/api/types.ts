@@ -147,6 +147,10 @@ export interface CaptureSettings {
   allow_auto_paste: boolean;
   /** Type cleaned text into the app while cleanup is still writing it. */
   live_text: boolean;
+  /** Chime when dictation starts, stops or fails. */
+  sound_cues: boolean;
+  /** Chime volume, 0 to 1. */
+  sound_cue_volume: number;
   /** Configured audio input deviceId (null or empty string means system default microphone). */
   input_device_id: string | null;
   /** Whether the global keyboard hotkey is armed. Off by default — turning

@@ -3,7 +3,7 @@
 from datetime import datetime
 import uuid
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 
 from ..utils.capture_chords import (
@@ -36,6 +36,9 @@ class CaptureSettings(Base):
     # Type cleaned text into the app while cleanup is still writing it
     # (docs/plans/STREAMING_INSERTION.md). Off until checked in more apps.
     live_text = Column(Boolean, nullable=False, default=False)
+    # Chimes when dictation starts, stops or fails, played by the desktop app.
+    sound_cues = Column(Boolean, nullable=False, default=True)
+    sound_cue_volume = Column(Float, nullable=False, default=0.5)
     # Configured audio input deviceId (None means system default microphone)
     input_device_id = Column(String, nullable=True, default=None)
     # Default OFF — opting in is what triggers the macOS Input Monitoring TCC

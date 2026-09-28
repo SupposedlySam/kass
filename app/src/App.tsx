@@ -10,6 +10,7 @@ import type { HealthResponse } from '@/lib/api/types';
 import { TOP_SAFE_AREA_PADDING } from '@/lib/constants/ui';
 import { useChordSync } from '@/lib/hooks/useChordSync';
 import { useInAppDictationInsert } from '@/lib/hooks/useInAppDictationInsert';
+import { useSoundCueSync } from '@/lib/hooks/useSoundCueSync';
 import { cn } from '@/lib/utils/cn';
 import { usePlatform } from '@/platform/PlatformContext';
 import { router } from '@/router';
@@ -84,6 +85,8 @@ function MainApp() {
   useChordSync();
   // Dictation into Voicebox's own fields arrives here instead of as a paste.
   useInAppDictationInsert();
+  // Rust plays the dictation chimes; it needs their saved settings.
+  useSoundCueSync();
 
   // Setup lifecycle callbacks
   useEffect(() => {
