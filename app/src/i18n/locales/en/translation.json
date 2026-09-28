@@ -600,7 +600,7 @@
     },
     "commandMode": {
       "sectionShortcut": "Command Mode",
-      "description": "Select text in any app, hold the command shortcut and say what to do with it: “make this more concise”, “translate to Spanish”, or a transform’s name. The rewrite replaces the selection, and the original stays in Captures.",
+      "description": "Select text in any app, hold the command shortcut and say what to do with it: “make this more concise”, “translate to Spanish”, or a transform’s name. The rewrite replaces the selection, and the original stays in Captures. Rewrites run on the dictation cleanup model.",
       "chord": {
         "title": "Command shortcut",
         "description": "Hold to speak an instruction for the selected text, let go to rewrite it.",
@@ -613,13 +613,6 @@
         "pickerTitle": "Set the Command Mode shortcut",
         "pickerDescription": "Hold the keys you want to use, then release and click Save. Pick something distinct from your dictation shortcuts.",
         "taken": "That shortcut already starts dictation. Pick different keys."
-      },
-      "model": {
-        "title": "Rewriting model",
-        "description": "Following an instruction takes more model than cleaning up dictation. 1.7B is the best balance; 0.6B sometimes misreads instructions.",
-        "size06": "Qwen3 0.6B · fastest",
-        "size17": "Qwen3 1.7B · recommended",
-        "size40": "Qwen3 4B · slowest"
       },
       "transforms": {
         "title": "Transforms",

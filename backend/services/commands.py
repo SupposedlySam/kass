@@ -19,10 +19,6 @@ MAX_SELECTION_CHARS = 16_000
 MAX_INSTRUCTION_CHARS = 2_000
 MAX_TRANSFORMS = 50
 MAX_TRANSFORM_NAME_CHARS = 60
-# Rewriting by a free-form instruction needs more model than cleanup: 0.6B
-# obeys tone requests by translating, and 4B is twice as slow for no better
-# edits (docs/plans/COMMAND_MODE.md, "Measurements").
-DEFAULT_COMMAND_MODEL = "1.7B"
 
 DEFAULT_TRANSFORMS: list[dict] = [
     {
@@ -333,8 +329,8 @@ async def run_command(db, *, selection: str, spoken: str, settings, row=None, ap
 
     instruction, transform = resolve_instruction(spoken, settings_transforms(settings))
     validate_request(selection, instruction)
-    ensure_model_ready(settings.command_llm_model)
-    text, model = await rewrite(selection, instruction, settings.command_llm_model)
+    ensure_model_ready(settings.llm_model)
+    text, model = await rewrite(selection, instruction, settings.llm_model)
     if row is None:
         bundle_id, name = target_app(app_bundle_id, app_name)
         row = Capture(

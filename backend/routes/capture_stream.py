@@ -91,7 +91,7 @@ async def stream_capture(websocket: WebSocket):
             )
         )
         worker = asyncio.create_task(session.run())
-        # A command session prefills its own model when its selection arrives.
+        # A command session prefills the same model when its selection arrives.
         if settings.auto_refine and not session.is_command:
             load = asyncio.create_task(_load_cleanup(session))
             _loading.add(load)

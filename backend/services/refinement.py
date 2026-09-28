@@ -475,8 +475,9 @@ async def refine_transcript(
 async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
     """Load the model (and personal adapter) ``refine_transcript`` will use, without generating.
 
-    Called when a dictation starts: after a command has run on another model,
-    the switch back happens while the user speaks, not after release.
+    Called when a dictation starts, so a load happens while the user speaks,
+    not after release: the first dictation after the model setting changed,
+    or a personal adapter coming back after a command ran on the base weights.
     """
     backend = llm_service.get_llm_model()
     prepare = getattr(backend, "prepare", None)

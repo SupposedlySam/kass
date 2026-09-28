@@ -248,8 +248,8 @@ class MLXQwenLLMBackend:
     async def prepare(self, model_size: Optional[str] = None, adapter_path: Optional[str] = None) -> None:
         """Load what a later ``generate`` with these arguments needs, without generating.
 
-        Dictation and Command Mode can use different models; a session loads
-        its own while the user speaks rather than after release.
+        A dictation loads its model and personal adapter while the user
+        speaks rather than after release.
         """
         await run_on_mlx_thread(self._ensure_ready_sync, model_size, adapter_path)
 

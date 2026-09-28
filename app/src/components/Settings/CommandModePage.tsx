@@ -12,35 +12,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import type { Qwen3ModelSize, Transform } from '@/lib/api/types';
+import type { Transform } from '@/lib/api/types';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
 import { sortChordKeys } from '@/lib/utils/keyCodes';
 import { ChordKeys } from './ChordKeys';
 
 const P = 'settings.commandMode';
 
-const MODELS: Array<{ value: Qwen3ModelSize; key: string }> = [
-  { value: '0.6B', key: 'size06' },
-  { value: '1.7B', key: 'size17' },
-  { value: '4B', key: 'size40' },
-];
-
 const sameChord = (a: string[], b: string[]) =>
   sortChordKeys(a).join('+') === sortChordKeys(b).join('+');
 
 /**
  * Command Mode (docs/plans/COMMAND_MODE.md): the chord that rewrites the
- * selection by a spoken instruction, the model that rewrites, and the saved
- * transforms.
+ * selection by a spoken instruction, and the saved transforms. Rewrites run
+ * on the dictation cleanup model, so the two never switch models.
  */
 export function CommandModePage() {
   const { t } = useTranslation();
@@ -48,7 +35,6 @@ export function CommandModePage() {
   const { settings, update } = useCaptureSettings();
   const hotkeyEnabled = settings?.hotkey_enabled ?? false;
   const commandKeys = settings?.chord_command_keys ?? [];
-  const model = settings?.command_llm_model ?? '1.7B';
   const [editingChord, setEditingChord] = useState(false);
 
   const saveChord = (keys: string[]) => {
@@ -96,27 +82,6 @@ export function CommandModePage() {
                 {commandKeys.length > 0 ? t(`${P}.chord.change`) : t(`${P}.chord.set`)}
               </Button>
             </div>
-          }
-        />
-        <SettingRow
-          title={t(`${P}.model.title`)}
-          description={t(`${P}.model.description`)}
-          action={
-            <Select
-              value={model}
-              onValueChange={(v) => update({ command_llm_model: v as Qwen3ModelSize })}
-            >
-              <SelectTrigger className="h-8 w-[200px]" aria-label={t(`${P}.model.title`)}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {t(`${P}.model.${m.key}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           }
         />
       </SettingSection>

@@ -26,7 +26,7 @@ import logging
 
 from sqlalchemy import inspect, text
 
-from ..services.commands import DEFAULT_COMMAND_MODEL, default_transforms
+from ..services.commands import default_transforms
 from ..utils.capture_chords import (
     default_command_chord,
     default_push_to_talk_chord,
@@ -147,13 +147,6 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             f"chord_command_keys TEXT NOT NULL DEFAULT {_sql_literal(json.dumps(default_command_chord()))}",
             "chord_command_keys",
-        )
-    if "command_llm_model" not in columns:
-        _add_column(
-            engine,
-            "capture_settings",
-            f"command_llm_model VARCHAR NOT NULL DEFAULT {_sql_literal(DEFAULT_COMMAND_MODEL)}",
-            "command_llm_model",
         )
     if "command_transforms" not in columns:
         _add_column(

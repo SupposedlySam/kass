@@ -154,7 +154,6 @@ def test_new_installs_get_the_default_transforms_and_command_chord():
         response = CaptureSettingsResponse.model_validate(get_capture_settings(db))
     assert [t.name for t in response.command_transforms] == ["Polish", "Prompt Engineer"]
     assert response.chord_command_keys == ["MetaRight", "ShiftRight"]
-    assert response.command_llm_model == commands.DEFAULT_COMMAND_MODEL
 
 
 def test_existing_installs_are_migrated_with_the_defaults(tmp_path):
@@ -180,6 +179,24 @@ def test_existing_installs_are_migrated_with_the_defaults(tmp_path):
     assert json.loads(transforms) == commands.default_transforms()
     assert json.loads(chord) == ["MetaRight", "ShiftRight"]
     assert {"command_selection", "command_instruction", "command_transform"} <= set(columns)
+
+
+def test_databases_with_the_retired_command_model_column_keep_working(tmp_path):
+    # Command Mode once had its own model setting; existing databases keep the column.
+    from sqlalchemy import text
+
+    from backend.database.migrations import run_migrations
+    from backend.services.settings import get_capture_settings, update_capture_settings
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE capture_settings ADD COLUMN command_llm_model VARCHAR NOT NULL DEFAULT '1.7B'"))
+    run_migrations(engine)
+    with Session(engine) as db:
+        get_capture_settings(db)
+        row = update_capture_settings(db, {"llm_model": "4B"})
+        assert CaptureSettingsResponse.model_validate(row).llm_model == "4B"
 
 
 # --- Rewrite ------------------------------------------------------------------------
@@ -281,9 +298,19 @@ def test_endpoint_rewrites_and_saves_a_command_capture(api):
     assert body["command_instruction"] == "translate to Spanish"
     assert body["command_transform"] is None
     assert body["app_name"] == "Notes"
-    assert body["llm_model"] == commands.DEFAULT_COMMAND_MODEL
+    assert body["llm_model"] == CaptureSettingsResponse().llm_model
     with api.db() as db:
         assert db.query(Capture).one().audio_path == ""
+
+
+def test_endpoint_rewrites_on_the_dictation_cleanup_model(api):
+    # One model for both, so a command never switches models.
+    with api.db() as db:
+        db.add(CaptureSettings(id=1, llm_model="4B"))
+        db.commit()
+    body = api.post("/commands/run", json={"selection": "Hello.", "instruction": "shorter"}).json()
+    assert body["llm_model"] == "4B"
+    assert api.llm.calls[0]["model_size"] == "4B"
 
 
 def test_endpoint_runs_a_transform_by_name(api):
@@ -386,6 +413,8 @@ async def test_a_command_session_prefills_while_speaking_and_rewrites_at_finish(
     assert stream.refined == "Hola."
     rewrite_call = stream.llm.calls[-1]
     assert rewrite_call["prompt"] == commands.command_message("Hello.", "translate to Spanish")
+    # Prefill and rewrite run on the dictation cleanup model.
+    assert {call["model_size"] for call in stream.llm.calls} == {stream.settings.llm_model}
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
@@ -423,7 +452,7 @@ def test_only_command_sessions_take_a_bounded_selection(stream, tmp_path, monkey
         stream.set_selection("x")
 
 
-# --- Switching models between dictation and commands --------------------------------
+# --- Loading the cleanup model ------------------------------------------------------
 
 
 @pytest.mark.asyncio

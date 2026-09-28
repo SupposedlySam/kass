@@ -176,8 +176,6 @@ export interface CaptureSettings {
   chord_toggle_to_talk_keys: string[];
   /** keytap key names for Command Mode; empty turns it off. */
   chord_command_keys: string[];
-  /** The model that rewrites selections in Command Mode. */
-  command_llm_model: Qwen3ModelSize;
   command_transforms: Transform[];
 }
 
