@@ -306,13 +306,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
     Some(take_id)
 }
 
-/// The app a take went to, for its capture. None before focus is known and
-/// for dictation inside Voicebox itself.
+/// The app a take went to, for its capture. None before focus is known.
 fn target_app(focus: &Mutex<Option<FocusSnapshot>>) -> Option<TargetApp> {
     let focus = focus.lock().ok()?.clone()?;
-    if focus.bundle_id.as_deref() == Some(crate::VOICEBOX_BUNDLE_ID) {
-        return None;
-    }
     Some(TargetApp {
         bundle_id: focus.bundle_id,
         name: focus.app_name,
