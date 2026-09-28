@@ -99,6 +99,12 @@ class Capture(Base):
     command_transform = Column(String, nullable=True)
     # The writing style the capture was cleaned up with (docs/plans/PER_APP_STYLE.md).
     style_id = Column(String, nullable=True)
+    # The app's App Store category (LSApplicationCategoryType), which suggests
+    # a style for a new app.
+    app_category = Column(String, nullable=True)
+    # The style this capture's corrections teach, when the user left them
+    # behind as its app moved to another style. None follows the app.
+    teaches_style_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

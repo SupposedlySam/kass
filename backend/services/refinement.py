@@ -540,6 +540,34 @@ async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
     await prepare(model_size, adapter_path)
 
 
+# Characters per token in the cleanup prompt, measured on Qwen3's tokenizer:
+# 3.8 to 3.9 for prompts of 1k to 2k tokens, chat template included.
+PROMPT_CHARS_PER_TOKEN = 3.8
+# A dictation's transcript and cleanup, cached after the prompt.
+DICTATION_TOKENS = 100
+
+
+def style_cache_bytes(flags: RefinementFlags, model_size: str) -> int | None:
+    """About how much memory the cached cleanup prompt of ``flags``' style takes.
+
+    Counted with the model's tokenizer when it is loaded, estimated from the
+    prompt's length otherwise, then rounded up the way the cache grows.
+    """
+    from ..backends.qwen_llm_backend import KV_CACHE_STEP
+
+    backend = llm_service.get_llm_model()
+    per_token = getattr(backend, "kv_bytes_per_token", lambda _size: None)(model_size)
+    if not per_token:
+        return None
+    system, examples = _prompt(flags, True, None, None)
+    tokens = backend.prompt_tokens(system, examples, model_size)
+    if tokens is None:
+        chars = len(system) + sum(len(said) + len(meant) for said, meant in examples)
+        tokens = round(chars / PROMPT_CHARS_PER_TOKEN)
+    steps = -(-(tokens + DICTATION_TOKENS) // KV_CACHE_STEP)
+    return steps * KV_CACHE_STEP * per_token
+
+
 async def prefill_cleanup(flags: RefinementFlags, model_size: str) -> None:
     """Put the cleanup prompt for ``flags``' style in the model's cache, without the transcript.
 

@@ -47,15 +47,37 @@ WHISPER_NATIVE_FORMATS = (".wav", ".mp3", ".flac", ".ogg")
 MAX_APP_FIELD_CHARS = 255
 
 
+def _clean_app_field(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip()[:MAX_APP_FIELD_CHARS] or None
+
+
 def target_app(bundle_id: object, name: object) -> tuple[Optional[str], Optional[str]]:
     """The dictation's target app as stored: blank or non-string parts become None."""
+    return _clean_app_field(bundle_id), _clean_app_field(name)
 
-    def clean(value: object) -> Optional[str]:
-        if not isinstance(value, str):
-            return None
-        return value.strip()[:MAX_APP_FIELD_CHARS] or None
 
-    return clean(bundle_id), clean(name)
+def target_app_category(category: object) -> str | None:
+    """The target app's App Store category (``LSApplicationCategoryType``), as stored."""
+    return _clean_app_field(category)
+
+
+def app_categories(db: Session) -> dict[str, str | None]:
+    """Each app's App Store category, from its newest capture that has one."""
+    rows = (
+        db.query(DBCapture.app_bundle_id, DBCapture.app_category, func.max(DBCapture.created_at))
+        .filter(DBCapture.app_bundle_id.isnot(None))
+        .group_by(DBCapture.app_bundle_id, DBCapture.app_category)
+        .all()
+    )
+    categories: dict[str, str | None] = {}
+    latest: dict[str, object] = {}
+    for bundle_id, category, when in rows:
+        categories.setdefault(bundle_id, None)
+        if category and (bundle_id not in latest or (when and when > latest[bundle_id])):
+            categories[bundle_id], latest[bundle_id] = category, when
+    return categories
 
 
 def _to_response(row: DBCapture) -> CaptureResponse:
@@ -231,10 +253,12 @@ def list_capture_apps(db: Session) -> CaptureAppsResponse:
     """How many captures each app has, most first, counted over every row
     rather than the page the list loads. An app is its bundle id; its name is
     the one on its newest capture, since an app can be renamed. Each app
-    carries the style its dictation uses and whether the user chose it."""
-    from .styles import snapshot
+    carries the style its dictation uses, whether the user chose it, and the
+    style suggested for it until they do."""
+    from .styles import snapshot, suggest_styles
 
     styles = snapshot()
+    suggested = suggest_styles(app_categories(db), styles)
     counts: dict[str, list] = {}
     unknown = 0
     rows = (
@@ -265,6 +289,7 @@ def list_capture_apps(db: Session) -> CaptureAppsResponse:
             last_captured_at=latest,
             style_id=styles.for_app(bundle_id).id,
             confirmed=bundle_id in styles.apps,
+            suggested_style_id=suggested.get(bundle_id),
         )
         for bundle_id, (name, count, latest) in counts.items()
     ]

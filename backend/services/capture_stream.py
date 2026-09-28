@@ -156,6 +156,7 @@ class StreamingCapture:
         # Set from the app command at key-down (or finish, from older clients).
         self.app_bundle_id = None
         self.app_name = None
+        self.app_category = None
         # Whether a cleanup has begun; the style is fixed from then on.
         self.cleanup_started = False
         # The field's text before the caret, from the context command, and
@@ -303,13 +304,15 @@ class StreamingCapture:
             self.last_cut = self.samples
         self.wake.set()
 
-    def set_app(self, bundle_id: str | None, name: str | None) -> bool:
-        """The dictation's target app, and so its writing style.
+    def set_app(self, bundle_id: str | None, name: str | None, category: str | None = None) -> bool:
+        """The dictation's target app, and so its writing style. ``category``
+        is its App Store category, saved to suggest styles for new apps.
 
         Returns whether the style is now that app's. It can't change once a
         cleanup has started; the app is still saved with the capture.
         """
         self.app_bundle_id, self.app_name = bundle_id, name
+        self.app_category = category or self.app_category
         if self.cleanup_started:
             return False
         self.style = styles_snapshot().for_app(bundle_id)
@@ -847,6 +850,7 @@ class StreamingCapture:
             else None,
             app_bundle_id=self.app_bundle_id,
             app_name=self.app_name,
+            app_category=self.app_category,
             style_id=self.style.id if self.settings.auto_refine else None,
         )
         db.add(row)
@@ -870,6 +874,7 @@ class StreamingCapture:
             stt_model=self.stt_model,
             app_bundle_id=self.app_bundle_id,
             app_name=self.app_name,
+            app_category=self.app_category,
             command_selection=self.selection,
         )
         if self.command is not None and not self.refinement_error:

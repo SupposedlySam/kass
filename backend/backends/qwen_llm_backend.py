@@ -63,10 +63,13 @@ LOOKUP_DECODING = True
 # the work and a wrong one wastes little.
 LOOKUP_DRAFT_TOKENS = 24
 
-# Prompts kept cached at once, least recently used out first. Each writing
-# style has its own cleanup prompt and Command Mode another; a 2k-token
-# prompt's cache is ~330 MB on 4B (docs/plans/PER_APP_STYLE.md).
-MAX_PROMPT_CACHES = 6
+# Prompts kept cached at once, least recently used out first: up to six
+# writing styles' cleanup prompts (styles.MAX_STYLES), Command Mode's, and one
+# for calibration previews and rule checks. A 2k-token prompt's cache is ~330
+# MB on 4B (docs/plans/PER_APP_STYLE.md; ``kv_bytes_per_token``).
+MAX_PROMPT_CACHES = 8
+# mlx_lm's KVCache grows in steps of this many tokens.
+KV_CACHE_STEP = 256
 
 
 class _PromptCache:
@@ -174,6 +177,36 @@ class MLXQwenLLMBackend:
 
     def is_loaded(self) -> bool:
         return self.model is not None
+
+    def kv_bytes_per_token(self, model_size: str) -> Optional[int]:
+        """What one cached token costs for ``model_size``: keys and values in
+        every layer, in the model's 2-byte activations. None if not downloaded."""
+        import json
+
+        from huggingface_hub import try_to_load_from_cache
+
+        path = try_to_load_from_cache(self._get_model_path(model_size), "config.json")
+        if not isinstance(path, str):
+            return None
+        try:
+            with open(path, encoding="utf-8") as file:
+                config = json.load(file)
+            head_dim = config.get("head_dim") or config["hidden_size"] // config["num_attention_heads"]
+            return config["num_hidden_layers"] * config["num_key_value_heads"] * head_dim * 2 * 2
+        except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError):
+            return None
+
+    def prompt_tokens(self, system: str, examples: list[tuple[str, str]], model_size: str) -> Optional[int]:
+        """How many tokens a prompt of ``system`` and ``examples`` takes, when
+        ``model_size`` is loaded to count them. Called off the MLX thread; the
+        tokenizer doesn't touch the GPU."""
+        tokenizer = self.tokenizer
+        if tokenizer is None or self._current_model_size != model_size:
+            return None
+        text = tokenizer.apply_chat_template(
+            _build_messages("", system, examples), tokenize=False, add_generation_prompt=True, enable_thinking=False
+        )
+        return len(tokenizer.encode(text, add_special_tokens=False))
 
     def _get_model_path(self, model_size: str) -> str:
         if model_size not in MLX_HF_REPOS:

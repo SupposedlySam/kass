@@ -41,20 +41,21 @@ def invalidate() -> None:
 
 def _from_corrections() -> list[dict]:
     from ..database import session as database_session
-    from ..database.models import CaptureFeedback
+    from ..database.models import Capture, CaptureFeedback
 
     if database_session.SessionLocal is None:
         return []
     with database_session.SessionLocal() as db:
         rows = (
-            db.query(CaptureFeedback)
+            db.query(CaptureFeedback, Capture.teaches_style_id)
+            .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
             .filter(CaptureFeedback.target == "refined")
             .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
             .all()
         )
     examples = []
     seen = set()
-    for row in rows:
+    for row, teaches in rows:
         # The latest correction of a capture replaces earlier ones.
         if row.capture_id in seen:
             continue
@@ -75,13 +76,14 @@ def _from_corrections() -> list[dict]:
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                     "app_bundle_id": snapshot.get("app_bundle_id"),
                     "app_name": snapshot.get("app_name"),
+                    "teaches_style_id": teaches,
                 }
             )
     return examples
 
 
 def _by_style() -> dict[str, list[dict]]:
-    from .styles import snapshot
+    from .styles import correction_style, snapshot
 
     try:
         corrections = _from_corrections()
@@ -92,7 +94,8 @@ def _by_style() -> dict[str, list[dict]]:
     hidden = set(writing_style.hidden_examples())
     grouped: dict[str, list[dict]] = {style.id: writing_style.calibration_examples(style.id) for style in styles.styles}
     for example in corrections:
-        grouped.setdefault(styles.for_app(example["app_bundle_id"]).id, []).append(example)
+        style = correction_style(styles, example["app_bundle_id"], example.pop("teaches_style_id"))
+        grouped.setdefault(style, []).append(example)
     for style_id, examples in grouped.items():
         examples = [
             e

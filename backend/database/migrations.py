@@ -75,6 +75,8 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
         ("command_instruction", "TEXT"),
         ("command_transform", "VARCHAR"),
         ("style_id", "VARCHAR"),
+        ("app_category", "VARCHAR"),
+        ("teaches_style_id", "VARCHAR"),
     ):
         if column not in columns:
             _add_column(engine, "captures", f"{column} {kind}", column)

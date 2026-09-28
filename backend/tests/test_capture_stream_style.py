@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.database.models import Capture
+from backend.database.models import Capture, WritingStyle
 from backend.models import CaptureSettingsResponse
 from backend.services import capture_stream, styles
 from backend.tests.test_capture_stream import append, make_session, socket_app
@@ -17,8 +17,15 @@ SLACK = "com.tinyspeck.slackmacgap"
 
 
 def seeded(engine):
+    """Personal, and a Chat style for Slack that writes casually in lowercase."""
     with Session(engine) as db:
         styles.ensure_styles(db)
+        chat = styles.create_style(db, "Chat")
+        db.query(WritingStyle).filter(WritingStyle.id == chat.id).update(
+            {"id": "chat", "punctuation_style": "casual", "capitalize_first": False}
+        )
+        db.commit()
+        styles.invalidate()
         styles.assign_app(db, SLACK, "Slack", "chat")
 
 
@@ -73,7 +80,7 @@ async def test_the_app_at_key_down_picks_the_style_for_the_first_cleanup(tmp_pat
 @pytest.mark.asyncio
 async def test_an_unassigned_app_uses_the_default_style(tmp_path, monkeypatch, database):
     session, refine = await dictate(tmp_path, monkeypatch, "net.whatsapp.WhatsApp", "So I looked at the build.")
-    assert refine.await_args.args[1].style == "work"
+    assert refine.await_args.args[1].style == "personal"
     assert session.refined == "So I looked at the build."
 
 
@@ -104,7 +111,7 @@ def test_the_app_message_prefills_its_style(tmp_path, monkeypatch):
     with TestClient(app) as client, client.websocket_connect("/captures/stream") as socket:
         socket.send_json(dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le"))
         socket.receive_json()
-        socket.send_json(dict(type="app", bundle_id=SLACK, name="Slack"))
+        socket.send_json(dict(type="app", bundle_id=SLACK, name="Slack", category="public.app-category.business"))
         socket.send_bytes(struct.pack("<II", 0, 0) + np.ones(1600, dtype="<i2").tobytes())
         socket.send_json(dict(type="finish"))
         while (event := socket.receive_json())["type"] != "final":
@@ -113,4 +120,7 @@ def test_the_app_message_prefills_its_style(tmp_path, monkeypatch):
     assert event["capture"]["style_id"] == "chat"
     assert event["capture"]["app_bundle_id"] == SLACK
     with Session(engine) as db:
-        assert db.query(Capture).one().style_id == "chat"
+        row = db.query(Capture).one()
+        assert row.style_id == "chat"
+        # Saved to suggest a style for the next new app of its category.
+        assert row.app_category == "public.app-category.business"

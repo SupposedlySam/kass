@@ -97,6 +97,8 @@ class CaptureAppCount(BaseModel):
     last_captured_at: Optional[datetime] = None
     style_id: Optional[str] = None
     confirmed: bool = False
+    # Until confirmed: the style most apps of its App Store category use.
+    suggested_style_id: Optional[str] = None
 
 
 class CaptureAppsResponse(BaseModel):
@@ -397,18 +399,27 @@ class WritingStyleModel(BaseModel):
 
 
 class StyledApp(BaseModel):
-    """An app on the Writing style page: the style it uses and whether the user chose it."""
+    """An app on the Writing style page: the style it uses and whether the user chose it.
+
+    ``corrections`` counts its captures whose corrections teach that style;
+    ``suggested_style_id`` is set until the user chooses.
+    """
 
     bundle_id: str
     name: Optional[str] = None
     style_id: str
     confirmed: bool
     count: int = 0
+    corrections: int = 0
+    suggested_style_id: Optional[str] = None
 
 
 class WritingStylesResponse(BaseModel):
     styles: List[WritingStyleModel]
     apps: List[StyledApp]
+    max_styles: int
+    # Memory each style's cached prompt takes in the cleanup model, estimated.
+    cache_mb_per_style: Optional[int] = None
 
 
 class WritingStyleCreate(BaseModel):
@@ -428,6 +439,8 @@ class WritingStyleUpdate(BaseModel):
 class AppStyleAssign(BaseModel):
     style_id: str
     app_name: Optional[str] = Field(default=None, max_length=255)
+    # The app's corrections: "bring" them to the new style, or "leave" them teaching the current one.
+    corrections: Literal["bring", "leave"] = "bring"
 
 
 class CorrectionNote(BaseModel):

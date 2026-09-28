@@ -4,7 +4,11 @@ A style holds the settings that shape how dictation is written: punctuation,
 whether the first word is capitalized, filler removal and technical terms.
 Its calibration, habits, examples and rules are kept per style by
 ``writing_style``, ``personal_examples`` and ``correction_notes``. An app the
-user hasn't assigned uses the default style.
+user hasn't assigned uses the default style; the style most apps of its App
+Store category use is suggested for it (``suggest_styles``).
+
+A correction teaches the style its app is in, unless the user left it behind
+when the app moved (``Capture.teaches_style_id``, ``correction_style``).
 
 Dictation reads styles on every take, so the rows are kept in memory as a
 ``Snapshot`` and reloaded only after a change.
@@ -19,19 +23,14 @@ from ..database.models import AppStyle, WritingStyle
 from .refinement import PUNCTUATION_STYLES, RefinementFlags
 
 MAX_NAME_CHARS = 40
-MAX_STYLES = 12
+# Each style keeps its own prompt cache in the cleanup model
+# (qwen_llm_backend.MAX_PROMPT_CACHES), a few hundred MB on 4B.
+MAX_STYLES = 6
 
-# Existing global settings and learned data move into this style, which is
-# the default (docs/plans/PER_APP_STYLE.md, Migration).
-MIGRATED_STYLE = "work"
-
-# (id, name, punctuation, capitalize first word, remove filler, keep technical terms)
-PRESETS = (
-    ("chat", "Chat", "casual", False, False, True),
-    ("work", "Work", "standard", True, True, True),
-    ("formal", "Formal", "standard", True, True, True),
-    ("code", "Code", "casual", False, True, True),
-)
+# The one style a new install starts with, and the default. Existing global
+# settings and learned data move into it (docs/plans/PER_APP_STYLE.md, Migration).
+MIGRATED_STYLE = "personal"
+MIGRATED_NAME = "Personal"
 
 SETTINGS = ("punctuation_style", "capitalize_first", "smart_cleanup", "preserve_technical")
 
@@ -49,7 +48,7 @@ class Style:
 
 
 # Before the database exists (tests, tools), every app uses one Standard style.
-_FALLBACK = Style(MIGRATED_STYLE, "Work", 0, True, "standard", True, True, True)
+_FALLBACK = Style(MIGRATED_STYLE, MIGRATED_NAME, 0, True, "standard", True, True, True)
 
 
 @dataclass(frozen=True)
@@ -153,11 +152,44 @@ def flags_for_app(bundle_id: str | None, settings) -> RefinementFlags:
     return flags_for(snapshot().for_app(bundle_id), settings)
 
 
+def correction_style(styles: Snapshot, app_bundle_id: str | None, teaches_style_id: str | None) -> str:
+    """The style a capture's corrections teach: the one they were left with,
+    while it exists, else the style of the app."""
+    left = styles.get(teaches_style_id)
+    return left.id if left else styles.for_app(app_bundle_id).id
+
+
+def suggest_styles(categories: dict[str, str | None], styles: Snapshot) -> dict[str, str]:
+    """A style for every app not assigned yet: the one most assigned apps of
+    its App Store category use.
+
+    ``categories`` maps bundle ids to categories. An app with no category, or
+    whose category no assigned app has, gets the default; ties go to the
+    style listed first.
+    """
+    votes: dict[str, dict[str, int]] = {}
+    for bundle_id, style_id in styles.apps.items():
+        category = categories.get(bundle_id)
+        if category and styles.get(style_id):
+            counted = votes.setdefault(category, {})
+            counted[style_id] = counted.get(style_id, 0) + 1
+    order = {style.id: index for index, style in enumerate(styles.styles)}
+    suggested = {}
+    for bundle_id, category in categories.items():
+        if bundle_id in styles.apps:
+            continue
+        counted = votes.get(category or "")
+        suggested[bundle_id] = (
+            min(counted, key=lambda style_id: (-counted[style_id], order[style_id])) if counted else styles.default.id
+        )
+    return suggested
+
+
 # --- Setup -----------------------------------------------------------------------
 
 
 def ensure_styles(db: Session) -> None:
-    """Create the preset styles on first run, moving the global settings into Work.
+    """Create the Personal style on first run, with the global settings in it.
 
     Also repairs a database left without exactly one default. Idempotent.
     """
@@ -166,23 +198,19 @@ def ensure_styles(db: Session) -> None:
         from ..database.models import CaptureSettings
 
         saved = db.query(CaptureSettings).first()
-        for position, (style_id, name, punctuation, capitalize, filler, technical) in enumerate(PRESETS):
-            if style_id == MIGRATED_STYLE and saved is not None:
-                # Dictation keeps working exactly as it did before styles.
-                punctuation = saved.punctuation_style or "standard"
-                capitalize, filler, technical = True, saved.smart_cleanup, saved.preserve_technical
-            db.add(
-                WritingStyle(
-                    id=style_id,
-                    name=name,
-                    position=position,
-                    is_default=style_id == MIGRATED_STYLE,
-                    punctuation_style=punctuation,
-                    capitalize_first=capitalize,
-                    smart_cleanup=filler,
-                    preserve_technical=technical,
-                )
+        # Dictation keeps working exactly as it did before styles.
+        db.add(
+            WritingStyle(
+                id=MIGRATED_STYLE,
+                name=MIGRATED_NAME,
+                position=0,
+                is_default=True,
+                punctuation_style=(saved.punctuation_style if saved else None) or "standard",
+                capitalize_first=True,
+                smart_cleanup=saved.smart_cleanup if saved else True,
+                preserve_technical=saved.preserve_technical if saved else True,
             )
+        )
         db.commit()
     elif sum(row.is_default for row in rows) != 1:
         keep = next((row for row in rows if row.is_default), rows[0])
@@ -208,7 +236,7 @@ def _clean_name(db: Session, name: object, exclude: str | None = None) -> str:
 def create_style(db: Session, name: str) -> Style:
     """A new style, starting from the default's settings with nothing learned."""
     if db.query(WritingStyle).count() >= MAX_STYLES:
-        raise ValueError(f"Voicebox keeps at most {MAX_STYLES} styles")
+        raise ValueError(f"Voicebox keeps at most {MAX_STYLES} styles, one cached prompt each")
     base = snapshot().default
     last = db.query(WritingStyle).order_by(WritingStyle.position.desc()).first()
     row = WritingStyle(
@@ -267,14 +295,50 @@ def delete_style(db: Session, style_id: str) -> bool:
     return True
 
 
-def assign_app(db: Session, bundle_id: str, app_name: str | None, style_id: str) -> None:
+def app_corrections(db: Session) -> dict[str, int]:
+    """Per app, the captures whose corrections teach the style the app is in now."""
+    from ..database.models import Capture, CaptureFeedback
+
+    styles = snapshot()
+    rows = (
+        db.query(Capture.id, Capture.app_bundle_id, Capture.teaches_style_id)
+        .join(CaptureFeedback, CaptureFeedback.capture_id == Capture.id)
+        .filter(CaptureFeedback.target == "refined", Capture.app_bundle_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    counts: dict[str, int] = {}
+    for _, bundle_id, teaches in rows:
+        if correction_style(styles, bundle_id, teaches) == styles.for_app(bundle_id).id:
+            counts[bundle_id] = counts.get(bundle_id, 0) + 1
+    return counts
+
+
+def assign_app(db: Session, bundle_id: str, app_name: str | None, style_id: str, corrections: str = "bring") -> None:
     """Put ``bundle_id`` in ``style_id``; this also confirms a new app's style.
 
-    The app's corrections now teach that style, so the learned habits are
-    recounted.
+    ``corrections`` says what happens to the corrections the app's captures
+    teach its current style: "bring" moves them to the new style with the
+    app, "leave" keeps them teaching the current one. Examples, habits and
+    rules follow the choice; the habits are recounted.
     """
+    from ..database.models import Capture
+
     if db.get(WritingStyle, style_id) is None:
         raise KeyError(style_id)
+    if corrections not in ("bring", "leave"):
+        raise ValueError("corrections must be bring or leave")
+    current = snapshot().for_app(bundle_id).id
+    if current != style_id:
+        captures = db.query(Capture).filter(Capture.app_bundle_id == bundle_id)
+        if corrections == "leave":
+            captures.filter(Capture.teaches_style_id.is_(None)).update(
+                {"teaches_style_id": current}, synchronize_session=False
+            )
+        else:
+            captures.filter(Capture.teaches_style_id == current).update(
+                {"teaches_style_id": None}, synchronize_session=False
+            )
     row = db.get(AppStyle, bundle_id)
     if row is None:
         db.add(AppStyle(bundle_id=bundle_id, app_name=app_name, style_id=style_id))

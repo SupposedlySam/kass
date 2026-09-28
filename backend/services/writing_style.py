@@ -383,13 +383,14 @@ def refresh_feedback(db) -> None:
     """Recount refined-output corrections for every style.
 
     Called after a correction is saved and after an app moves to another
-    style: a correction counts for the style its app is in now.
+    style: a correction counts for the style it teaches (``correction_style``).
     """
-    from ..database.models import CaptureFeedback
-    from .styles import snapshot
+    from ..database.models import Capture, CaptureFeedback
+    from .styles import correction_style, snapshot
 
     rows = (
-        db.query(CaptureFeedback)
+        db.query(CaptureFeedback, Capture.teaches_style_id)
+        .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
         .filter(CaptureFeedback.target == "refined")
         .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
         .limit(200)
@@ -398,7 +399,7 @@ def refresh_feedback(db) -> None:
     styles = snapshot()
     seen = set()
     counts: dict[str, list] = {}
-    for row in rows:
+    for row, teaches in rows:
         if row.capture_id in seen:
             continue
         seen.add(row.capture_id)
@@ -408,7 +409,7 @@ def refresh_feedback(db) -> None:
         except (ValueError, TypeError, AttributeError):
             continue
         if original and max(len(original), len(row.expected_text)) <= 2000:
-            style = styles.for_app(captured.get("app_bundle_id")).id
+            style = correction_style(styles, captured.get("app_bundle_id"), teaches)
             counts.setdefault(style, []).append(observe(original, row.expected_text))
     with _lock:
         state = _load()

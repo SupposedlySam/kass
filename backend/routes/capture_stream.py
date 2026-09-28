@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
-from ..services.captures import target_app
+from ..services.captures import target_app, target_app_category
 from ..services.commands import MAX_SELECTION_CHARS
 from ..services.refinement import load_cleanup_model, prefill_cleanup
 from ..services.settings import get_capture_settings
@@ -141,7 +141,8 @@ async def stream_capture(websocket: WebSocket):
                 continue
             if command.get("type") == "app":
                 # The target app, from the focus snapshot at key-down.
-                if session.set_app(*target_app(command.get("bundle_id"), command.get("name"))) and cleans:
+                app = target_app(command.get("bundle_id"), command.get("name"))
+                if session.set_app(*app, target_app_category(command.get("category"))) and cleans:
                     _start(_prefill_style(session))
                 continue
             if command.get("type") == "selection":
@@ -154,7 +155,9 @@ async def stream_capture(websocket: WebSocket):
                 raise ValueError("Cannot finish empty audio")
             app = command.get("app")
             if isinstance(app, dict):
-                session.set_app(*target_app(app.get("bundle_id"), app.get("name")))
+                session.set_app(
+                    *target_app(app.get("bundle_id"), app.get("name")), target_app_category(app.get("category"))
+                )
 
             async def send_finalizing(event):
                 # Finish is a commit request. Complete and retain the result if
