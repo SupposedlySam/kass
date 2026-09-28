@@ -234,9 +234,11 @@ fi
 # ─── Install ──────────────────────────────────────────────────────────
 
 step "Installing to $app"
-requirement() { codesign -d -r- "$1" 2>&1 | sed -n 's/^designated => //p'; }
+# An ad-hoc signature prints its requirement as a comment ("# designated => …").
+requirement() { codesign -d -r- "$1" 2>&1 | sed -n 's/^\(# \)\{0,1\}designated => //p'; }
+had_app=false
 old_requirement=""
-[ -d "$app" ] && old_requirement=$(requirement "$app")
+[ -d "$app" ] && had_app=true && old_requirement=$(requirement "$app")
 new_requirement=$(requirement "$built")
 
 if pgrep -f "$app/Contents/MacOS/" >/dev/null 2>&1; then
@@ -253,7 +255,9 @@ ditto "$built" "$app"
 codesign --verify --deep --strict "$app"
 ok "Installed"
 
-if [ -n "$old_requirement" ] && [ "$old_requirement" != "$new_requirement" ]; then
+# An unreadable old requirement counts as a change, so it resets instead of
+# silently keeping grants that may not apply.
+if $had_app && [ "$old_requirement" != "$new_requirement" ]; then
   # The old grants belong to the old signature and no longer apply. Clear
   # them so System Settings asks again cleanly instead of showing switches
   # that are on but don't work.
