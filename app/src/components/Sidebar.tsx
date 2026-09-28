@@ -2,6 +2,7 @@ import { Link, useMatchRoute } from '@tanstack/react-router';
 import {
   Box,
   Captions,
+  ChartColumn,
   CircleAlert,
   type LucideIcon,
   SlidersHorizontal,
@@ -15,6 +16,7 @@ import { version } from '../../package.json';
 
 const tabs: Array<{ id: string; path: string; icon: LucideIcon; labelKey: string }> = [
   { id: 'captures', path: '/captures', icon: Captions, labelKey: 'nav.captures' },
+  { id: 'insights', path: '/insights', icon: ChartColumn, labelKey: 'nav.insights' },
   { id: 'models', path: '/models', icon: Box, labelKey: 'nav.models' },
   { id: 'settings', path: '/settings', icon: SlidersHorizontal, labelKey: 'nav.settings' },
 ];

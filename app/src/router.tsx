@@ -8,6 +8,7 @@ import {
 import { AppFrame } from '@/components/AppFrame/AppFrame';
 import { CapturesTab } from '@/components/CapturesTab/CapturesTab';
 import { CommandPalette } from '@/components/CommandPalette/CommandPalette';
+import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
 import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
@@ -104,6 +105,13 @@ const capturesRoute = createRoute({
   }),
 });
 
+// Insights route: usage stats, for all apps or the one picked in Captures.
+const insightsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/insights',
+  component: InsightsTab,
+});
+
 // Models route
 const modelsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -192,6 +200,7 @@ const serverRedirectRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   capturesRoute,
+  insightsRoute,
   modelsRoute,
   settingsRoute.addChildren([
     settingsGeneralRoute,
