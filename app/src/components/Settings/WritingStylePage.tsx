@@ -1,5 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SettingSection } from '@/components/ServerTab/SettingRow';
 import { CalibrationCard } from '@/components/WritingStyle/CalibrationCard';
@@ -8,13 +9,19 @@ import { ExportCorrections } from '@/components/WritingStyle/ExportCorrections';
 import { PersonalExamples } from '@/components/WritingStyle/PersonalExamples';
 import { RecentCorrections } from '@/components/WritingStyle/RecentCorrections';
 import { ResetWritingStyle } from '@/components/WritingStyle/ResetWritingStyle';
-import { appLabel, appsIn, StyleBoard } from '@/components/WritingStyle/StyleBoard';
+import {
+  type AppListFilter,
+  appLabel,
+  appsIn,
+  StyleAppList,
+  StyleBoard,
+} from '@/components/WritingStyle/StyleBoard';
 import { StyleSettings } from '@/components/WritingStyle/StyleSettings';
 import { defaultStyle, useWritingStyles } from '@/lib/hooks/useWritingStyle';
 
 /**
- * Writing style: the styles and the apps in them, then everything about the
- * selected style (`?style=<id>`, the default when none): its settings,
+ * Writing style: the styles with a preview of their apps, every app with its
+ * style, then everything about the selected style (`?style=<id>`, the default when none): its settings,
  * calibration, examples, rules and recent corrections.
  */
 export function WritingStylePage() {
@@ -22,6 +29,7 @@ export function WritingStylePage() {
   const navigate = useNavigate({ from: '/settings/writing-style' });
   const { style: selectedId } = useSearch({ from: '/settings/writing-style' });
   const { data } = useWritingStyles();
+  const [filter, setFilter] = useState<AppListFilter>(null);
 
   if (!data) {
     return (
@@ -42,7 +50,13 @@ export function WritingStylePage() {
         description={t('writingStyle.styles.description')}
       >
         <div className="py-3.5">
-          <StyleBoard data={data} selectedId={style.id} onSelect={select} />
+          <StyleBoard
+            data={data}
+            selectedId={style.id}
+            onSelect={select}
+            filter={filter}
+            onFilter={setFilter}
+          />
           {data.cache_mb_per_style ? (
             <p className="mt-2.5 text-xs text-muted-foreground">
               {t('writingStyle.styles.memory', { mb: data.cache_mb_per_style.toLocaleString() })}
@@ -50,6 +64,16 @@ export function WritingStylePage() {
           ) : null}
         </div>
       </SettingSection>
+      {data.apps.length > 0 && (
+        <SettingSection
+          title={t('writingStyle.styles.appsTitle')}
+          description={t('writingStyle.styles.appsTotal', { count: data.apps.length })}
+        >
+          <div className="py-3.5">
+            <StyleAppList data={data} filter={filter} onFilter={setFilter} />
+          </div>
+        </SettingSection>
+      )}
       <StyleSettings key={style.id} style={style} onDeleted={() => select(undefined)} />
       <CalibrationCard style={style} apps={appsIn(data, style.id).map(appLabel)} />
       <SettingSection title={t('writingStyle.settings.learnsFrom', { style: style.name })}>
