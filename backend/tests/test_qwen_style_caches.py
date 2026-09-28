@@ -55,7 +55,7 @@ def call(llm, key, tokens, generated=(99,)):
     return cache, reused
 
 
-SHARED = list(range(0, 100))
+SHARED = list(range(100))
 # Two styles with the same settings: their prompts differ only in their examples.
 CHAT = [*SHARED, *range(1000, 1050)]
 WORK = [*SHARED, *range(2000, 2050)]
@@ -99,8 +99,8 @@ def test_a_new_example_at_the_end_still_continues_the_cache():
 def test_the_least_recently_used_cache_goes_first(monkeypatch):
     monkeypatch.setattr(qwen_llm_backend, "MAX_PROMPT_CACHES", 2)
     llm = backend()
-    a, _ = call(llm, "a", [1] * 50 + [0])
-    b, _ = call(llm, "b", [2] * 50 + [0])
+    call(llm, "a", [1] * 50 + [0])
+    call(llm, "b", [2] * 50 + [0])
     call(llm, "a", [1] * 50 + [5])
     call(llm, "c", [3] * 50 + [0])
     assert [entry.key for entry in llm._prompt_caches] == ["a", "c"]

@@ -10,8 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend import config
-from backend.database import get_db
-from backend.database import session as database_session
+from backend.database import get_db, session as database_session
 from backend.database.models import AppStyle, Base, Capture, CaptureFeedback, CaptureSettings, WritingStyle
 from backend.models import CaptureSettingsResponse
 from backend.services import correction_notes, personal_examples, styles, writing_style
