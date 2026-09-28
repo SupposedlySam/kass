@@ -1,5 +1,5 @@
-import { ChevronRight, CircleHelp, Copy, Pencil } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
+import { Check, ChevronRight, CircleHelp, Copy, Pencil } from 'lucide-react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -57,9 +57,16 @@ function CopyButton({
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  // The icon turns to a check for a second after a copy lands.
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setCopied(false), 1000);
       toast({ title: t('captures.toast.transcriptCopied') });
     } catch {
       toast({ title: t('captures.toast.copyFailed'), variant: 'destructive' });
@@ -74,7 +81,7 @@ function CopyButton({
       aria-label={label}
       title={label}
     >
-      <Copy className="size-3.5!" />
+      {copied ? <Check className="size-3.5!" /> : <Copy className="size-3.5!" />}
     </Button>
   );
 }
