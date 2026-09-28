@@ -1,6 +1,7 @@
 mod accessibility;
 mod app_icon;
 mod clipboard;
+mod deep_link;
 #[cfg(desktop)]
 mod dictation;
 mod focus_capture;
@@ -1246,6 +1247,7 @@ pub fn run() {
             models_dir: Mutex::new(None),
         })
         .manage(dictation::DictationState::default())
+        .manage(deep_link::DeepLinkState::default())
         .setup(|app| {
             dictation::restore(app.handle());
             sound_cues::init(app.handle());
@@ -1311,7 +1313,8 @@ pub fn run() {
             dictation::command_run,
             dictation::list_input_devices,
             sound_cues::configure_sound_cues,
-            sound_cues::preview_sound_cue
+            sound_cues::preview_sound_cue,
+            deep_link::take_deep_link
         ])
         .on_window_event({
             let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1364,6 +1367,11 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             match &event {
+                RunEvent::Opened { urls } => {
+                    for url in urls {
+                        deep_link::open(app, url.as_str());
+                    }
+                }
                 RunEvent::Exit => {
                     let state = app.state::<ServerState>();
                     if let Err(error) = stop_managed_server(&state) {

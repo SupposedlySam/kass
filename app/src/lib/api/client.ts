@@ -112,6 +112,10 @@ class ApiClient {
     return this.request<CaptureListResponse>(`/captures?limit=${limit}&offset=${offset}`);
   }
 
+  async getCapture(captureId: string): Promise<CaptureResponse> {
+    return this.request<CaptureResponse>(`/captures/${captureId}`);
+  }
+
   async createCapture(
     file: File,
     options?: {

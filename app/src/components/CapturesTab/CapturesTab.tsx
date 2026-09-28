@@ -44,15 +44,35 @@ export function CapturesTab() {
     }
   }, [captures, selectedId]);
 
-  // `?capture=<id>` (from the command palette) selects that capture once it
-  // is in the list, clears whatever would hide it, then drops the parameter
-  // so the same link works again.
+  // `?capture=<id>` (from the command palette or a voicebox:// link) selects
+  // that capture once it is in the list, clears whatever would hide it, then
+  // drops the parameter so the same link works again. A capture older than
+  // the loaded page is fetched and added to the end of the list.
   useEffect(() => {
-    if (!linkedId || !captures.some((c) => c.id === linkedId)) return;
+    if (!linkedId || !capturesData) return;
+    if (!captures.some((c) => c.id === linkedId)) {
+      let cancelled = false;
+      apiClient
+        .getCapture(linkedId)
+        .then((capture) => {
+          if (cancelled) return;
+          queryClient.setQueryData<CaptureListResponse>(['captures'], (prev) =>
+            prev && !prev.items.some((c) => c.id === capture.id)
+              ? { ...prev, items: [...prev.items, capture] }
+              : prev,
+          );
+        })
+        .catch(() => {
+          if (!cancelled) navigate({ search: {}, replace: true });
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     setSelectedId(linkedId);
     setSearch('');
     navigate({ search: {}, replace: true });
-  }, [linkedId, captures, navigate]);
+  }, [linkedId, capturesData, captures, navigate, queryClient]);
 
   // Live sync from sibling Tauri webviews (the floating dictate window).
   // ``capture:created`` carries the full row so we can seed the cache before

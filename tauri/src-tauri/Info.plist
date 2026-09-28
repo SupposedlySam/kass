@@ -6,6 +6,17 @@
 	<string>voicebox</string>
 	<key>CFBundleIconName</key>
 	<string>voicebox</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>sh.voicebox.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>voicebox</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voicebox needs microphone access to transcribe your dictation.</string>
 </dict>

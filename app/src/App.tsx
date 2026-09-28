@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api/client';
 import type { HealthResponse } from '@/lib/api/types';
 import { TOP_SAFE_AREA_PADDING } from '@/lib/constants/ui';
 import { useChordSync } from '@/lib/hooks/useChordSync';
+import { useDeepLinks } from '@/lib/hooks/useDeepLinks';
 import { useInAppDictationInsert } from '@/lib/hooks/useInAppDictationInsert';
 import { useSoundCueSync } from '@/lib/hooks/useSoundCueSync';
 import { cn } from '@/lib/utils/cn';
@@ -87,6 +88,8 @@ function MainApp() {
   useInAppDictationInsert();
   // Rust plays the dictation chimes; it needs their saved settings.
   useSoundCueSync();
+  // voicebox:// links open their screen once the router is showing.
+  useDeepLinks(serverReady);
 
   // Setup lifecycle callbacks
   useEffect(() => {
