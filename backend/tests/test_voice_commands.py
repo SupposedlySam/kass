@@ -14,7 +14,13 @@ from backend.tests.test_capture_stream_tail import refining_session, scripted
         ("Paste from clipboard.", f"{CLIPBOARD}."),
         ("here's the link paste from the clipboard let me know", f"here's the link {CLIPBOARD} let me know"),
         ("Paste from my clipboard, then paste from clipboard", f"{CLIPBOARD}, then {CLIPBOARD}"),
+        # How Whisper has spelled it.
+        ("This is my PR branch, Pace from Clipboard. Thanks.", f"This is my PR branch, {CLIPBOARD}. Thanks."),
+        ("pays from the clipboard", CLIPBOARD),
+        ("Paced, from clipboard.", f"{CLIPBOARD}."),
         ("copy it to the clipboard", "copy it to the clipboard"),
+        ("I read it from the clipboard", "I read it from the clipboard"),
+        ("I copied it from my clipboard", "I copied it from my clipboard"),
         ("the paste from clipboards", "the paste from clipboards"),
     ],
 )

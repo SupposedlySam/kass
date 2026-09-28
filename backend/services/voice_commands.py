@@ -14,7 +14,10 @@ import re
 
 CLIPBOARD = "[clipboard]"
 
-_PASTE_CLIPBOARD = re.compile(r"\bpaste from (?:the |my )?clipboard\b", re.IGNORECASE)
+# Whisper spells the verb by its sound: "paste", "Pace", "pays", "paced".
+# Any short p- or b- word with an s sound before "from clipboard" is taken
+# as it: nothing else is said that way.
+_PASTE_CLIPBOARD = re.compile(r"\b[pb][aeiy]{1,2}[scz]\w*,?\s+from\s+(?:the\s+|my\s+)?clipboard\b", re.IGNORECASE)
 _MARKER = re.compile(re.escape(CLIPBOARD), re.IGNORECASE)
 
 
