@@ -30,6 +30,10 @@ const STOP_WAV: &[u8] = include_bytes!("../sounds/stop.wav");
 const ERROR_WAV: &[u8] = include_bytes!("../sounds/error.wav");
 
 pub const DEFAULT_VOLUME: f32 = 0.5;
+/// How much of a take's first audio the start cue can reach: the 220 ms
+/// sound plus the time to start playing it and the output's own latency.
+/// The microphone opens after the cue starts, so this is an upper bound.
+pub const START_CUE_SPAN_MS: u32 = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cue {
@@ -129,17 +133,18 @@ pub fn init(app: &AppHandle) {
     }
 }
 
-/// Play `cue` if cues are on. Never blocks on playback.
-pub fn play(cue: Cue) {
-    if let Some(volume) = current().playback_volume() {
-        send(cue, volume);
-    }
+/// Play `cue` if cues are on. Never blocks on playback. Returns whether the
+/// cue went to the player.
+pub fn play(cue: Cue) -> bool {
+    current()
+        .playback_volume()
+        .is_some_and(|volume| send(cue, volume))
 }
 
-fn send(cue: Cue, volume: f32) {
-    if let Some(player) = PLAYER.get() {
-        let _ = player.send((cue, volume));
-    }
+fn send(cue: Cue, volume: f32) -> bool {
+    PLAYER
+        .get()
+        .is_some_and(|player| player.send((cue, volume)).is_ok())
 }
 
 fn load_settings(path: &Path) -> Settings {
@@ -328,7 +333,7 @@ mod tests {
     }
 
     /// Short and quiet: the start cue plays while the microphone opens, and
-    /// the voice detector ignores it at this level (see the cue script).
+    /// must end inside [`START_CUE_SPAN_MS`].
     #[test]
     fn bundled_cues_are_short_quiet_mono_wavs() {
         for bytes in [START_WAV, STOP_WAV, ERROR_WAV] {
@@ -344,6 +349,13 @@ mod tests {
                 .unwrap();
             assert!(peak < i16::MAX as u16 / 2, "peak {peak}");
         }
+    }
+
+    #[test]
+    fn the_start_cue_span_covers_the_start_cue() {
+        let reader = hound::WavReader::new(std::io::Cursor::new(START_WAV)).unwrap();
+        let ms = reader.duration() as u64 * 1000 / reader.spec().sample_rate as u64;
+        assert!(START_CUE_SPAN_MS as u64 >= ms + 50, "{ms} ms cue");
     }
 
     /// AppKit decodes and plays the cues off the main thread. Silent; run

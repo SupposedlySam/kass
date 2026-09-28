@@ -126,6 +126,11 @@ class StreamingCapture:
             raise ValueError("Audio must be mono pcm_s16le")
         # Protocol addition: the client can show provisional cleaned text.
         self.provisional = start.get("provisional") is True
+        # Protocol addition: the first milliseconds may hold the client's own
+        # start cue, picked up by the microphone.
+        start_cue_ms = start.get("start_cue_ms", 0)
+        if not isinstance(start_cue_ms, int) or isinstance(start_cue_ms, bool) or not 0 <= start_cue_ms <= 1000:
+            raise ValueError("start_cue_ms must be between 0 and 1000")
         self.shown = ""
         # Set from the finish command, once the client knows the focused app.
         self.app_bundle_id = None
@@ -165,7 +170,7 @@ class StreamingCapture:
         self.pending = bytearray()
         # Checked as audio arrives, so a phrase without a voice skips Whisper,
         # which would otherwise invent one ("Thank you.").
-        self.speech = SpeechDetector(self.rate)
+        self.speech = SpeechDetector(self.rate, ignore_before=self.rate * start_cue_ms // 1000)
         self.cuts = []
         self.offset = 0
         self.samples = 0

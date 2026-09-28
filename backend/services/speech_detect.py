@@ -57,11 +57,15 @@ class SpeechDetector:
     """Voice detection over a stream of int16 PCM at any sample rate.
 
     ``feed`` audio as it arrives; ``heard(start, end)`` says whether any voice
-    was detected between two sample offsets of the stream.
+    was detected between two sample offsets of the stream. A voice detected
+    before ``ignore_before`` (source samples) doesn't count: the dictation
+    start cue can be picked up there by the microphone, and a loud chime
+    reads as a voice to Silero. The audio itself is kept for Whisper.
     """
 
-    def __init__(self, rate: int):
+    def __init__(self, rate: int, ignore_before: int = 0):
         self.rate = rate
+        self.ignore_before = ignore_before * RATE / rate  # in 16 kHz samples
         self.session = load()
         self.state = np.zeros((2, 1, 128), dtype=np.float32)
         self.context = np.zeros(CONTEXT, dtype=np.float32)
@@ -78,7 +82,8 @@ class SpeechDetector:
         self.buffer = np.concatenate([self.buffer, self._to_16k(samples)])
         while len(self.buffer) >= WINDOW:
             window, self.buffer = self.buffer[:WINDOW], self.buffer[WINDOW:]
-            if self._probability(window) >= VOICE_PROBABILITY:
+            voiced = self._probability(window) >= VOICE_PROBABILITY
+            if voiced and self.analyzed >= self.ignore_before:
                 self.voiced.append(self.analyzed)
             self.analyzed += WINDOW
 

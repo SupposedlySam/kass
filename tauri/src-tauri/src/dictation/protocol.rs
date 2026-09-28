@@ -25,8 +25,11 @@ pub fn encode_frame(sequence: u32, sample_offset: u32, pcm: &[i16]) -> Vec<u8> {
 }
 
 /// The JSON start object sent right after the socket opens. `provisional`
-/// asks for provisional cleaned text after release; older servers ignore it.
-pub fn start_message(sample_rate: u32, provisional: bool) -> String {
+/// asks for provisional cleaned text after release; `start_cue_ms`, when not
+/// zero, says the take's first milliseconds may hold Voicebox's own start
+/// cue, so a voice detected there alone doesn't make the take speech. Older
+/// servers ignore both.
+pub fn start_message(sample_rate: u32, provisional: bool, start_cue_ms: u32) -> String {
     let mut start = serde_json::json!({
         "type": "start",
         "protocol_version": 1,
@@ -37,6 +40,9 @@ pub fn start_message(sample_rate: u32, provisional: bool) -> String {
     });
     if provisional {
         start["provisional"] = Value::Bool(true);
+    }
+    if start_cue_ms > 0 {
+        start["start_cue_ms"] = Value::from(start_cue_ms);
     }
     start.to_string()
 }
@@ -159,7 +165,7 @@ mod tests {
 
     #[test]
     fn start_message_matches_protocol_v1() {
-        let value: Value = serde_json::from_str(&start_message(48_000, false)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 0)).unwrap();
         assert_eq!(
             value,
             serde_json::json!({
@@ -182,9 +188,17 @@ mod tests {
 
     #[test]
     fn start_message_can_ask_for_provisional_text() {
-        let value: Value = serde_json::from_str(&start_message(16_000, true)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(16_000, true, 0)).unwrap();
         assert_eq!(value["provisional"], Value::Bool(true));
         assert_eq!(value["protocol_version"], 1);
+    }
+
+    #[test]
+    fn start_message_marks_the_start_cue_only_when_it_played() {
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 300)).unwrap();
+        assert_eq!(value["start_cue_ms"], 300);
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 0)).unwrap();
+        assert_eq!(value.get("start_cue_ms"), None);
     }
 
     #[test]
