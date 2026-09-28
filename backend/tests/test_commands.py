@@ -40,7 +40,7 @@ class FakeLLM:
 
 def test_command_prompt_allows_translation_and_asks_for_the_edited_text_only():
     prompt = commands.build_command_prompt()
-    assert "Translate only when the instruction asks" in prompt
+    assert "Change the language only when the instruction names another one" in prompt
     assert "Do not translate" not in prompt
     assert "edited passage only" in prompt
 
@@ -55,12 +55,10 @@ def test_selection_comes_first_so_it_can_be_prefilled_before_the_instruction():
     assert message.endswith("Instruction: make it formal")
 
 
-def test_examples_nearest_the_request_are_in_the_passage_language():
-    # An example in another language right before the request pulled "more
-    # formal" into that language on every model size.
-    *_, (_, last_instruction, last_result) = commands.COMMAND_EXAMPLES
-    assert last_result.isascii()
-    assert "translate" not in last_instruction
+def test_every_example_stays_in_the_passage_language():
+    # An example in another language pulled "more formal" into that language on
+    # 0.6B wherever it sat; the rules alone keep translation working.
+    assert all(result.isascii() and "translate" not in instruction for _, instruction, result in commands.COMMAND_EXAMPLES)
     examples = commands.command_examples()
     assert len(examples) == len(commands.COMMAND_EXAMPLES)
     assert all(user.startswith("<text>\n") and "\nInstruction: " in user for user, _ in examples)
