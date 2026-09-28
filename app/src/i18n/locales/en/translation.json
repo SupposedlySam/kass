@@ -12,6 +12,7 @@
   },
   "nav": {
     "captures": "Captures",
+    "insights": "Insights",
     "models": "Models",
     "settings": "Settings",
     "alerts": {
@@ -414,6 +415,130 @@
       "failed": "This command didn’t produce a rewrite, so the selection was left as it was.",
       "undoHint": "To undo a rewrite, press ⌘Z in the app, or copy the original back in.",
       "rewriting": "Rewriting"
+    },
+    "week": {
+      "label": "Last 7 days",
+      "labelApp": "Last 7 days · {{app}}",
+      "wordsLabel": "words",
+      "wpm": "wpm",
+      "saved": "saved",
+      "open": "Open Insights",
+      "chart": "Words per day in {{app}}, last 7 days",
+      "words_one": "{{formatted}} word",
+      "words_other": "{{formatted}} words",
+      "noDictation": "No dictation",
+      "today": "today"
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "titleApp": "Insights · {{app}}",
+    "period": {
+      "label": "Period",
+      "today": "Today",
+      "7d": "7 days",
+      "30d": "30 days",
+      "all": "All time"
+    },
+    "previous": {
+      "today": "yesterday",
+      "7d": "the 7 days before",
+      "30d": "the 30 days before"
+    },
+    "legend": {
+      "current": {
+        "today": "Today",
+        "7d": "This week",
+        "30d": "Last 30 days",
+        "all": "All time"
+      },
+      "previous": {
+        "today": "Yesterday",
+        "7d": "Week before",
+        "30d": "30 days before"
+      }
+    },
+    "stats": {
+      "words": "Words dictated",
+      "pace": "Speaking pace",
+      "saved": "Time saved",
+      "weekdays": "Weekdays you dictated",
+      "hours": "Hours you dictated",
+      "wpm": "wpm",
+      "of": "of {{count}}",
+      "compared": "Compared with {{period}}:",
+      "noChange": "No change",
+      "new": "New",
+      "nothingBefore": "Nothing to compare",
+      "since": "Since {{date}}",
+      "firstDictation": "Counted from your first dictation:",
+      "prevWords_one": "{{formatted}} word",
+      "prevWords_other": "{{formatted}} words",
+      "prevPace": "{{count}} wpm",
+      "noPace": "No pace yet",
+      "prevSaved": "{{time}} saved",
+      "prevHours_one": "{{count}} hour",
+      "prevHours_other": "{{count}} hours",
+      "weekend_one": "+{{count}} weekend day",
+      "weekend_other": "+{{count}} weekend days",
+      "weekendTip": "Weekend dictation:",
+      "weekendDay": "{{day}} · {{words}}",
+      "weekendMore_one": "and {{count}} more day",
+      "weekendMore_other": "and {{count}} more days",
+      "weekdaysOnly": "Weekdays only",
+      "noWeekend": "No dictation on",
+      "noWeekendAny": "No weekend dictation in this period"
+    },
+    "chart": {
+      "hour": "Words per hour",
+      "day": "Words per day",
+      "week": "Words per week",
+      "words_one": "{{formatted}} word",
+      "words_other": "{{formatted}} words",
+      "noDictation": "No dictation",
+      "on": "{{value}} on {{date}}",
+      "change": "{{pct}} vs {{period}}",
+      "today": "today",
+      "thisWeek": "this week",
+      "weekOf": "Week of {{date}}",
+      "label": "{{title}} in {{app}}"
+    },
+    "where": {
+      "title": "Where you dictate",
+      "hint": "click an app to see only its stats",
+      "compareTitle": "{{app}} compared with all apps",
+      "compareHint": "click to go back to all apps",
+      "share": "{{pct}} of words",
+      "shareTitle": "Share of your words",
+      "shareSub": "{{words}} of {{total}}",
+      "paceTitle": "Pace vs all apps",
+      "paceSub": "{{pace}} vs {{all}} wpm",
+      "fixTitle": "Needed a fix",
+      "fixSub": "all apps: {{pct}}",
+      "none": "No dictation in this period."
+    },
+    "when": {
+      "title": "When you dictate",
+      "fewer": "fewer",
+      "more": "more words",
+      "busiest": "Busiest: {{slot}}.",
+      "weekendsQuiet": "Weekends are nearly empty.",
+      "none": "No dictation in this period."
+    },
+    "length": {
+      "title": "How long you talk",
+      "hint": "share of dictations",
+      "median": "median {{value}}",
+      "share": "{{pct}}% of dictations",
+      "count_one": "{{count}} dictation, {{bin}} long",
+      "count_other": "{{count}} dictations, {{bin}} long",
+      "most": "Most dictations run {{bin}}.",
+      "band": "The darker band holds the middle half.",
+      "none": "No dictation in this period."
+    },
+    "empty": {
+      "title": "No dictation yet",
+      "body": "Your words, pace and time saved show up here once you dictate."
     }
   },
   "settings": {

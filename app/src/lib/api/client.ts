@@ -21,6 +21,8 @@ import type {
   ModelStatusListResponse,
   MovedCorrections,
   PersonalExample,
+  UsagePeriod,
+  UsageStatsResponse,
   WhisperModelSize,
   WritingStyle,
   WritingStyleCalibrationResult,
@@ -132,6 +134,16 @@ class ApiClient {
 
   async listCaptureApps(): Promise<CaptureAppsResponse> {
     return this.request<CaptureAppsResponse>('/captures/apps');
+  }
+
+  async getCaptureStats(
+    period: UsagePeriod,
+    app: CaptureAppFilter = { kind: 'all' },
+  ): Promise<UsageStatsResponse> {
+    const params = new URLSearchParams({ period });
+    if (app.kind === 'app') params.set('app_bundle_id', app.bundleId);
+    if (app.kind === 'unknown') params.set('unknown_app', 'true');
+    return this.request<UsageStatsResponse>(`/captures/stats?${params}`);
   }
 
   async getCapture(captureId: string): Promise<CaptureResponse> {

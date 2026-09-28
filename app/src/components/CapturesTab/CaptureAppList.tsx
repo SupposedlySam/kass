@@ -48,7 +48,8 @@ export function AppTile({
   );
 }
 
-function SymbolTile({ children }: { children: ReactNode }) {
+/** A glyph in an app-sized tile, for "All apps" and "Unknown app". */
+export function SymbolTile({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden

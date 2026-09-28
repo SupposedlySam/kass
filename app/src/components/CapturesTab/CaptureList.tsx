@@ -122,8 +122,9 @@ function CaptureRow({
 }
 
 /**
- * The capture list: the selected app's card, search (⌘K hint), the
- * not-set-up banner, the style calibration prompt, and one row per capture.
+ * The capture list: the last 7 days' card, the selected app's card, search
+ * (⌘K hint), the not-set-up banner, the style calibration prompt, and one
+ * row per capture.
  * It narrows from 440px to 400px while the app list beside it is open.
  */
 export function CaptureList({
@@ -136,6 +137,7 @@ export function CaptureList({
   onSearchChange,
   allReady,
   appName,
+  summary,
   appHeader,
   appStyles,
   narrow,
@@ -151,6 +153,8 @@ export function CaptureList({
   allReady: boolean;
   /** The app the list is filtered to, if any. */
   appName?: string;
+  /** The last 7 days' card, at the top. */
+  summary?: ReactNode;
   /** The filtered app's card, above search. */
   appHeader?: ReactNode;
   appStyles: AppStyles;
@@ -207,6 +211,7 @@ export function CaptureList({
       )}
     >
       <div className="flex flex-col gap-2 p-4 border-b border-border">
+        {summary}
         {appHeader}
         <label className="flex items-center gap-2.5 h-10 px-3 rounded-lg border border-input bg-popover focus-within:border-ring">
           <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
