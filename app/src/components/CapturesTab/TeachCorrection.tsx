@@ -74,7 +74,8 @@ export function useTeachCorrection(
       }),
   });
 
-  const changed = draft !== null && draft.trim() !== original.trim();
+  // Exact, so adding or removing a line break at either end counts as a fix.
+  const changed = draft !== null && draft !== original;
 
   return {
     target,

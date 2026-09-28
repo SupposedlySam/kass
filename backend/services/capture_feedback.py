@@ -34,12 +34,12 @@ def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session):
     original = capture.transcript_raw if request.target == "raw" else capture.transcript_refined
     if original is None:
         raise ValueError("This capture has no refined output to report.")
-    if request.expected_text.strip() == original.strip():
+    if request.expected_text == original:
         raise ValueError("Expected output must differ from the model output.")
     row = CaptureFeedback(
         capture_id=capture_id,
         target=request.target,
-        expected_text=request.expected_text.strip(),
+        expected_text=request.expected_text,
         notes=request.notes.strip(),
         snapshot=capture.model_dump_json(),
     )

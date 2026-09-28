@@ -57,9 +57,11 @@ def test_stale_snapshot_rejected(db):
 
 def test_unchanged_output_rejected_but_empty_correction_allowed(db):
     draft = request(db)
-    draft.expected_text = " wrong words "
+    draft.expected_text = "wrong words"
     with pytest.raises(ValueError, match="must differ"):
         save_feedback("take", draft, db)
+    draft.expected_text = "\nwrong words"
+    assert save_feedback("take", draft, db).expected_text == "\nwrong words"
     draft.expected_text = ""
     assert save_feedback("take", draft, db).expected_text == ""
 
