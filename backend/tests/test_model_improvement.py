@@ -292,6 +292,25 @@ def test_speech_is_not_promoted_without_final_pipeline_evaluation(storage, tmp_p
     assert manager.speech_model("small") == "small"
 
 
+class FakeLoRA:
+    def __init__(self):
+        self.lora_a = object()
+        self.scale = 16.0
+
+
+class FakeModel:
+    def __init__(self, adapter):
+        self.adapter = adapter
+        self.layers = [FakeLoRA(), FakeLoRA()] if adapter else []
+
+    def named_modules(self):
+        return [(str(i), layer) for i, layer in enumerate(self.layers)]
+
+    def output(self):
+        # A LoRA layer at scale zero computes what the base layer does.
+        return self.adapter if any(layer.scale for layer in self.layers) else "base"
+
+
 @pytest.mark.asyncio
 async def test_adapter_switches_are_serialized_and_general_generation_returns_to_base():
     from backend.backends.qwen_llm_backend import MLXQwenLLMBackend
@@ -301,19 +320,27 @@ async def test_adapter_switches_are_serialized_and_general_generation_returns_to
 
     def load(size):
         loaded.append(backend._adapter_path)
-        backend.model = (size, backend._adapter_path)
+        backend.model = FakeModel(backend._adapter_path)
         backend._current_model_size = size
 
     def unload():
         backend.model = None
         backend._current_model_size = None
+        backend._loaded_adapter = None
 
     backend._load_model_sync = load
     backend.unload_model = unload
-    backend._generate_sync = lambda *args: backend.model[1] or "base"
+    backend._generate_sync = lambda *args: backend.model.output()
     assert await backend.generate("a", adapter_path="/adapter-one") == "/adapter-one"
     assert await backend.generate("a", adapter_path="/adapter-two") == "/adapter-two"
+    # Base generation switches the loaded adapter off instead of reloading,
+    # so styles it doesn't cover don't reload the model on every app switch.
     assert await backend.generate("a") == "base"
+    assert backend._adapter_path is None
+    assert await backend.generate("a", adapter_path="/adapter-two") == "/adapter-two"
+    assert loaded == ["/adapter-one", "/adapter-two"]
+    # A different size still reloads, without the adapter.
+    assert await backend.generate("a", model_size="4B") == "base"
     assert loaded == ["/adapter-one", "/adapter-two", None]
 
 

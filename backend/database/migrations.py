@@ -70,7 +70,12 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "app_name"):
         if column not in columns:
             _add_column(engine, "captures", f"{column} VARCHAR", column)
-    for column, kind in (("command_selection", "TEXT"), ("command_instruction", "TEXT"), ("command_transform", "VARCHAR")):
+    for column, kind in (
+        ("command_selection", "TEXT"),
+        ("command_instruction", "TEXT"),
+        ("command_transform", "VARCHAR"),
+        ("style_id", "VARCHAR"),
+    ):
         if column not in columns:
             _add_column(engine, "captures", f"{column} {kind}", column)
 

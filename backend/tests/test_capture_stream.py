@@ -738,7 +738,7 @@ async def test_learned_style_finishes_the_way_the_user_writes(tmp_path, monkeypa
     monkeypatch.setattr(
         capture_stream,
         "apply_learned",
-        lambda text: text.replace(". B", ", b").removesuffix("."),
+        lambda text, style=None: text.replace(". B", ", b").removesuffix("."),
     )
     session, _ = make_session(tmp_path, monkeypatch, punctuation_style="learned")
     session.settings.auto_refine = True

@@ -21,6 +21,10 @@ unlikely to change, while the last phrase is still being cleaned up. It is a
 prediction, not a promise; ``final`` is the only authoritative text
 (docs/plans/STREAMING_INSERTION.md).
 
+The target app arrives in an ``app`` message right after key-down, before
+any phrase is cleaned, and picks the writing style the session cleans up in
+(docs/plans/PER_APP_STYLE.md).
+
 A ``command`` session (docs/plans/COMMAND_MODE.md) records a spoken
 instruction for text selected in another app. It is recognized like a
 dictation but never cleaned up; the client sends the selection while the user
@@ -67,9 +71,10 @@ from .phrase_seams import (
     open_phrase,
     strip_pause_mark,
 )
-from .refinement import RefinementFlags, prepare_refinement, refine_transcript
+from .refinement import RefinementFlags, prepare_refinement, refine_transcript, style_first_word
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
+from .styles import flags_for, snapshot as styles_snapshot
 from .transcribe import get_whisper_model
 from .voice_commands import mark_commands
 from .writing_style import apply_learned, apply_style, habits, is_ready
@@ -148,9 +153,11 @@ class StreamingCapture:
         if not isinstance(start_cue_ms, int) or isinstance(start_cue_ms, bool) or not 0 <= start_cue_ms <= 1000:
             raise ValueError("start_cue_ms must be between 0 and 1000")
         self.shown = ""
-        # Set from the finish command, once the client knows the focused app.
+        # Set from the app command at key-down (or finish, from older clients).
         self.app_bundle_id = None
         self.app_name = None
+        # Whether a cleanup has begun; the style is fixed from then on.
+        self.cleanup_started = False
         # The field's text before the caret, from the context command, and
         # whether the dictation continues its sentence
         # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
@@ -240,9 +247,9 @@ class StreamingCapture:
         self.finished = False
         self.persisted = False
         self.wake = asyncio.Event()
-        self.flags = RefinementFlags(
-            settings.smart_cleanup, settings.self_correction, settings.preserve_technical, settings.punctuation_style
-        )
+        # The default style until the app is known.
+        self.style = styles_snapshot().default
+        self.flags: RefinementFlags = flags_for(self.style, settings)
 
     async def emit(self, kind, **payload):
         self.revision += 1
@@ -295,6 +302,19 @@ class StreamingCapture:
             self.cuts.append(self.samples)
             self.last_cut = self.samples
         self.wake.set()
+
+    def set_app(self, bundle_id: str | None, name: str | None) -> bool:
+        """The dictation's target app, and so its writing style.
+
+        Returns whether the style is now that app's. It can't change once a
+        cleanup has started; the app is still saved with the capture.
+        """
+        self.app_bundle_id, self.app_name = bundle_id, name
+        if self.cleanup_started:
+            return False
+        self.style = styles_snapshot().for_app(bundle_id)
+        self.flags = flags_for(self.style, self.settings)
+        return True
 
     def set_context(self, before) -> None:
         """The field's text before the caret, known shortly after the take starts."""
@@ -356,8 +376,14 @@ class StreamingCapture:
 
         Cleanup capitalizes the start of every text; where the dictation
         continues the field's sentence, the transcript decided its case.
+        Elsewhere the style decides (``style_first_word``).
         """
-        return match_raw_start(text, self.raw) if self.continues else text
+        if self.continues:
+            return match_raw_start(text, self.raw)
+        return style_first_word(text, self.flags, self.names)
+
+    def learned(self, text: str) -> str:
+        return apply_learned(text, self.flags.style)
 
     def _spent(self, stage: str, started: float) -> None:
         if self.finished_at is not None:
@@ -394,7 +420,7 @@ class StreamingCapture:
         closed = close_phrase(text) if closed else text
         # Phrases were styled one at a time; habits like a dropped final period
         # only apply once the whole dictation is joined.
-        return (learned or apply_learned)(closed) if self.flags.punctuation_style == "learned" else closed
+        return (learned or self.learned)(closed) if self.flags.punctuation_style == "learned" else closed
 
     def join(self, previous, phrase, raw_phrase, learned=None):
         if self.overlap:
@@ -402,7 +428,7 @@ class StreamingCapture:
         if self.flags.punctuation_style == "learned":
             # Join like Standard, then let the user's habits decide what each
             # sentence break becomes (comma, nothing, lowercase start...).
-            return (learned or apply_learned)(join_phrases(previous, phrase, raw_phrase, "standard"))
+            return (learned or self.learned)(join_phrases(previous, phrase, raw_phrase, "standard"))
         return join_phrases(previous, phrase, raw_phrase, self.flags.punctuation_style)
 
     def compose(self, settled, text, raw, learned=None):
@@ -454,7 +480,8 @@ class StreamingCapture:
         """
         from .correction_learning import apply_learned_corrections
 
-        learned = (lambda text, h=habits(): apply_style(text, h)) if is_ready() else (lambda text: text)
+        style = self.flags.style
+        learned = (lambda text, h=habits(style): apply_style(text, h)) if is_ready(style) else (lambda text: text)
         prefix = self.settled
 
         def project(partial: str) -> str:
@@ -544,6 +571,7 @@ class StreamingCapture:
         # A command's instruction is never cleaned up: it isn't the output.
         if not self.settings.auto_refine or self.is_command:
             return
+        self.cleanup_started = self.cleanup_started or bool(self.raw)
         try:
             # Explicit corrections operate on the entire raw session so a later
             # "scratch that" can revise a previously accepted phrase.
@@ -757,6 +785,7 @@ class StreamingCapture:
         if self.is_command:
             await self.finish_command()
         elif self.settings.auto_refine:
+            self.cleanup_started = True
             try:
                 started = time.monotonic()
                 refined, self.llm_model = await refine_transcript(
@@ -818,6 +847,7 @@ class StreamingCapture:
             else None,
             app_bundle_id=self.app_bundle_id,
             app_name=self.app_name,
+            style_id=self.style.id if self.settings.auto_refine else None,
         )
         db.add(row)
         db.commit()

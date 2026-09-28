@@ -8,6 +8,10 @@ to fit are summarized into correction notes, so none stop counting.
 
 Corrections are immutable training records, so removing one from the user's
 examples hides it here without deleting the record.
+
+Examples belong to a writing style (docs/plans/PER_APP_STYLE.md): a
+correction to the style its capture's app is assigned to now, a calibration
+rewrite to the style it was run for. Cleanup in a style sees only its own.
 """
 
 import json
@@ -25,7 +29,9 @@ MAX_PROMPT_EXAMPLES = 16
 MAX_PROMPT_CHARS = 6000
 
 _lock = threading.RLock()
-_cache = None
+# Style id -> its examples, newest first.
+_cache: dict[str, list[dict]] | None = None
+
 
 def invalidate() -> None:
     global _cache
@@ -54,9 +60,10 @@ def _from_corrections() -> list[dict]:
             continue
         seen.add(row.capture_id)
         try:
+            snapshot = json.loads(row.snapshot)
             # Captures saved before Whisper's loops were stripped at the source.
-            said = strip_stt_artifacts(json.loads(row.snapshot).get("transcript_raw") or "")
-        except (ValueError, TypeError):
+            said = strip_stt_artifacts(snapshot.get("transcript_raw") or "")
+        except (ValueError, TypeError, AttributeError):
             continue
         if said and row.expected_text:
             examples.append(
@@ -66,40 +73,57 @@ def _from_corrections() -> list[dict]:
                     "said": said,
                     "meant": row.expected_text,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "app_bundle_id": snapshot.get("app_bundle_id"),
+                    "app_name": snapshot.get("app_name"),
                 }
             )
     return examples
 
 
-def all_examples() -> list[dict]:
-    """Every example cleanup may use, newest first."""
+def _by_style() -> dict[str, list[dict]]:
+    from .styles import snapshot
+
+    try:
+        corrections = _from_corrections()
+    except Exception:
+        logger.warning("Could not load corrections as examples", exc_info=True)
+        corrections = []
+    styles = snapshot()
+    hidden = set(writing_style.hidden_examples())
+    grouped: dict[str, list[dict]] = {style.id: writing_style.calibration_examples(style.id) for style in styles.styles}
+    for example in corrections:
+        grouped.setdefault(styles.for_app(example["app_bundle_id"]).id, []).append(example)
+    for style_id, examples in grouped.items():
+        examples = [
+            e
+            for e in examples
+            if e["id"] not in hidden
+            and max(len(e["said"]), len(e["meant"])) <= MAX_EXAMPLE_CHARS
+            and e["said"] != e["meant"]
+        ]
+        examples.sort(key=lambda e: e["created_at"] or "", reverse=True)
+        grouped[style_id] = examples
+    return grouped
+
+
+def all_examples(style: str | None = None) -> list[dict]:
+    """Every example cleanup in ``style`` may use, newest first. None is the default style."""
     global _cache
+    from .styles import default_id
+
     with _lock:
         if _cache is None:
-            try:
-                corrections = _from_corrections()
-            except Exception:
-                logger.warning("Could not load corrections as examples", exc_info=True)
-                corrections = []
-            hidden = set(writing_style.hidden_examples())
-            examples = [e for e in corrections + writing_style.calibration_examples() if e["id"] not in hidden]
-            examples = [
-                e
-                for e in examples
-                if max(len(e["said"]), len(e["meant"])) <= MAX_EXAMPLE_CHARS and e["said"] != e["meant"]
-            ]
-            examples.sort(key=lambda e: e["created_at"] or "", reverse=True)
-            _cache = examples
-        return list(_cache)
+            _cache = _by_style()
+        return list(_cache.get(style or default_id(), []))
 
 
-def in_prompt() -> list[dict]:
-    """The most recent examples that fit the prompt budget, newest first.
+def in_prompt(style: str | None = None) -> list[dict]:
+    """The most recent examples of ``style`` that fit the prompt budget, newest first.
 
     Older examples are summarized into correction notes instead.
     """
     chosen, size = [], 0
-    for example in all_examples()[:MAX_PROMPT_EXAMPLES]:
+    for example in all_examples(style)[:MAX_PROMPT_EXAMPLES]:
         size += len(example["said"]) + len(example["meant"])
         if size > MAX_PROMPT_CHARS:
             break
@@ -107,20 +131,25 @@ def in_prompt() -> list[dict]:
     return chosen
 
 
-def for_prompt(extra: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
-    """The examples every cleanup shows the model, oldest first.
+def for_prompt(style: str | None = None, extra: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
+    """The examples every cleanup in ``style`` shows the model, oldest first.
 
-    Every dictation gets the same list, so the cleanup model's cached prompt
-    covers it and only the new transcript is read. A new example goes at the
-    end, keeping everything before it cached. ``extra`` examples, such as a
-    calibration run's rewrites before they are saved, come last.
+    Every dictation in a style gets the same list, so the cleanup model's
+    cached prompt covers it and only the new transcript is read. A new example
+    goes at the end, keeping everything before it cached. ``extra`` examples,
+    such as a calibration run's rewrites before they are saved, come last.
     """
-    chosen = [(example["said"], example["meant"]) for example in in_prompt()]
+    chosen = [(example["said"], example["meant"]) for example in in_prompt(style)]
     return [*reversed(chosen), *(extra or [])]
 
 
 def hide(example_id: str) -> bool:
-    if not any(e["id"] == example_id for e in all_examples()):
+    global _cache
+    with _lock:
+        if _cache is None:
+            _cache = _by_style()
+        known = any(e["id"] == example_id for examples in _cache.values() for e in examples)
+    if not known:
         return False
     writing_style.hide_example(example_id)
     invalidate()

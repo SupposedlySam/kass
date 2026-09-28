@@ -137,7 +137,7 @@ def test_calibration_learns_habits_and_saves_examples():
     assert status["runs"] == 1
     assert status["example_count"] == 5
     assert (config.get_data_dir() / "writing-style.json").is_file()
-    saved = writing_style._load()["examples"]
+    saved = writing_style._profile(None)["examples"]
     assert [e["said"] for e in saved] == [BY_ID[p].said for p in (e["paragraph_id"] for e in saved)]
 
 
@@ -190,7 +190,7 @@ def test_learned_style_has_its_own_prompt_and_example():
     assert "written prose" not in prompt
     assert "Punctuation style: casual." not in prompt
     said, written = refinement_examples(learned)[0]
-    latest = writing_style._load()["examples"][-1]
+    latest = writing_style._profile(None)["examples"][-1]
     assert (said, written) == (latest["said"], latest["written"])
     assert refinement_examples(learned)[1:] == REFINEMENT_EXAMPLES
 

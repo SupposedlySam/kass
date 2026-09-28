@@ -35,6 +35,9 @@ class RefinementFlagsModel(BaseModel):
     self_correction: bool = True
     preserve_technical: bool = True
     punctuation_style: str = Field(default="standard", pattern="^(standard|casual|learned)$")
+    capitalize_first: bool = True
+    # The writing style whose habits, examples and rules were used.
+    style: Optional[str] = None
 
 
 class RefinementReviewModel(BaseModel):
@@ -66,6 +69,8 @@ class CaptureResponse(BaseModel):
     command_selection: Optional[str] = None
     command_instruction: Optional[str] = None
     command_transform: Optional[str] = None
+    # The writing style the capture was cleaned up with.
+    style_id: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -80,12 +85,18 @@ class CaptureListResponse(BaseModel):
 
 
 class CaptureAppCount(BaseModel):
-    """One app in the Captures app list: how many captures went to it."""
+    """One app in the Captures app list: how many captures went to it.
+
+    ``style_id`` is the style its dictation uses; ``confirmed`` is False while
+    that is only the default because the user hasn't chosen one.
+    """
 
     app_bundle_id: str
     app_name: Optional[str] = None
     count: int
     last_captured_at: Optional[datetime] = None
+    style_id: Optional[str] = None
+    confirmed: bool = False
 
 
 class CaptureAppsResponse(BaseModel):
@@ -367,6 +378,56 @@ class PersonalExample(BaseModel):
     said: str
     meant: str
     created_at: Optional[str] = None
+    # The app a correction was made in.
+    app_bundle_id: Optional[str] = None
+    app_name: Optional[str] = None
+
+
+class WritingStyleModel(BaseModel):
+    """A named writing style and its settings (docs/plans/PER_APP_STYLE.md)."""
+
+    id: str
+    name: str
+    position: int
+    is_default: bool
+    punctuation_style: str
+    capitalize_first: bool
+    smart_cleanup: bool
+    preserve_technical: bool
+
+
+class StyledApp(BaseModel):
+    """An app on the Writing style page: the style it uses and whether the user chose it."""
+
+    bundle_id: str
+    name: Optional[str] = None
+    style_id: str
+    confirmed: bool
+    count: int = 0
+
+
+class WritingStylesResponse(BaseModel):
+    styles: List[WritingStyleModel]
+    apps: List[StyledApp]
+
+
+class WritingStyleCreate(BaseModel):
+    name: str = Field(..., max_length=80)
+
+
+class WritingStyleUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=80)
+    punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
+    capitalize_first: Optional[bool] = None
+    smart_cleanup: Optional[bool] = None
+    preserve_technical: Optional[bool] = None
+    # Only true is meaningful: another style becomes the default by being made it.
+    is_default: Optional[bool] = None
+
+
+class AppStyleAssign(BaseModel):
+    style_id: str
+    app_name: Optional[str] = Field(default=None, max_length=255)
 
 
 class CorrectionNote(BaseModel):

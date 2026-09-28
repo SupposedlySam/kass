@@ -188,19 +188,13 @@ async def refine_capture_endpoint(
 ):
     saved = settings_service.get_capture_settings(db)
     if request.flags is not None:
-        flags = RefinementFlags(
-            smart_cleanup=request.flags.smart_cleanup,
-            self_correction=request.flags.self_correction,
-            preserve_technical=request.flags.preserve_technical,
-            punctuation_style=request.flags.punctuation_style,
-        )
+        flags = RefinementFlags.from_dict(request.flags.model_dump())
     else:
-        flags = RefinementFlags(
-            smart_cleanup=saved.smart_cleanup,
-            self_correction=saved.self_correction,
-            preserve_technical=saved.preserve_technical,
-            punctuation_style=saved.punctuation_style,
-        )
+        # Cleaned up in the style of the app it was dictated into.
+        from ..services.styles import flags_for_app
+
+        existing = captures_service.get_capture(capture_id, db)
+        flags = flags_for_app(existing.app_bundle_id if existing else None, saved)
 
     resolved_model = request.model_size or saved.llm_model
 

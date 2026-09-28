@@ -8,10 +8,12 @@ import numpy as np
 
 from .. import config
 from ..database import session
-from . import llm, refinement, settings, speech_detect, transcribe
+from . import llm, refinement, settings, speech_detect, styles, transcribe
 from .mlx_thread import keep_weights_resident, run_on_mlx_thread
 
 logger = logging.getLogger(__name__)
+# The other styles' prompts, cached after startup (docs/plans/PER_APP_STYLE.md).
+_style_warmup: asyncio.Task | None = None
 WARM_RATE = 48000
 # Enough real speech to run Whisper's full decode, short enough to keep
 # startup quick.
@@ -26,9 +28,14 @@ async def load_startup_models() -> None:
         llm_size = saved.llm_model
         auto_refine = saved.auto_refine
         language = None if saved.language in (None, "auto") else saved.language
-        flags = refinement.RefinementFlags(
-            saved.smart_cleanup, saved.self_correction, saved.preserve_technical, saved.punctuation_style
-        )
+        snapshot = styles.snapshot()
+        flags = styles.flags_for(snapshot.default, saved)
+        # Styles with apps in them, most likely to be dictated in next.
+        others = [
+            styles.flags_for(style, saved)
+            for style in snapshot.styles
+            if not style.is_default and style.id in snapshot.apps.values()
+        ]
 
     try:
         await run_on_mlx_thread(keep_weights_resident)
@@ -58,6 +65,8 @@ async def load_startup_models() -> None:
     await warm_whisper(stt_size, language)
     if auto_refine:
         await warm_refinement(flags, llm_size)
+        global _style_warmup
+        _style_warmup = asyncio.create_task(warm_styles(others, llm_size))
 
 
 async def warm_whisper(stt_size: str, language: str | None) -> None:
@@ -99,6 +108,27 @@ async def warm_refinement(flags, llm_size: str) -> None:
         logger.info("Refinement prompt warmed in %.3fs", time.monotonic() - started)
     except Exception:
         logger.exception("Could not warm the refinement prompt")
+
+
+async def warm_styles(all_flags: list, llm_size: str) -> None:
+    """Cache the other styles' prompts in the background, one at a time, while nothing is dictated.
+
+    Each takes seconds on 4B the first time. A style whose app is dictated in
+    before its turn is cached at that key-down instead.
+    """
+    from .model_improvement.manager import dictating
+
+    backend = llm.get_llm_model()
+    for flags in all_flags:
+        if not backend.is_loaded() or dictating():
+            return
+        try:
+            started = time.monotonic()
+            await refinement.prefill_cleanup(flags, llm_size)
+            logger.info("Style %s prompt cached in %.3fs", flags.style, time.monotonic() - started)
+        except Exception:
+            logger.exception("Could not cache a style's prompt")
+            return
 
 
 def _warm_audio() -> tuple[np.ndarray, int]:

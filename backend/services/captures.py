@@ -30,7 +30,7 @@ from ..models import (
 )
 from ..utils.audio import load_audio
 from .content_check import check_refinement, summarize_reviews
-from .refinement import RefinementFlags, refine_transcript
+from .refinement import RefinementFlags, refine_transcript, style_first_word
 from .transcribe import get_whisper_model
 from .voice_commands import mark_commands
 
@@ -90,6 +90,7 @@ def _to_response(row: DBCapture) -> CaptureResponse:
         command_selection=row.command_selection,
         command_instruction=row.command_instruction,
         command_transform=row.command_transform,
+        style_id=row.style_id,
         created_at=row.created_at,
     )
 
@@ -229,7 +230,11 @@ def list_captures(
 def list_capture_apps(db: Session) -> CaptureAppsResponse:
     """How many captures each app has, most first, counted over every row
     rather than the page the list loads. An app is its bundle id; its name is
-    the one on its newest capture, since an app can be renamed."""
+    the one on its newest capture, since an app can be renamed. Each app
+    carries the style its dictation uses and whether the user chose it."""
+    from .styles import snapshot
+
+    styles = snapshot()
     counts: dict[str, list] = {}
     unknown = 0
     rows = (
@@ -253,7 +258,14 @@ def list_capture_apps(db: Session) -> CaptureAppsResponse:
         if latest and (entry[2] is None or latest > entry[2]):
             entry[2] = latest
     apps = [
-        CaptureAppCount(app_bundle_id=bundle_id, app_name=name, count=count, last_captured_at=latest)
+        CaptureAppCount(
+            app_bundle_id=bundle_id,
+            app_name=name,
+            count=count,
+            last_captured_at=latest,
+            style_id=styles.for_app(bundle_id).id,
+            confirmed=bundle_id in styles.apps,
+        )
         for bundle_id, (name, count, latest) in counts.items()
     ]
     apps.sort(key=lambda app: (-app.count, (app.app_name or app.app_bundle_id).lower()))
@@ -308,9 +320,10 @@ async def refine_capture(
 
     from .correction_learning import apply_learned_corrections
 
-    refined = apply_learned_corrections(refined, row.language)
+    refined = style_first_word(apply_learned_corrections(refined, row.language), flags)
 
     row.transcript_refined = refined
+    row.style_id = flags.style
     review = summarize_reviews([verdict])
     row.refinement_review = json.dumps(review) if review else None
     row.llm_model = llm_size

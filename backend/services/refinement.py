@@ -131,12 +131,19 @@ PUNCTUATION_STYLES = ("standard", "casual", "learned")
 
 @dataclass
 class RefinementFlags:
-    """Which refinement behaviours to apply."""
+    """Which refinement behaviours to apply.
+
+    ``style`` is the writing style whose learned habits, examples and rules
+    cleanup uses (docs/plans/PER_APP_STYLE.md); None is the default style.
+    ``capitalize_first`` off lowercases a common first word after cleanup.
+    """
 
     smart_cleanup: bool = True
     self_correction: bool = True
     preserve_technical: bool = True
     punctuation_style: str = "standard"
+    capitalize_first: bool = True
+    style: str | None = None
 
     def to_dict(self) -> dict:
         flags = {
@@ -144,10 +151,14 @@ class RefinementFlags:
             "self_correction": self.self_correction,
             "preserve_technical": self.preserve_technical,
         }
-        # Standard is left implicit so flags saved before styles existed, and
+        # Defaults are left implicit so flags saved before styles existed, and
         # personal adapters tested against them, still compare equal.
         if self.punctuation_style != "standard":
             flags["punctuation_style"] = self.punctuation_style
+        if not self.capitalize_first:
+            flags["capitalize_first"] = False
+        if self.style is not None:
+            flags["style"] = self.style
         return flags
 
     @classmethod
@@ -161,6 +172,8 @@ class RefinementFlags:
             punctuation_style=data.get("punctuation_style")
             if data.get("punctuation_style") in PUNCTUATION_STYLES
             else "standard",
+            capitalize_first=data.get("capitalize_first") is not False,
+            style=data.get("style") if isinstance(data.get("style"), str) else None,
         )
 
 
@@ -269,7 +282,7 @@ def build_refinement_prompt(flags: RefinementFlags, personal: bool = False, note
         from .writing_style import prompt_section
 
         # Until something is learned, Match my writing punctuates like Standard.
-        learned = prompt_section()
+        learned = prompt_section(flags.style)
     style = "learned" if learned else "standard" if flags.punctuation_style == "learned" else flags.punctuation_style
     punctuation, cleanup_punctuation = _PUNCTUATION.get(style, _PUNCTUATION["standard"])
     sections = [
@@ -381,7 +394,7 @@ def refinement_examples(flags: RefinementFlags, personal: list[tuple[str, str]] 
         from .writing_style import prompt_example
 
         # The user's own calibration rewrite demonstrates their style.
-        example = prompt_example()
+        example = prompt_example(flags.style)
         if example:
             return [example, *REFINEMENT_EXAMPLES]
     return REFINEMENT_EXAMPLES
@@ -389,6 +402,50 @@ def refinement_examples(flags: RefinementFlags, personal: list[tuple[str, str]] 
 
 def _without_final_period(text: str) -> str:
     return re.sub(r"(?<=[\w)\"'\u201d])\.$", "", text.rstrip())
+
+
+def style_first_word(text: str, flags: RefinementFlags, names: frozenset[str] = frozenset()) -> str:
+    """The start of a dictation, cased the way its style writes.
+
+    Cleanup capitalizes every text as the start of a sentence. With
+    "Capitalize the first word" off, a common first word is lowercased by the
+    rule mid-sentence dictation uses: "I", acronyms, names and ``names`` keep
+    their capitals.
+    """
+    if flags.capitalize_first:
+        return text
+    from .phrase_seams import continue_phrase
+
+    return continue_phrase(text, "", names)
+
+
+def _cache_key(flags: RefinementFlags, use_personal_examples=True, correction_notes=None) -> str:
+    """The prompt cache a cleanup continues: one per writing style.
+
+    Cleanups without the user's examples, and replays with candidate rules,
+    get their own, so checking them never evicts the style's cached prompt.
+    """
+    key = f"cleanup:{flags.style or 'default'}"
+    if not use_personal_examples:
+        key += ":plain"
+    if correction_notes is not None:
+        key += ":candidate-rules"
+    return key
+
+
+def _prompt(flags: RefinementFlags, use_personal_examples, extra_examples, correction_notes):
+    """The system prompt and example turns cleanup uses for ``flags``' style."""
+    personal, notes = [], None
+    if use_personal_examples:
+        from .correction_notes import prompt_section as notes_section
+        from .personal_examples import for_prompt
+
+        personal = for_prompt(flags.style, extra=extra_examples)
+        notes = notes_section(flags.style, correction_notes)
+    # Whisper ends every transcript with a period. Hide it, in the user's
+    # examples too, so the ending follows how they write ("3. Do chores").
+    personal = [(_without_final_period(said), meant) for said, meant in personal]
+    return build_refinement_prompt(flags, personal=bool(personal), notes=notes), refinement_examples(flags, personal)
 
 
 async def refine_transcript(
@@ -427,31 +484,22 @@ async def refine_transcript(
 
         adapter_path = active_adapter(resolved_size, flags.to_dict())
     options = {"adapter_path": adapter_path} if adapter_path else {}
-    personal, notes = [], None
-    if use_personal_examples:
-        from .correction_notes import prompt_section as notes_section
-        from .personal_examples import for_prompt
-
-        personal = for_prompt(extra=extra_examples)
-        notes = notes_section(correction_notes)
-    # Whisper ends every transcript with a period. Hide it, in the user's
-    # examples too, so the ending follows how they write ("3. Do chores").
-    personal = [(_without_final_period(said), meant) for said, meant in personal]
-    system_prompt = build_refinement_prompt(flags, personal=bool(personal), notes=notes)
+    system_prompt, examples = _prompt(flags, use_personal_examples, extra_examples, correction_notes)
     arguments = dict(
         prompt=_without_final_period(cleaned_input),
         system=system_prompt,
         max_tokens=2048,
         temperature=0.2,
         model_size=resolved_size,
-        examples=refinement_examples(flags, personal),
+        examples=examples,
     )
-    from ..backends.qwen_llm_backend import generation_hint
+    from ..backends.qwen_llm_backend import generation_hint, prompt_cache_key
 
     # A cleanup copies most of its transcript, so generation checks copied
     # words several per model call. The output is the same, in about a third
     # of the time. A caller may already have set a better hint.
     hint = generation_hint.set("") if generation_hint.get() is None else None
+    key = prompt_cache_key.set(_cache_key(flags, use_personal_examples, correction_notes))
     try:
         text = await backend.generate(**arguments, **options)
     except Exception:
@@ -462,13 +510,14 @@ async def refine_transcript(
         quarantine_adapter("The personal adapter failed to load or generate; reverted to the base model.")
         text = await backend.generate(**arguments)
     finally:
+        prompt_cache_key.reset(key)
         if hint is not None:
             generation_hint.reset(hint)
     text = text.strip()
     if flags.punctuation_style == "learned":
         from .writing_style import apply_learned
 
-        text = apply_learned(text)
+        text = apply_learned(text, flags.style)
     return text, resolved_size
 
 
@@ -489,6 +538,38 @@ async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
 
         adapter_path = active_adapter(model_size, flags.to_dict())
     await prepare(model_size, adapter_path)
+
+
+async def prefill_cleanup(flags: RefinementFlags, model_size: str) -> None:
+    """Put the cleanup prompt for ``flags``' style in the model's cache, without the transcript.
+
+    Called once a dictation's app is known, while the user speaks. The backend
+    keeps a cache per prompt, so this costs a few tokens when the style was
+    used recently, and moves the prefill of a style not used in a while
+    (seconds on 4B) out of the wait after release.
+    """
+    backend = llm_service.get_llm_model()
+    adapter_path = None
+    if getattr(backend, "supports_adapters", False):
+        from .model_improvement.manager import active_adapter
+
+        adapter_path = active_adapter(model_size, flags.to_dict())
+    from ..backends.qwen_llm_backend import prompt_cache_key
+
+    system_prompt, examples = _prompt(flags, True, None, None)
+    key = prompt_cache_key.set(_cache_key(flags))
+    try:
+        await backend.generate(
+            prompt="",
+            system=system_prompt,
+            max_tokens=1,
+            temperature=0,
+            model_size=model_size,
+            examples=examples,
+            **({"adapter_path": adapter_path} if adapter_path else {}),
+        )
+    finally:
+        prompt_cache_key.reset(key)
 
 
 def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, str | None]:

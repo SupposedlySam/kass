@@ -6,19 +6,23 @@ reaching into submodules.
 """
 
 from .models import (
+    AppStyle,
     Base,
     Capture,
     CaptureFeedback,
     CaptureSettings,
+    WritingStyle,
 )
 from .session import engine, SessionLocal, _db_path, init_db, get_db
 
 __all__ = [
     # Models
+    "AppStyle",
     "Base",
     "Capture",
     "CaptureFeedback",
     "CaptureSettings",
+    "WritingStyle",
     # Session
     "engine",
     "SessionLocal",

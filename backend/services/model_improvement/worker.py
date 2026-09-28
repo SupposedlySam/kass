@@ -205,7 +205,9 @@ def evaluate_adapter(plan, directory, candidate_adapter="trained", candidate_stt
     cases = [dict(s, kind="heldout") for s in heldout]
     cases += [dict(s, raw=audio[s["id"]][0], kind="audio") for s in heldout if s["id"] in audio]
     # All evaluated flag combinations are recorded; other settings keep the base model.
+    # Each writing style's current flags are among them.
     flags = {json.dumps(s.get("flags") or {}, sort_keys=True) for s in heldout}
+    flags |= {json.dumps(f, sort_keys=True) for f in plan.get("style_flags", [])}
     flags.add("{}")
     for flag in flags:
         cases += [
@@ -308,6 +310,10 @@ def run(plan_path):
     plan_path = Path(plan_path)
     directory = plan_path.parent
     plan = json.loads(plan_path.read_text())
+    if plan.get("data_dir"):
+        from ... import config
+
+        config.set_data_dir(plan["data_dir"])
     result = {"adapter": None, "speech": None}
     if plan["train_ready"]:
         phase(directory, "training")
