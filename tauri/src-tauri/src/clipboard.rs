@@ -16,11 +16,14 @@
 //! Tauri command runtime threads don't have one by default — without it,
 //! every autoreleased `NSString` / `NSData` we touch would leak for the
 //! life of the process.
+//!
+//! [`copy_selection`] runs the same save/restore around a synthetic ⌘C, to
+//! read a selection that Accessibility can't (Command Mode).
 
 use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::insert_chain::{Attempt, Inserter, Method, Request};
 
@@ -378,6 +381,58 @@ impl Inserter for Paste {
         });
         Attempt::Inserted { verified: false }
     }
+}
+
+// ========================================================================
+// ⌘C: a selection Accessibility can't read (docs/plans/COMMAND_MODE.md)
+// ========================================================================
+
+/// How long the frontmost app gets to put its selection on the clipboard
+/// after ⌘C. Apps answer in a few milliseconds; with nothing selected most
+/// leave the clipboard alone, so the whole wait means "no selection".
+pub const COPY_WAIT: Duration = Duration::from_millis(250);
+const COPY_POLL: Duration = Duration::from_millis(10);
+
+/// The general pasteboard's plain text, if it has any.
+fn read_text() -> Option<String> {
+    unsafe {
+        let _pool = AutoreleasePool::new();
+        let pb = general_pasteboard().ok()?;
+        let text: Id = msg_send![pb, stringForType: ns_string("public.utf8-plain-text")];
+        ns_string_to_rust(text)
+    }
+}
+
+/// Copy the frontmost app's selection with ⌘C and put the user's clipboard
+/// back. `Ok(None)` when nothing was copied. Blocking, for up to
+/// [`COPY_WAIT`].
+pub fn copy_selection() -> Result<Option<String>, String> {
+    // Serialized with pastes: a paste's restore still pending means the
+    // clipboard holds our text, and the user's own is the one it would restore.
+    let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+    let before = current_change_count()?;
+    let from_pending = pending.as_ref().is_some_and(|p| p.staged_count == before);
+    let original = match original_to_restore(pending.take(), None, Some(before)) {
+        Some(snapshot) => snapshot,
+        None => save_clipboard()?,
+    };
+    crate::synthetic_keys::send_copy()?;
+    let started = Instant::now();
+    let mut copied = None;
+    while started.elapsed() < COPY_WAIT {
+        std::thread::sleep(COPY_POLL);
+        // An app may clear the clipboard before writing to it: wait for text.
+        if current_change_count()? != before {
+            copied = read_text();
+            if copied.is_some() {
+                break;
+            }
+        }
+    }
+    if copied.is_some() || from_pending || current_change_count()? != before {
+        restore_clipboard(&original)?;
+    }
+    Ok(copied.filter(|text| !text.is_empty()))
 }
 
 #[cfg(test)]

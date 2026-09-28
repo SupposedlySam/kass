@@ -797,6 +797,7 @@ pub struct HotkeyState {
 fn build_chord_bindings(
     push_to_talk: &[String],
     toggle_to_talk: &[String],
+    command: &[String],
 ) -> Result<hotkey_monitor::Bindings, String> {
     use hotkey_monitor::{Bindings, ChordAction};
     use keytap::Key;
@@ -821,6 +822,10 @@ fn build_chord_bindings(
     let mut bindings = Bindings::new();
     bindings.insert(ChordAction::PushToTalk, push_chord);
     bindings.insert(ChordAction::ToggleToTalk, toggle_chord);
+    // Command Mode's chord is optional: empty turns it off.
+    if !command.is_empty() {
+        bindings.insert(ChordAction::Command, build_chord("command", command)?);
+    }
     Ok(bindings)
 }
 
@@ -839,8 +844,10 @@ fn enable_hotkey(
     state: State<'_, HotkeyState>,
     push_to_talk: Vec<String>,
     toggle_to_talk: Vec<String>,
+    command: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let bindings = build_chord_bindings(&push_to_talk, &toggle_to_talk)?;
+    let bindings =
+        build_chord_bindings(&push_to_talk, &toggle_to_talk, &command.unwrap_or_default())?;
 
     // Fire the Input Monitoring TCC prompt explicitly from the user's
     // toggle click, before keytap's Tap would do it implicitly via
@@ -902,8 +909,10 @@ fn update_chord_bindings(
     state: State<'_, HotkeyState>,
     push_to_talk: Vec<String>,
     toggle_to_talk: Vec<String>,
+    command: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let bindings = build_chord_bindings(&push_to_talk, &toggle_to_talk)?;
+    let bindings =
+        build_chord_bindings(&push_to_talk, &toggle_to_talk, &command.unwrap_or_default())?;
     let mut slot = state.monitor.lock().map_err(|e| e.to_string())?;
     if let Some(monitor) = slot.as_mut() {
         monitor.update_bindings(bindings);
@@ -1255,6 +1264,7 @@ pub fn run() {
             dictation::dictation_configure,
             dictation::dictation_start,
             dictation::dictation_stop,
+            dictation::command_run,
             dictation::list_input_devices
         ])
         .on_window_event({

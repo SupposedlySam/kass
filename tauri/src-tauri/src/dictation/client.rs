@@ -33,6 +33,9 @@ pub enum Outcome {
     },
     /// The take was abandoned (too short, microphone failure, shutdown).
     Cancelled,
+    /// A command take refused before it began: nothing to rewrite. The
+    /// message says why.
+    Declined(String),
 }
 
 pub struct StreamClient {
@@ -53,6 +56,18 @@ pub struct StreamClient {
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
     field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
     context_sent: bool,
+    /// A command take (docs/plans/COMMAND_MODE.md): `finish` waits for the
+    /// selection, which follows `start`.
+    command: bool,
+    selection: Selection,
+}
+
+/// A command take's selection, as far as it has gone.
+#[derive(Debug, Clone, PartialEq)]
+enum Selection {
+    Unknown,
+    Known(String),
+    Sent,
 }
 
 impl StreamClient {
@@ -76,7 +91,58 @@ impl StreamClient {
             target_app: None,
             field_before: None,
             context_sent: false,
+            command: false,
+            selection: Selection::Unknown,
         }
+    }
+
+    /// Make this a command take: its words are an instruction for the
+    /// selection passed to [`Self::set_selection`].
+    pub fn with_command(mut self) -> Self {
+        self.command = true;
+        self
+    }
+
+    /// Whether `finish` must wait for the selection.
+    fn awaiting_selection(&self) -> bool {
+        self.command && self.selection == Selection::Unknown
+    }
+
+    /// The `selection` message, once known and the server is ready.
+    fn selection_action(&mut self) -> Option<Action> {
+        if !self.ready {
+            return None;
+        }
+        match std::mem::replace(&mut self.selection, Selection::Sent) {
+            Selection::Known(text) => Some(Action::Text(protocol::selection_message(&text))),
+            other => {
+                self.selection = other;
+                None
+            }
+        }
+    }
+
+    /// Everything that goes out before audio: context and selection.
+    fn preamble(&mut self) -> Vec<Action> {
+        self.context_action()
+            .into_iter()
+            .chain(self.selection_action())
+            .collect()
+    }
+
+    /// The selection a command take rewrites, read after key-down. Sends a
+    /// `finish` that was waiting for it.
+    pub fn set_selection(&mut self, text: String) -> Vec<Action> {
+        if self.outcome.is_some() || !self.awaiting_selection() {
+            return Vec::new();
+        }
+        self.selection = Selection::Known(text);
+        let mut actions = self.preamble();
+        if self.ready && self.finish_requested && !self.finish_sent {
+            self.finish_sent = true;
+            actions.push(Action::Text(self.finish_message()));
+        }
+        actions
     }
 
     /// Receive provisional cleaned text for this take, after `finish`.
@@ -160,6 +226,7 @@ impl StreamClient {
                 vec![Action::Text(protocol::start_message(
                     rate,
                     self.on_provisional.is_some(),
+                    self.command,
                 ))]
             }
             _ => Vec::new(),
@@ -171,7 +238,7 @@ impl StreamClient {
         if self.outcome.is_some() || self.finish_requested {
             return Vec::new();
         }
-        let mut actions: Vec<Action> = self.context_action().into_iter().collect();
+        let mut actions = self.preamble();
         for chunk in pcm.chunks(protocol::MAX_SAMPLES_PER_MESSAGE) {
             let frame = protocol::encode_frame(self.sequence, self.sample_offset, chunk);
             self.sequence = self.sequence.wrapping_add(1);
@@ -196,9 +263,9 @@ impl StreamClient {
             return Vec::new();
         }
         self.finish_requested = true;
-        if self.ready {
+        if self.ready && !self.awaiting_selection() {
             self.finish_sent = true;
-            let mut actions: Vec<Action> = self.context_action().into_iter().collect();
+            let mut actions = self.preamble();
             actions.push(Action::Text(self.finish_message()));
             actions
         } else {
@@ -216,9 +283,9 @@ impl StreamClient {
                 self.ready = true;
                 self.session_id = Some(session_id);
                 self.pending_bytes = 0;
-                let mut actions: Vec<Action> = self.context_action().into_iter().collect();
+                let mut actions = self.preamble();
                 actions.extend(self.pending.drain(..).map(Action::Binary));
-                if self.finish_requested {
+                if self.finish_requested && !self.awaiting_selection() {
                     self.finish_sent = true;
                     actions.push(Action::Text(self.finish_message()));
                 }
@@ -278,10 +345,20 @@ impl StreamClient {
 
     /// Abandon the take. Returns `cancel` when the server is listening.
     pub fn cancel(&mut self) -> Vec<Action> {
+        self.abandon(Outcome::Cancelled)
+    }
+
+    /// Refuse a command take (nothing selected). Like [`Self::cancel`], with
+    /// the reason to show.
+    pub fn decline(&mut self, message: &str) -> Vec<Action> {
+        self.abandon(Outcome::Declined(message.to_string()))
+    }
+
+    fn abandon(&mut self, outcome: Outcome) -> Vec<Action> {
         if self.outcome.is_some() {
             return Vec::new();
         }
-        self.outcome = Some(Outcome::Cancelled);
+        self.outcome = Some(outcome);
         self.pending.clear();
         self.pending_bytes = 0;
         if self.start_sent && !self.finish_sent {
@@ -610,6 +687,64 @@ mod tests {
             client.outcome(),
             Some(Outcome::FailedBeforeFinish(_))
         ));
+    }
+
+    fn open_and_ready(client: &mut StreamClient) -> Vec<Action> {
+        client.set_format(16_000);
+        client.on_open();
+        client.on_text(r#"{"type":"ready","session_id":"s1"}"#)
+    }
+
+    #[test]
+    fn a_command_take_sends_its_selection_before_audio() {
+        let mut client = StreamClient::new(1 << 20).with_command();
+        client.set_format(16_000);
+        let start = texts(&client.on_open());
+        assert_eq!(start[0]["source"], "command");
+        assert!(client.set_selection("the text".into()).is_empty());
+        let sent = texts(&client.on_text(r#"{"type":"ready","session_id":"s1"}"#));
+        assert_eq!(
+            sent,
+            vec![serde_json::json!({"type": "selection", "text": "the text"})]
+        );
+        // Only once, and never a second selection.
+        assert!(texts(&client.push_audio(&[1, 2])).is_empty());
+        assert!(client.set_selection("other".into()).is_empty());
+    }
+
+    #[test]
+    fn finish_waits_for_a_selection_still_being_read() {
+        let mut client = StreamClient::new(1 << 20).with_command();
+        open_and_ready(&mut client);
+        client.push_audio(&[1, 2]);
+        assert!(client.request_finish().is_empty());
+        assert!(!client.finish_sent());
+        let sent: Vec<_> = texts(&client.set_selection("late".into()))
+            .iter()
+            .map(|t| t["type"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(sent, ["selection", "finish"]);
+        assert!(client.finish_sent());
+    }
+
+    #[test]
+    fn a_dictation_take_finishes_without_a_selection() {
+        let mut client = StreamClient::new(1 << 20);
+        open_and_ready(&mut client);
+        let sent = texts(&client.request_finish());
+        assert_eq!(sent[0]["type"], "finish");
+    }
+
+    #[test]
+    fn a_declined_command_cancels_the_session_and_says_why() {
+        let mut client = StreamClient::new(1 << 20).with_command();
+        open_and_ready(&mut client);
+        assert_eq!(texts(&client.decline("Select text"))[0]["type"], "cancel");
+        assert_eq!(
+            client.outcome(),
+            Some(&Outcome::Declined("Select text".into()))
+        );
+        assert!(client.set_selection("late".into()).is_empty());
     }
 
     #[test]

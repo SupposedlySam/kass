@@ -5,7 +5,8 @@
 //! longest-match resolution, sticky-toggle semantics); this module's only
 //! job is:
 //!
-//!   1. Build a `ChordMatcher` from the user's saved PTT + Toggle chords.
+//!   1. Build a `ChordMatcher` from the user's saved PTT, Toggle and
+//!      Command chords.
 //!   2. Translate `ChordEvent` → voicebox's [`Effect`] on a dispatcher
 //!      thread.
 //!   3. Fan [`Effect`]s out into native dictation (microphone + streaming,
@@ -43,11 +44,23 @@ use crate::focus_capture;
 
 /// Semantic action a chord can be bound to. `PushToTalk` = hold chord to
 /// record, release to stop. `ToggleToTalk` = press chord to start recording,
-/// press again to stop.
+/// press again to stop. `Command` = hold to speak an instruction for the
+/// selected text, release to rewrite it (docs/plans/COMMAND_MODE.md).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChordAction {
     PushToTalk,
     ToggleToTalk,
+    Command,
+}
+
+impl ChordAction {
+    /// What a take started by this chord is for.
+    pub fn take_mode(self) -> dictation::TakeMode {
+        match self {
+            Self::Command => dictation::TakeMode::Command,
+            Self::PushToTalk | Self::ToggleToTalk => dictation::TakeMode::Dictation,
+        }
+    }
 }
 
 /// Effect produced after the chord matcher resolves an event. Hosts
@@ -165,6 +178,11 @@ fn build_matcher(bindings: &Bindings) -> Result<ChordMatcher<ChordAction>, keyta
                 builder.add_toggle(ChordAction::ToggleToTalk, Chord::of(keys.iter().copied()));
         }
     }
+    if let Some(keys) = bindings.get(&ChordAction::Command) {
+        if !keys.is_empty() {
+            builder = builder.add(ChordAction::Command, Chord::of(keys.iter().copied()));
+        }
+    }
     builder.build()
 }
 
@@ -230,11 +248,16 @@ fn process_event(
 
 fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
     match effect {
-        Effect::StartRecording(_) => {
+        Effect::StartRecording(action) => {
             // Open the microphone before anything else: every word from
             // key-down must be captured. `time` is the key event's own
             // timestamp, so the logged latency includes our dispatch.
-            let take = dictation::start(app, time, dictation::TakeOrigin::Shortcut);
+            let take = dictation::start(
+                app,
+                time,
+                dictation::TakeOrigin::Shortcut,
+                action.take_mode(),
+            );
 
             // Snapshot focus BEFORE we touch the window — any AppKit
             // reshuffle triggered by set_position / show could in principle

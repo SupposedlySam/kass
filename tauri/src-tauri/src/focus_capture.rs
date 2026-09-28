@@ -314,6 +314,59 @@ pub fn capture_focus() -> Result<FocusSnapshot, String> {
     }
 }
 
+/// The app whose window is frontmost apart from Voicebox's own: where the
+/// user was before opening Voicebox's window (Command Mode's palette runs
+/// there). Reads the on-screen window list front to back and takes the first
+/// normal-level window another process owns.
+pub fn app_behind_voicebox() -> Option<FocusSnapshot> {
+    use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
+    use core_foundation_sys::dictionary::{CFDictionaryGetValue, CFDictionaryRef};
+    use core_foundation_sys::number::{kCFNumberSInt32Type, CFNumberGetValue, CFNumberRef};
+
+    /// `kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements`.
+    const ON_SCREEN_WITHOUT_DESKTOP: u32 = 1 | 16;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> CFArrayRef;
+        static kCGWindowOwnerPID: CFStringRef;
+        static kCGWindowLayer: CFStringRef;
+    }
+
+    unsafe fn number(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
+        let value = CFDictionaryGetValue(dict, key as *const std::ffi::c_void);
+        if value.is_null() {
+            return None;
+        }
+        let mut n: i32 = 0;
+        CFNumberGetValue(
+            value as CFNumberRef,
+            kCFNumberSInt32Type,
+            &mut n as *mut i32 as *mut std::ffi::c_void,
+        )
+        .then_some(n)
+    }
+
+    let ours = std::process::id() as i32;
+    unsafe {
+        let windows = CGWindowListCopyWindowInfo(ON_SCREEN_WITHOUT_DESKTOP, 0);
+        if windows.is_null() {
+            return None;
+        }
+        let _guard = scopeguard::guard(windows, |w| CFRelease(w as *const std::ffi::c_void));
+        (0..CFArrayGetCount(windows))
+            .map(|i| CFArrayGetValueAtIndex(windows, i) as CFDictionaryRef)
+            .filter(|dict| !dict.is_null())
+            .find_map(|dict| {
+                let pid = number(dict, kCGWindowOwnerPID)?;
+                // Layer 0 holds app windows; the menu bar, Dock and panels
+                // like the dictation pill sit above it.
+                (number(dict, kCGWindowLayer) == Some(0) && pid != ours).then_some(pid)
+            })
+            .map(|pid| app_snapshot(pid))
+    }
+}
+
 /// Bring the app owning `pid` to the foreground, re-activating its
 /// last-focused window. Paired with [`capture_focus`] at chord-start so a
 /// post-transcription synthetic ⌘V lands where the user started, not

@@ -350,6 +350,47 @@ pub fn fit_to_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> String {
     }
 }
 
+// ========================================================================
+// Selection: the text a command rewrites (docs/plans/COMMAND_MODE.md)
+// ========================================================================
+
+/// What Accessibility says is selected in the focused element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SelectionRead {
+    Text(String),
+    /// A caret with nothing selected.
+    Empty,
+    /// The focused text can't be rewritten in place: a secure field, or an
+    /// app whose Accessibility text is not its input (a terminal).
+    NotEditable,
+    /// Accessibility can't tell (no selection range, or its text won't
+    /// read). The caller may copy the selection instead.
+    Unreadable,
+}
+
+/// Read the selection in `target` without changing anything.
+pub fn read_selection<T: AxTextTarget>(target: &T, bundle_id: Option<&str>) -> SelectionRead {
+    if !context_readable(target, bundle_id) {
+        return SelectionRead::NotEditable;
+    }
+    match target.observe().selection {
+        Some(sel) if sel.length == 0 => SelectionRead::Empty,
+        Some(sel) => match target.string_for_range(sel) {
+            Some(text) if !text.is_empty() => SelectionRead::Text(text),
+            _ => SelectionRead::Unreadable,
+        },
+        None => SelectionRead::Unreadable,
+    }
+}
+
+/// [`read_selection`] in `pid`'s focused element. Blocking.
+pub fn selection_in_focused(pid: i32, bundle_id: Option<&str>) -> SelectionRead {
+    match macos::FocusedElement::of_app(pid) {
+        Some(element) => read_selection(&element, bundle_id),
+        None => SelectionRead::Unreadable,
+    }
+}
+
 /// Try to insert `text` into `target`, verifying the result. `sleep` is
 /// called between re-reads (a real sleep in production, recorded in tests).
 pub fn insert_into<T: AxTextTarget>(
@@ -1568,6 +1609,40 @@ mod tests {
         let (out, _) = run(&field, None, "there");
         assert_eq!(out, Outcome::Inserted { exact: true });
         assert_eq!(field.contents(), "Hello there");
+    }
+
+    #[test]
+    fn reads_the_selected_text_for_a_command() {
+        let field = FakeField::new("Hello 👍 world", range(6, 8));
+        assert_eq!(
+            read_selection(&field, Some("com.apple.TextEdit")),
+            SelectionRead::Text("👍 world".into())
+        );
+    }
+
+    #[test]
+    fn a_bare_caret_is_no_selection() {
+        let field = FakeField::new("Hello world", range(5, 0));
+        assert_eq!(read_selection(&field, None), SelectionRead::Empty);
+    }
+
+    #[test]
+    fn a_selection_whose_text_will_not_read_is_left_to_the_copy() {
+        let mut field = FakeField::new("Hello world", range(0, 5));
+        field.ranges_unreadable = true;
+        assert_eq!(read_selection(&field, None), SelectionRead::Unreadable);
+    }
+
+    #[test]
+    fn terminals_and_password_fields_have_no_editable_selection() {
+        let field = FakeField::new("ls -la", range(0, 2));
+        assert_eq!(
+            read_selection(&field, Some("com.apple.Terminal")),
+            SelectionRead::NotEditable
+        );
+        let mut secret = FakeField::new("hunter2", range(0, 7));
+        secret.role = Some(SECURE_ROLE.into());
+        assert_eq!(read_selection(&secret, None), SelectionRead::NotEditable);
     }
 
     #[test]

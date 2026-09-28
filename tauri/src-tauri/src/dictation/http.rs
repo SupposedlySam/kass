@@ -1,5 +1,5 @@
 //! HTTP calls the native take needs: result recovery, the batch fallback
-//! upload and its refinement, and the learning pause.
+//! upload and its refinement, commands, and the learning pause.
 
 use std::time::Duration;
 
@@ -53,11 +53,13 @@ async fn json_or_error(response: reqwest::Response) -> Result<Value, String> {
     }
 }
 
-/// `POST /captures` with the complete recording.
+/// `POST /captures` with the complete recording. `source` is `dictation`,
+/// or `command` for a command take's instruction.
 pub async fn upload(
     http: &reqwest::Client,
     server_url: &str,
     wav: Vec<u8>,
+    source: &'static str,
     app: Option<TargetApp>,
 ) -> Result<Value, String> {
     let millis = std::time::SystemTime::now()
@@ -70,7 +72,7 @@ pub async fn upload(
         .map_err(|e| e.to_string())?;
     let mut form = reqwest::multipart::Form::new()
         .part("file", file)
-        .text("source", "dictation");
+        .text("source", source);
     if let Some(app) = app {
         if let Some(bundle_id) = app.bundle_id {
             form = form.text("app_bundle_id", bundle_id);
@@ -103,6 +105,49 @@ pub async fn refine(
     json_or_error(response).await
 }
 
+/// What a command runs on its selection.
+pub enum CommandInput<'a> {
+    /// Typed or chosen in Voicebox: an instruction or a transform's name.
+    Instruction {
+        instruction: &'a str,
+        bundle_id: Option<&'a str>,
+        app_name: Option<&'a str>,
+    },
+    /// A command take's recording, saved through the batch upload.
+    Recording { capture_id: &'a str },
+}
+
+/// `POST /commands/run`: rewrite `selection`; returns the command capture.
+pub async fn run_command(
+    http: &reqwest::Client,
+    server_url: &str,
+    selection: &str,
+    input: CommandInput<'_>,
+) -> Result<Value, String> {
+    let body = match input {
+        CommandInput::Instruction {
+            instruction,
+            bundle_id,
+            app_name,
+        } => serde_json::json!({
+            "selection": selection,
+            "instruction": instruction,
+            "app_bundle_id": bundle_id,
+            "app_name": app_name,
+        }),
+        CommandInput::Recording { capture_id } => {
+            serde_json::json!({ "selection": selection, "capture_id": capture_id })
+        }
+    };
+    let response = http
+        .post(format!("{}/commands/run", base(server_url)))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    json_or_error(response).await
+}
+
 /// Tell background model learning to yield while the user records.
 pub async fn pause_learning(http: &reqwest::Client, server_url: &str) {
     let _ = http
@@ -125,7 +170,9 @@ mod tests {
         let wav = std::fs::read(std::env::var("VOICEBOX_SMOKE_WAV").expect("VOICEBOX_SMOKE_WAV"))
             .unwrap();
         let http = client();
-        let capture = upload(&http, &server, wav, None).await.unwrap();
+        let capture = upload(&http, &server, wav, "dictation", None)
+            .await
+            .unwrap();
         eprintln!(
             "[smoke] batch raw: {} auto_refine {} allow_auto_paste {}",
             capture["transcript_raw"], capture["auto_refine"], capture["allow_auto_paste"]
@@ -136,7 +183,7 @@ mod tests {
         assert_eq!(refined["id"], capture["id"]);
         let missing = fetch_result(&http, &server, "no-such-session").await;
         assert_eq!(missing, Recovery::Pending);
-        let rejected = upload(&http, &server, b"not audio".to_vec(), None)
+        let rejected = upload(&http, &server, b"not audio".to_vec(), "dictation", None)
             .await
             .unwrap_err();
         eprintln!("[smoke] bad upload: {rejected}");
