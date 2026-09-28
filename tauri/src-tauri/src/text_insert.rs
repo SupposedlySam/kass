@@ -64,6 +64,9 @@ pub enum FallbackReason {
     Unverifiable,
     /// Attempted, and the element is observably unchanged.
     NotInserted,
+    /// The app writes Accessibility text somewhere other than the caret
+    /// ([`writes_at_caret`]).
+    WritesAwayFromCaret,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -612,6 +615,9 @@ pub fn finish_live<T: AxTextTarget>(
 
 /// [`begin_live`] on the focused element of the app with `pid`. Blocking.
 pub fn begin_live_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> LiveStart {
+    if !writes_at_caret(pid) {
+        return LiveStart::Declined(FallbackReason::WritesAwayFromCaret);
+    }
     match macos::FocusedElement::of_app(pid) {
         Some(element) => begin_live(&element, bundle_id, text, std::thread::sleep),
         None => LiveStart::Declined(FallbackReason::NoFocusedElement),
@@ -659,6 +665,9 @@ pub fn clear_focused(pid: i32) -> bool {
 /// Insert `text` into the focused element of the app with `pid`, verifying
 /// the result. Blocking: every step is a synchronous AX message to the target.
 pub fn insert_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Outcome {
+    if !writes_at_caret(pid) {
+        return Outcome::UseClipboard(FallbackReason::WritesAwayFromCaret);
+    }
     match macos::FocusedElement::of_app(pid) {
         Some(element) => insert_into(&element, bundle_id, text, std::thread::sleep),
         None => Outcome::UseClipboard(FallbackReason::NoFocusedElement),
@@ -753,6 +762,23 @@ pub fn wake_electron(pid: i32) {
 fn is_electron_bundle(path: &str) -> bool {
     std::path::Path::new(path)
         .join("Contents/Frameworks/Electron Framework.framework")
+        .exists()
+}
+
+/// Whether an `AXSelectedText` write in the app with `pid` lands at the
+/// caret. Gecko apps (Firefox, Zen, Thunderbird) accept the write and put
+/// the text at the start of the field, in `<input>`, `<textarea>` and
+/// contenteditable alike; in a multi-paragraph editor (X, Draft.js) it also
+/// deletes the first paragraph. Setting `AXSelectedTextRange` first does not
+/// help. Reading the caret and the text around it works there.
+fn writes_at_caret(pid: i32) -> bool {
+    !crate::focus_capture::app_bundle_path(pid).is_some_and(|path| is_gecko_bundle(&path))
+}
+
+/// Gecko ships its engine as `XUL` next to the app's executable.
+fn is_gecko_bundle(path: &str) -> bool {
+    std::path::Path::new(path)
+        .join("Contents/MacOS/XUL")
         .exists()
 }
 
@@ -1087,6 +1113,19 @@ mod tests {
             selection: sel.map(|(l, n)| range(l, n)),
             char_count: count,
         }
+    }
+
+    #[test]
+    fn gecko_bundles_are_found_by_their_engine() {
+        let root = std::env::temp_dir().join(format!("voicebox-gecko-{}", std::process::id()));
+        let gecko = root.join("Zen.app");
+        let other = root.join("TextEdit.app");
+        std::fs::create_dir_all(gecko.join("Contents/MacOS")).unwrap();
+        std::fs::write(gecko.join("Contents/MacOS/XUL"), b"").unwrap();
+        std::fs::create_dir_all(other.join("Contents/MacOS")).unwrap();
+        assert!(is_gecko_bundle(gecko.to_str().unwrap()));
+        assert!(!is_gecko_bundle(other.to_str().unwrap()));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     fn text_area(before: Observation) -> Capabilities {
