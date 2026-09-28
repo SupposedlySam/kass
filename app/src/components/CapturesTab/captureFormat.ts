@@ -190,6 +190,14 @@ export function buildCaptureMarkdown(capture: CaptureResponse): string {
   return lines.join('\n');
 }
 
+/** Voicebox's own bundle ID (`tauri.conf.json`), recorded on captures dictated into its window. */
+const VOICEBOX_BUNDLE_ID = 'sh.voicebox.app';
+
+/** The capture was dictated into a field in Voicebox's own window. */
+export function wentIntoVoicebox(capture: CaptureResponse): boolean {
+  return capture.app_bundle_id === VOICEBOX_BUNDLE_ID;
+}
+
 /** Focus is somewhere typing goes, so single-key shortcuts must stay out of the way. */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

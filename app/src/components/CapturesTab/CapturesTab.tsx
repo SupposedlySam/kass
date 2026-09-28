@@ -8,7 +8,7 @@ import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { CaptureDetail } from './CaptureDetail';
 import { CaptureDetailHeader } from './CaptureDetailHeader';
 import { CaptureList } from './CaptureList';
-import { isInOverlay, isTypingTarget, matchesSearch } from './captureFormat';
+import { isInOverlay, isTypingTarget, matchesSearch, wentIntoVoicebox } from './captureFormat';
 import { EmptyDetail } from './EmptyDetail';
 
 /** The Captures screen: the capture list on the left, the selected capture on the right. */
@@ -61,9 +61,9 @@ export function CapturesTab() {
   // the race window between ``setSelectedId(new)`` and the refetched list
   // actually containing the new row.
   //
-  // While the user is typing in a field on this screen, the new capture is
-  // almost certainly one they dictated into that field (e.g. a correction on
-  // the selected capture), so the selection stays put.
+  // A capture dictated into a field on this screen (e.g. a correction on the
+  // selected capture) leaves the selection put. It is recorded with
+  // Voicebox as its app; the focus check covers captures without one.
   useEffect(() => {
     const unlistens: Promise<UnlistenFn>[] = [];
     unlistens.push(
@@ -75,7 +75,8 @@ export function CapturesTab() {
             if (prev.items.some((c) => c.id === capture.id)) return prev;
             return { ...prev, items: [capture, ...prev.items], total: prev.total + 1 };
           });
-          if (!(document.hasFocus() && isTypingTarget(document.activeElement))) {
+          const typingHere = document.hasFocus() && isTypingTarget(document.activeElement);
+          if (!wentIntoVoicebox(capture) && !typingHere) {
             setSelectedId(capture.id);
           }
         }
