@@ -16,6 +16,7 @@ mod key_codes;
 mod keyboard_layout;
 mod keystroke_insert;
 mod server_process;
+mod sound_cues;
 mod synthetic_keys;
 mod text_insert;
 
@@ -1196,6 +1197,7 @@ pub fn run() {
         .manage(dictation::DictationState::default())
         .setup(|app| {
             dictation::restore(app.handle());
+            sound_cues::init(app.handle());
             #[cfg(desktop)]
             {
                 // Resolve the active keyboard layout's V keycode now, on
@@ -1255,7 +1257,9 @@ pub fn run() {
             dictation::dictation_configure,
             dictation::dictation_start,
             dictation::dictation_stop,
-            dictation::list_input_devices
+            dictation::list_input_devices,
+            sound_cues::configure_sound_cues,
+            sound_cues::preview_sound_cue
         ])
         .on_window_event({
             let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
