@@ -166,6 +166,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
         }
     };
     let capture = capture::spawn(config.input_device_id.clone(), keydown, audio_tx, hooks);
+    // Right behind the microphone thread, never ahead of it. Only a message
+    // to the player thread, so it costs the take nothing.
+    let start_cue = crate::sound_cues::play(crate::sound_cues::Cue::Start);
 
     // Save the clipboard while the user speaks. Reading it can take seconds
     // when the copying app renders its data lazily.
@@ -199,7 +202,12 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
         let app_focus = env.focus.clone();
         let client = StreamClient::new(MAX_PENDING_BYTES)
             .with_target_app(move || target_app(&app_focus))
-            .with_field_before(move || field_before_task.lock().ok()?.clone());
+            .with_field_before(move || field_before_task.lock().ok()?.clone())
+            .with_start_cue(if start_cue {
+                crate::sound_cues::START_CUE_SPAN_MS
+            } else {
+                0
+            });
         let client = if live_text {
             let offer = live.clone();
             client.with_provisional(move |text| {
@@ -514,6 +522,9 @@ impl LiveTarget for AxLive {
 
 impl TakeEnv for AppEnv {
     fn emit(&self, event: PillEvent) {
+        if let Some(cue) = event.cue() {
+            crate::sound_cues::play(cue);
+        }
         let mut payload = serde_json::to_value(&event).unwrap_or(Value::Null);
         if let Value::Object(ref mut map) = payload {
             map.insert("take".into(), Value::from(self.take_id));

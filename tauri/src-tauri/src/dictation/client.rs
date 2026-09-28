@@ -53,6 +53,7 @@ pub struct StreamClient {
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
     field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
     context_sent: bool,
+    start_cue_ms: u32,
 }
 
 impl StreamClient {
@@ -76,7 +77,15 @@ impl StreamClient {
             target_app: None,
             field_before: None,
             context_sent: false,
+            start_cue_ms: 0,
         }
+    }
+
+    /// The start cue played as the take began and may be in its first
+    /// `start_cue_ms` of audio.
+    pub fn with_start_cue(mut self, start_cue_ms: u32) -> Self {
+        self.start_cue_ms = start_cue_ms;
+        self
     }
 
     /// Receive provisional cleaned text for this take, after `finish`.
@@ -160,6 +169,7 @@ impl StreamClient {
                 vec![Action::Text(protocol::start_message(
                     rate,
                     self.on_provisional.is_some(),
+                    self.start_cue_ms,
                 ))]
             }
             _ => Vec::new(),
@@ -495,6 +505,16 @@ mod tests {
             Some(Outcome::Final(v)) => assert_eq!(v["capture"]["id"], "s1"),
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_start_cue_is_announced_in_the_start_message() {
+        let mut client = StreamClient::new(1 << 20).with_start_cue(300);
+        client.set_format(48_000);
+        assert_eq!(texts(&client.on_open())[0]["start_cue_ms"], 300);
+        let mut client = StreamClient::new(1 << 20);
+        client.set_format(48_000);
+        assert_eq!(texts(&client.on_open())[0].get("start_cue_ms"), None);
     }
 
     #[test]

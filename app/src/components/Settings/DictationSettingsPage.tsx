@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AccessibilityNotice } from '@/components/AccessibilityGate/AccessibilityGate';
 import { DictationReadinessChecklist } from '@/components/CapturesTab/DictationReadinessChecklist';
@@ -112,6 +113,7 @@ export function DictationSettingsPage() {
           description={t('settings.captures.dictation.preview.description')}
           action={<HudPreview enabled={hotkeyEnabled} />}
         />
+        <SoundCueRows />
       </SettingSection>
 
       <SettingSection title={t('settings.captures.dictation.sectionOutput')}>
@@ -231,6 +233,67 @@ function ChordAction({
         {t('settings.captures.dictation.pushToTalk.change')}
       </Button>
     </div>
+  );
+}
+
+/**
+ * The dictation chimes, played natively by Rust (see useSoundCueSync). The
+ * volume is saved and previewed when the slider is let go, not while it moves.
+ */
+function SoundCueRows() {
+  const { t } = useTranslation();
+  const platform = usePlatform();
+  const { settings, update } = useCaptureSettings();
+  const enabled = settings?.sound_cues ?? true;
+  const saved = settings?.sound_cue_volume ?? 0.5;
+  const [volume, setVolume] = useState(saved);
+  useEffect(() => setVolume(saved), [saved]);
+
+  if (!platform.metadata.isTauri) return null;
+
+  const commit = () => {
+    if (volume === saved) return;
+    update({ sound_cue_volume: volume });
+    invoke('preview_sound_cue', { volume }).catch((err) =>
+      console.warn('[sound-cues] preview failed:', err),
+    );
+  };
+
+  return (
+    <>
+      <SettingRow
+        htmlFor="soundCues"
+        title={t('settings.captures.dictation.soundCues.title')}
+        description={t('settings.captures.dictation.soundCues.description')}
+        action={
+          <Toggle
+            id="soundCues"
+            checked={enabled}
+            onCheckedChange={(v) => update({ sound_cues: v })}
+          />
+        }
+      />
+      <SettingRow
+        htmlFor="soundCueVolume"
+        title={t('settings.captures.dictation.soundCueVolume.title')}
+        description={t('settings.captures.dictation.soundCueVolume.description')}
+        action={
+          <input
+            id="soundCueVolume"
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volume}
+            disabled={!enabled}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            onPointerUp={commit}
+            onKeyUp={commit}
+            className="w-[240px] cursor-pointer accent-accent disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        }
+      />
+    </>
   );
 }
 

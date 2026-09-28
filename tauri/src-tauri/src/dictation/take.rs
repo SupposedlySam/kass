@@ -14,6 +14,7 @@ use super::audio;
 use super::client::Outcome;
 use super::delivery::{self, Delivery};
 use super::stream::{self, Recovery};
+use crate::sound_cues::Cue;
 
 /// Shortest take worth transcribing.
 pub const MIN_RECORDING: Duration = Duration::from_millis(500);
@@ -49,6 +50,20 @@ impl PillEvent {
         Self::Error {
             message,
             visible_ms,
+        }
+    }
+
+    /// The sound this state change plays. `Transcribing` is sent the moment
+    /// the microphone closes on a take long enough to transcribe, so the stop
+    /// cue can't bleed into the recording; every error, including a take too
+    /// short to keep, plays the error cue. A take with nothing to paste
+    /// finishes as `Done`: silence isn't a failure. The start cue is played
+    /// by `dictation::start` itself, before the microphone opens.
+    pub fn cue(&self) -> Option<Cue> {
+        match self {
+            PillEvent::Transcribing { .. } => Some(Cue::Stop),
+            PillEvent::Error { .. } => Some(Cue::Error),
+            _ => None,
         }
     }
 }
@@ -471,6 +486,27 @@ mod tests {
         })
         .await;
         assert!(env.events().is_empty());
+    }
+
+    #[test]
+    fn stopping_and_errors_play_cues_but_done_is_silent() {
+        assert_eq!(
+            PillEvent::Transcribing { elapsed_ms: 900 }.cue(),
+            Some(Cue::Stop)
+        );
+        assert_eq!(PillEvent::error("boom").cue(), Some(Cue::Error));
+        assert_eq!(
+            PillEvent::error(delivery::SHORT_RECORDING_MESSAGE).cue(),
+            Some(Cue::Error)
+        );
+        for silent in [
+            PillEvent::Preparing,
+            PillEvent::Recording,
+            PillEvent::Refining,
+            PillEvent::Done,
+        ] {
+            assert_eq!(silent.cue(), None);
+        }
     }
 
     #[test]

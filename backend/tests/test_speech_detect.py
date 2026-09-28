@@ -1,5 +1,8 @@
 """The voice detector that keeps Whisper off audio nobody spoke into."""
 
+import wave
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -7,6 +10,7 @@ from backend.services import speech_detect
 from backend.services.speech_detect import SpeechDetector, has_speech
 
 RATE = 48000
+SOUNDS = Path(__file__).resolve().parents[2] / "tauri" / "src-tauri" / "sounds"
 
 
 def room_noise(seconds, level=300, seed=0):
@@ -39,6 +43,43 @@ def test_silence_and_room_noise_are_not_speech():
 
 def test_a_voice_is_speech():
     assert has_speech(np.concatenate([room_noise(0.5), voice(1.5), room_noise(0.5)]), RATE)
+
+
+def with_start_cue(take, mic_open_ms):
+    """``take`` with the dictation start cue picked up by the microphone
+    ``mic_open_ms`` after it began, as loud as the file itself."""
+    with wave.open(str(SOUNDS / "start.wav")) as w:
+        rate = w.getframerate()
+        cue = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
+    cue = np.interp(np.arange(0, len(cue), rate / RATE), np.arange(len(cue)), cue)
+    heard = cue[round(mic_open_ms * RATE / 1000) :]
+    mixed = take.astype(np.float32)
+    mixed[: len(heard)] += heard
+    return np.clip(mixed, -32768, 32767).astype(np.int16)
+
+
+START_CUE_SPAN = RATE * 300 // 1000  # sound_cues::START_CUE_SPAN_MS
+
+
+@pytest.mark.parametrize("mic_open_ms", [20, 100, 160])
+def test_the_start_cue_in_a_silent_take_is_not_speech(mic_open_ms):
+    take = with_start_cue(room_noise(2, level=30), mic_open_ms)
+    # A loud chime reads as a voice to Silero...
+    unaware = SpeechDetector(RATE)
+    unaware.feed(take)
+    assert unaware.heard(0, len(take))
+    # ...so a voice where the cue can be doesn't count.
+    detector = SpeechDetector(RATE, ignore_before=START_CUE_SPAN)
+    detector.feed(take)
+    assert not detector.heard(0, len(take))
+
+
+def test_speech_after_the_start_cue_is_heard():
+    take = with_start_cue(np.concatenate([room_noise(0.3, level=30), voice(1.0)]), 0)
+    detector = SpeechDetector(RATE, ignore_before=START_CUE_SPAN)
+    detector.feed(take)
+    assert detector.heard(0, len(take))
+    assert not detector.heard(0, START_CUE_SPAN)
 
 
 def test_float_audio_at_16k_is_checked_too():

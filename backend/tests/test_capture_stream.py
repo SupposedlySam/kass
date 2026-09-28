@@ -22,7 +22,8 @@ class HeardWhenLoud:
     rightly ignores (it has its own tests).
     """
 
-    def __init__(self, rate):
+    def __init__(self, rate, ignore_before=0):
+        self.ignore_before = ignore_before
         self.loud = []
         self.samples = 0
 
@@ -52,6 +53,18 @@ def make_session(tmp_path, monkeypatch, **settings):
         send,
     )
     return session, events
+
+
+def test_the_start_cue_span_reaches_the_voice_detector(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    monkeypatch.setattr(capture_stream, "SpeechDetector", HeardWhenLoud)
+    start = dict(type="start", protocol_version=1, sample_rate=48000, channels=1, encoding="pcm_s16le")
+    session = capture_stream.StreamingCapture({**start, "start_cue_ms": 300}, CaptureSettingsResponse(), None)
+    assert session.speech.ignore_before == 14400
+    assert capture_stream.StreamingCapture(start, CaptureSettingsResponse(), None).speech.ignore_before == 0
+    for bad in (-1, 5000, "300", True, 0.3):
+        with pytest.raises(ValueError, match="start_cue_ms"):
+            capture_stream.StreamingCapture({**start, "start_cue_ms": bad}, CaptureSettingsResponse(), None)
 
 
 def append(session, seconds, amplitude=1000):
