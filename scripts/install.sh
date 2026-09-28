@@ -6,9 +6,8 @@
 #
 # Checks what the build needs and says how to install anything missing,
 # pulls the latest code, builds the server (only when it changed) and the
-# app, and replaces /Applications/Voicebox.app. It also builds the Voicebox
-# Input input method (only when it changed) into ~/Library/Input Methods.
-# Every build is signed with the same identity, so updates keep the app's
+# app, and replaces /Applications/Voicebox.app. It removes the Voicebox
+# Input input method that earlier versions installed. Every build is signed with the same identity, so updates keep the app's
 # privacy permissions.
 #
 # Options:
@@ -212,25 +211,6 @@ VOICEBOX_APP="$app" ./scripts/build-local-app.sh
 built=tauri/src-tauri/target/release/bundle/macos/Voicebox.app
 ok "Built and signed with \"$(codesign -dvv "$built" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)\""
 
-step "Building the input method"
-im_built="tauri/input-method/build/Voicebox Input.app"
-im_inputs() {
-  git rev-parse HEAD:tauri/input-method
-  git diff HEAD -- tauri/input-method
-  git ls-files --others --exclude-standard tauri/input-method
-  cat scripts/build-input-method.sh scripts/test-input-method.sh
-  ./scripts/signing-identity.sh
-}
-im_stamp=$(stamp_of im_inputs)
-im_stamp_file=tauri/input-method/build/.voicebox-input-stamp
-if [ -d "$im_built" ] && [ -f "$im_stamp_file" ] && [ "$(cat "$im_stamp_file")" = "$im_stamp" ]; then
-  ok "Unchanged since the last build"
-else
-  ./scripts/build-input-method.sh
-  echo "$im_stamp" >"$im_stamp_file"
-  ok "Input method built"
-fi
-
 # ─── Install ──────────────────────────────────────────────────────────
 
 step "Installing to $app"
@@ -269,22 +249,29 @@ if $had_app && [ "$old_requirement" != "$new_requirement" ]; then
   warn "It's signed the same way from now on, so updates keep them."
 fi
 
-step "Installing the input method"
+# Earlier versions installed the Voicebox Input input method. Switch off it
+# first if it's the selected keyboard, so removing it doesn't leave the
+# input menu pointing at nothing.
 im_app="$HOME/Library/Input Methods/Voicebox Input.app"
-if [ -d "$im_app" ] && diff -rq "$im_built" "$im_app" >/dev/null 2>&1; then
-  ok "Up to date"
-else
-  # macOS starts it again the next time it's needed, from the new copy.
+if [ -d "$im_app" ]; then
+  step "Removing the Voicebox Input input method"
+  swift - <<'SWIFT' >/dev/null 2>&1 || warn "Could not turn off Voicebox Input; remove it from your input sources in System Settings."
+import Carbon
+
+let filter = [kTISPropertyInputSourceID as String: "sh.voicebox.inputmethod.VoiceboxInput"] as CFDictionary
+let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource] ?? []
+for source in sources {
+    if let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsSelected),
+       CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(raw).takeUnretainedValue()),
+       let layout = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue() {
+        TISSelectInputSource(layout)
+    }
+    TISDisableInputSource(source)
+}
+SWIFT
   pkill -f "$im_app/Contents/MacOS/" 2>/dev/null || true
-  mkdir -p "$(dirname "$im_app")"
   rm -rf "$im_app"
-  ditto "$im_built" "$im_app"
-  ok "Installed to $im_app"
-fi
-if ! defaults read com.apple.inputsources AppleEnabledThirdPartyInputSources 2>/dev/null |
-  grep -q "sh.voicebox.inputmethod.VoiceboxInput"; then
-  warn "To let Voicebox type through its input method, click \"voicebox input\""
-  warn "in the status bar at the bottom of the Voicebox window (it types like ABC)."
+  ok "Removed $im_app"
 fi
 
 if [ "$launch" = 1 ]; then

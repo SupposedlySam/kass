@@ -138,7 +138,6 @@ fn insert_bench() {
     let ax = crate::text_insert::Accessibility;
     // The real step, minus the input-source check (see `assume_ascii`).
     let keys = crate::keystroke_insert::assume_ascii::KeystrokesAssumingAscii;
-    let im = crate::input_method::InputMethod::new();
     let paste = crate::clipboard::Paste::new(None);
 
     for (label, text) in [("short", SHORT), ("long", LONG), ("multi-line", MULTILINE)] {
@@ -148,7 +147,6 @@ fn insert_bench() {
         );
         report("Accessibility", &ax, pid, text);
         report("Keystrokes", &keys, pid, text);
-        report("Voicebox Input", &im, pid, text);
         report("Clipboard + ⌘V", &paste, pid, text);
         // Let the last background clipboard restore run.
         std::thread::sleep(crate::clipboard::PASTE_CONSUME + Duration::from_millis(100));
@@ -197,16 +195,6 @@ fn insert_bench() {
     decline_cost(
         "Keystrokes, target not in front",
         &keys,
-        &Request {
-            pid: finder,
-            bundle_id: Some("com.apple.finder"),
-            role: None,
-            text: SHORT,
-        },
-    );
-    decline_cost(
-        "Voicebox Input, other app",
-        &im,
         &Request {
             pid: finder,
             bundle_id: Some("com.apple.finder"),

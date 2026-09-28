@@ -1,9 +1,8 @@
 //! The ordered fallback chain that delivers dictated text into another app.
 //!
 //! Each [`Inserter`] is one way of getting text into the focused field:
-//! Accessibility write, the Voicebox input method, typed keystrokes, and
-//! clipboard + ⌘V. [`deliver`] tries them in order and stops at the first
-//! one that inserted the text.
+//! Accessibility write, typed keystrokes, and clipboard + ⌘V. [`deliver`]
+//! tries them in order and stops at the first one that inserted the text.
 //!
 //! The one rule every step must keep: fall through only when **nothing was
 //! inserted**. A step that sent something it cannot confirm reports
@@ -20,7 +19,6 @@ use std::time::{Duration, Instant};
 pub enum Method {
     Accessibility,
     Keystrokes,
-    InputMethod,
     Clipboard,
 }
 
@@ -142,8 +140,7 @@ fn ms(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
-/// Wraps a step that acts on the frontmost app (keystrokes, the input
-/// method, ⌘V) so the target is brought to the front first. `bring_front`
+/// Wraps a step that acts on the frontmost app (keystrokes, ⌘V) so the target is brought to the front first. `bring_front`
 /// must be cheap when the target is already in front: it runs before every
 /// wrapped step. If it fails, the step declines without running.
 pub struct InFront<'a, F: Fn() -> Result<(), String>> {
@@ -256,14 +253,9 @@ mod tests {
         deliver_with_clock(chain, &REQ, || base + clock.get())
     }
 
-    const ORDER: [Method; 4] = [
-        Method::Accessibility,
-        Method::Keystrokes,
-        Method::InputMethod,
-        Method::Clipboard,
-    ];
+    const ORDER: [Method; 3] = [Method::Accessibility, Method::Keystrokes, Method::Clipboard];
 
-    /// Every combination of per-step results over the four-step chain:
+    /// Every combination of per-step results over the three-step chain:
     /// the chain stops at the first non-declined step, calls nothing after
     /// it, and reports that step.
     #[test]
@@ -278,52 +270,50 @@ mod tests {
         for a in &options {
             for b in &options {
                 for c in &options {
-                    for d in &options {
-                        let clock = Cell::new(Duration::ZERO);
-                        let results = [a, b, c, d];
-                        let fakes: Vec<Fake> = ORDER
-                            .iter()
-                            .zip(results)
-                            .enumerate()
-                            .map(|(i, (m, r))| Fake::new(*m, r.clone(), 1 + i as u64, &clock))
-                            .collect();
-                        let chain: Vec<&dyn Inserter> =
-                            fakes.iter().map(|f| f as &dyn Inserter).collect();
-                        let report = run(&chain, &clock);
+                    let clock = Cell::new(Duration::ZERO);
+                    let results = [a, b, c];
+                    let fakes: Vec<Fake> = ORDER
+                        .iter()
+                        .zip(results)
+                        .enumerate()
+                        .map(|(i, (m, r))| Fake::new(*m, r.clone(), 1 + i as u64, &clock))
+                        .collect();
+                    let chain: Vec<&dyn Inserter> =
+                        fakes.iter().map(|f| f as &dyn Inserter).collect();
+                    let report = run(&chain, &clock);
 
-                        let stop = results
-                            .iter()
-                            .position(|r| !matches!(r, Attempt::Declined(_)));
-                        let expected_len = stop.map_or(4, |i| i + 1);
-                        assert_eq!(report.steps.len(), expected_len);
-                        for (i, fake) in fakes.iter().enumerate() {
-                            assert_eq!(fake.called(), usize::from(i < expected_len));
-                        }
-                        let delivery = report.delivery();
-                        match stop.map(|i| (i, results[i])) {
-                            None => assert_eq!(delivery, Delivery::Exhausted),
-                            Some((i, Attempt::Inserted { verified })) => assert_eq!(
-                                delivery,
-                                Delivery::Inserted {
-                                    method: ORDER[i],
-                                    verified: *verified
-                                }
-                            ),
-                            Some((i, Attempt::Uncertain(m))) => assert_eq!(
-                                delivery,
-                                Delivery::Uncertain {
-                                    method: ORDER[i],
-                                    message: m.clone()
-                                }
-                            ),
-                            Some((_, Attempt::Declined(_))) => unreachable!(),
-                        }
-                        cases += 1;
+                    let stop = results
+                        .iter()
+                        .position(|r| !matches!(r, Attempt::Declined(_)));
+                    let expected_len = stop.map_or(3, |i| i + 1);
+                    assert_eq!(report.steps.len(), expected_len);
+                    for (i, fake) in fakes.iter().enumerate() {
+                        assert_eq!(fake.called(), usize::from(i < expected_len));
                     }
+                    let delivery = report.delivery();
+                    match stop.map(|i| (i, results[i])) {
+                        None => assert_eq!(delivery, Delivery::Exhausted),
+                        Some((i, Attempt::Inserted { verified })) => assert_eq!(
+                            delivery,
+                            Delivery::Inserted {
+                                method: ORDER[i],
+                                verified: *verified
+                            }
+                        ),
+                        Some((i, Attempt::Uncertain(m))) => assert_eq!(
+                            delivery,
+                            Delivery::Uncertain {
+                                method: ORDER[i],
+                                message: m.clone()
+                            }
+                        ),
+                        Some((_, Attempt::Declined(_))) => unreachable!(),
+                    }
+                    cases += 1;
                 }
             }
         }
-        assert_eq!(cases, 256);
+        assert_eq!(cases, 64);
     }
 
     #[test]
@@ -331,14 +321,13 @@ mod tests {
         let clock = Cell::new(Duration::ZERO);
         let ax = Fake::new(Method::Accessibility, declined(), 3, &clock);
         let keys = Fake::new(Method::Keystrokes, declined(), 1, &clock);
-        let im = Fake::new(Method::InputMethod, declined(), 2, &clock);
         let paste = Fake::new(
             Method::Clipboard,
             Attempt::Inserted { verified: false },
             5,
             &clock,
         );
-        let report = run(&[&ax, &keys, &im, &paste], &clock);
+        let report = run(&[&ax, &keys, &paste], &clock);
 
         assert_eq!(
             report.delivery(),
@@ -347,8 +336,8 @@ mod tests {
                 verified: false
             }
         );
-        assert_eq!(report.total(), Duration::from_millis(11));
-        assert_eq!(report.fallback_cost(), Duration::from_millis(6));
+        assert_eq!(report.total(), Duration::from_millis(9));
+        assert_eq!(report.fallback_cost(), Duration::from_millis(4));
         let methods: Vec<Method> = report.steps.iter().map(|s| s.method).collect();
         assert_eq!(methods, ORDER);
     }

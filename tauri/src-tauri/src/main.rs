@@ -6,9 +6,7 @@ mod dictation;
 mod focus_capture;
 #[cfg(desktop)]
 mod hotkey_monitor;
-mod input_method;
 mod input_monitoring;
-mod input_source;
 mod insert_chain;
 #[cfg(test)]
 mod insert_bench;
@@ -779,20 +777,6 @@ fn check_input_monitoring_permission() -> bool {
     input_monitoring::is_trusted()
 }
 
-/// Whether Voicebox Input is installed, enabled and selected, for the status
-/// bar. Sync so Tauri runs it on the main thread, where TIS calls belong.
-#[command]
-fn voicebox_input_state() -> input_source::InputSourceState {
-    input_source::state()
-}
-
-/// Enable Voicebox Input and select it as the keyboard, so the insertion
-/// chain can use it. Sync for the same reason as `voicebox_input_state`.
-#[command]
-fn activate_voicebox_input() -> Result<input_source::InputSourceState, String> {
-    input_source::activate()
-}
-
 /// Holds the lazily-spawned global hotkey monitor. The monitor is `None`
 /// until the user opts in via the Captures settings toggle — that opt-in is
 /// what triggers the macOS Input Monitoring TCC prompt, so a fresh-install
@@ -1050,14 +1034,12 @@ fn run_insert_chain(
         bring_front: &bring_front,
     };
     let keys = keystroke_insert::Keystrokes::new();
-    let input_method = input_method::InputMethod::new();
     let paste = clipboard::Paste::new(prepared);
-    let (keys, input_method, paste) = (in_front(&keys), in_front(&input_method), in_front(&paste));
+    let (keys, paste) = (in_front(&keys), in_front(&paste));
     // Fastest first. In TextEdit a verified Accessibility write lands in
-    // 3-6 ms, the input method in 5-8 ms at any length, typing ~6 ms plus
-    // 2.7 ms per keystroke, and a paste ~20 ms (`insert_bench.rs`).
-    let chain: [&dyn insert_chain::Inserter; 4] =
-        [&text_insert::Accessibility, &input_method, &keys, &paste];
+    // 3-6 ms, typing ~6 ms plus 2.7 ms per keystroke, and a paste ~20 ms
+    // (`insert_bench.rs`).
+    let chain: [&dyn insert_chain::Inserter; 3] = [&text_insert::Accessibility, &keys, &paste];
     insert_chain::deliver(
         &chain,
         &insert_chain::Request {
@@ -1262,8 +1244,6 @@ pub fn run() {
             check_input_monitoring_permission,
             open_accessibility_settings,
             open_input_monitoring_settings,
-            voicebox_input_state,
-            activate_voicebox_input,
             paste_final_text,
             enable_hotkey,
             disable_hotkey,
