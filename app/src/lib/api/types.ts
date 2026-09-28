@@ -52,7 +52,56 @@ export interface PersonalExample {
   said: string;
   meant: string;
   created_at: string | null;
+  /** The app a correction was made in. */
+  app_bundle_id?: string | null;
+  app_name?: string | null;
 }
+
+/** A named writing style that apps are assigned to (docs/plans/PER_APP_STYLE.md). */
+export interface WritingStyle {
+  id: string;
+  name: string;
+  position: number;
+  /** The style of every app the user hasn't assigned. */
+  is_default: boolean;
+  punctuation_style: PunctuationStyle;
+  capitalize_first: boolean;
+  smart_cleanup: boolean;
+  preserve_technical: boolean;
+}
+
+/**
+ * An app and the style its dictation uses; `confirmed` once the user chose
+ * it. `corrections` counts its captures whose corrections teach that style;
+ * `suggested_style_id` is what most apps of its App Store category use.
+ */
+export interface StyledApp {
+  bundle_id: string;
+  name?: string | null;
+  style_id: string;
+  confirmed: boolean;
+  count: number;
+  corrections: number;
+  suggested_style_id?: string | null;
+}
+
+export interface WritingStylesResponse {
+  styles: WritingStyle[];
+  apps: StyledApp[];
+  max_styles: number;
+  /** Memory one style's cached prompt takes in the cleanup model, estimated. */
+  cache_mb_per_style?: number | null;
+}
+
+/** What happens to an app's corrections when it moves to another style. */
+export type MovedCorrections = 'bring' | 'leave';
+
+export type WritingStyleUpdate = Partial<
+  Pick<
+    WritingStyle,
+    'name' | 'punctuation_style' | 'capitalize_first' | 'smart_cleanup' | 'preserve_technical'
+  >
+> & { is_default?: true };
 
 export interface CorrectionNote {
   id: string;
@@ -92,6 +141,9 @@ export interface RefinementFlags {
   self_correction: boolean;
   preserve_technical: boolean;
   punctuation_style?: PunctuationStyle;
+  capitalize_first?: boolean;
+  /** The writing style whose habits, examples and rules cleanup used. */
+  style?: string | null;
 }
 
 /** Why a capture's cleanup is flagged for the user to check. */
@@ -124,6 +176,8 @@ export interface CaptureResponse {
   command_selection?: string | null;
   command_instruction?: string | null;
   command_transform?: string | null;
+  /** The writing style the capture was cleaned up with. */
+  style_id?: string | null;
   created_at: string;
 }
 
@@ -131,6 +185,34 @@ export interface CaptureListResponse {
   items: CaptureResponse[];
   total: number;
 }
+
+/** One app in the Captures app list. */
+export interface CaptureAppCount {
+  app_bundle_id: string;
+  app_name?: string | null;
+  count: number;
+  last_captured_at?: string | null;
+  /** The style the app's dictation uses; the default until the user chooses. */
+  style_id?: string | null;
+  confirmed: boolean;
+  suggested_style_id?: string | null;
+}
+
+/**
+ * Response of ``GET /captures/apps``. ``unknown_count`` is the captures with
+ * no app recorded: uploads, and dictation from before apps were saved.
+ */
+export interface CaptureAppsResponse {
+  total: number;
+  unknown_count: number;
+  apps: CaptureAppCount[];
+}
+
+/** Which captures the list shows: every app's, one app's, or those with no app. */
+export type CaptureAppFilter =
+  | { kind: 'all' }
+  | { kind: 'app'; bundleId: string }
+  | { kind: 'unknown' };
 
 /**
  * Response of ``POST /captures``. Adds ``auto_refine`` and ``allow_auto_paste``

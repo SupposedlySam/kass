@@ -54,6 +54,7 @@ pub struct StreamClient {
     outcome: Option<Outcome>,
     on_provisional: Option<Box<dyn Fn(String) + Send>>,
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
+    app_sent: bool,
     field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
     context_sent: bool,
     start_cue_ms: u32,
@@ -90,6 +91,7 @@ impl StreamClient {
             outcome: None,
             on_provisional: None,
             target_app: None,
+            app_sent: false,
             field_before: None,
             context_sent: false,
             start_cue_ms: 0,
@@ -131,12 +133,25 @@ impl StreamClient {
         }
     }
 
-    /// Everything that goes out before audio: context and selection.
+    /// Everything that goes out before audio: the app, context and selection.
     fn preamble(&mut self) -> Vec<Action> {
-        self.context_action()
+        self.app_action()
             .into_iter()
+            .chain(self.context_action())
             .chain(self.selection_action())
             .collect()
+    }
+
+    /// The `app` message, the first time the target app is known. The server
+    /// picks the app's writing style from it, so it goes out with the first
+    /// audio after the focus snapshot, well before a phrase is cleaned up.
+    fn app_action(&mut self) -> Option<Action> {
+        if self.app_sent || !self.ready {
+            return None;
+        }
+        let app = self.target_app.as_ref().and_then(|app| app())?;
+        self.app_sent = true;
+        Some(Action::Text(protocol::app_message(&app)))
     }
 
     /// The selection a command take rewrites, read after key-down. Sends a
@@ -160,8 +175,9 @@ impl StreamClient {
         self
     }
 
-    /// Name the take's target app in `finish`. Asked only then, since the
-    /// app is found after the take starts.
+    /// Name the take's target app: in an `app` message as soon as it is known
+    /// (the focus snapshot is taken just after the take starts), and again in
+    /// `finish` for servers that only read it there.
     pub fn with_target_app(
         mut self,
         target_app: impl Fn() -> Option<TargetApp> + Send + 'static,
@@ -490,11 +506,13 @@ mod tests {
             Some(TargetApp {
                 bundle_id: Some("com.apple.Notes".into()),
                 name: Some("Notes".into()),
+                category: None,
             })
         });
         client.set_format(48_000);
         client.on_open();
-        ready(&mut client);
+        // Known at ready, so the app message went out then.
+        assert_eq!(texts(&ready(&mut client))[0]["type"], "app");
         assert_eq!(
             texts(&client.request_finish()),
             vec![serde_json::json!({
@@ -502,6 +520,54 @@ mod tests {
                 "app": { "bundle_id": "com.apple.Notes", "name": "Notes" },
             })]
         );
+    }
+
+    #[test]
+    fn the_app_goes_out_once_with_the_first_audio_after_focus_is_known() {
+        let focus = std::sync::Arc::new(std::sync::Mutex::new(None::<TargetApp>));
+        let read = focus.clone();
+        let mut client =
+            StreamClient::new(1 << 20).with_target_app(move || read.lock().unwrap().clone());
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        // The focus snapshot hasn't landed: audio goes alone.
+        assert!(texts(&client.push_audio(&[1])).is_empty());
+        *focus.lock().unwrap() = Some(TargetApp {
+            bundle_id: Some("com.tinyspeck.slackmacgap".into()),
+            name: Some("Slack".into()),
+            category: None,
+        });
+        let actions = client.push_audio(&[2]);
+        // Ahead of the audio, so the style is set before anything is cleaned.
+        assert!(matches!(actions[0], Action::Text(_)));
+        assert_eq!(
+            texts(&actions),
+            vec![serde_json::json!({
+                "type": "app",
+                "bundle_id": "com.tinyspeck.slackmacgap",
+                "name": "Slack",
+            })]
+        );
+        assert!(texts(&client.push_audio(&[3])).is_empty());
+    }
+
+    #[test]
+    fn the_app_known_before_ready_goes_out_with_the_buffered_audio() {
+        let mut client = StreamClient::new(1 << 20).with_target_app(|| {
+            Some(TargetApp {
+                bundle_id: Some("com.apple.mail".into()),
+                name: Some("Mail".into()),
+                category: None,
+            })
+        });
+        client.set_format(48_000);
+        client.on_open();
+        client.push_audio(&[1]);
+        let sent = ready(&mut client);
+        assert!(matches!(sent[0], Action::Text(_)));
+        assert!(matches!(sent[1], Action::Binary(_)));
+        assert_eq!(texts(&sent)[0]["type"], "app");
     }
 
     #[test]

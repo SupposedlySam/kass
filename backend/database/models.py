@@ -97,7 +97,47 @@ class Capture(Base):
     command_selection = Column(Text, nullable=True)
     command_instruction = Column(Text, nullable=True)
     command_transform = Column(String, nullable=True)
+    # The writing style the capture was cleaned up with (docs/plans/PER_APP_STYLE.md).
+    style_id = Column(String, nullable=True)
+    # The app's App Store category (LSApplicationCategoryType), which suggests
+    # a style for a new app.
+    app_category = Column(String, nullable=True)
+    # The style this capture's corrections teach, when the user left them
+    # behind as its app moved to another style. None follows the app.
+    teaches_style_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WritingStyle(Base):
+    """A named writing style that apps are assigned to (docs/plans/PER_APP_STYLE.md).
+
+    Its calibration, habits, examples and rules live in the writing style and
+    correction notes files, keyed by ``id``.
+    """
+
+    __tablename__ = "writing_styles"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    name = Column(String, nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    # The style of every app the user hasn't assigned. Exactly one row.
+    is_default = Column(Boolean, nullable=False, default=False)
+    punctuation_style = Column(String, nullable=False, default="standard")
+    capitalize_first = Column(Boolean, nullable=False, default=True)
+    smart_cleanup = Column(Boolean, nullable=False, default=True)
+    preserve_technical = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AppStyle(Base):
+    """The style the user chose for an app. An app without a row uses the default and is "new"."""
+
+    __tablename__ = "app_styles"
+
+    bundle_id = Column(String, primary_key=True)
+    app_name = Column(String, nullable=True)
+    style_id = Column(String, ForeignKey("writing_styles.id"), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class CaptureFeedback(Base):

@@ -237,6 +237,12 @@ def idle_generation():
         return None if busy else _generation
 
 
+def dictating():
+    """Whether a dictation is recording or finishing right now."""
+    with _lock:
+        return bool(_foreground_count) or time.monotonic() < _recording_until
+
+
 def interrupted(generation):
     return generation != _generation
 
@@ -285,10 +291,15 @@ def _prepare():
         groups = deepcopy(_state["groups"])
         active = deepcopy(_active)
     with database_session.SessionLocal() as db:
+        from ..styles import flags_for, load as load_styles
+
         samples = collect(db, groups)
         settings = get_capture_settings(db)
         size = settings.llm_model or "0.6B"
         configured_stt = settings.stt_model or "base"
+        # Every writing style's flags are evaluated, so an accepted adapter
+        # covers each style (docs/plans/PER_APP_STYLE.md).
+        style_flags = [flags_for(style, settings).to_dict() for style in load_styles(db).styles]
     counts, train_ready = readiness(samples)
     current_stt = speech_model(configured_stt)
     raw_tests = [s for s in samples if s["target"] == "raw" and s["split"] == "test" and s.get("audio")]
@@ -315,6 +326,9 @@ def _prepare():
         "train_ready": train_ready and bool(path),
         "has_training_data": train_ready,
         "baseline_revision": _state["revision"],
+        "style_flags": style_flags,
+        # Prompts for learned punctuation read each style's habits from here.
+        "data_dir": str(config.get_data_dir()),
     }
     fingerprint = digest(
         {

@@ -2,6 +2,7 @@
 
 import mlx_lm.models.cache as mlx_cache
 
+from backend.backends import qwen_llm_backend
 from backend.backends.qwen_llm_backend import MLXQwenLLMBackend
 
 CLEANUP = [0, *range(100, 300)]
@@ -26,7 +27,7 @@ def call(model, tokens, generated):
     """What a generate call does with the cache: reuse a prefix, then hold prompt + output."""
     cache = model._reusable_cache(tokens)
     reused = len(model._cached_tokens)
-    model._cached_tokens = tokens + generated
+    model._set_cached_tokens(tokens + generated)
     return cache, reused
 
 
@@ -48,15 +49,23 @@ def test_the_same_prompt_keeps_trimming_one_cache(monkeypatch):
     first, _ = call(model, CLEANUP + [1, 2], [3])
     second, reused = call(model, CLEANUP + [1, 2, 4], [5])
     assert second is first and reused == len(CLEANUP) + 2
-    assert not model._parked
+    assert len(model._prompt_caches) == 1
 
 
-def test_unloading_forgets_parked_caches(monkeypatch):
+def test_a_long_selections_cache_is_not_kept_once_unused(monkeypatch):
+    monkeypatch.setattr(qwen_llm_backend, "KEPT_CACHE_TOKENS", 150)
+    model = backend(monkeypatch)
+    call(model, COMMAND + list(range(1000, 1100)), [1])
+    cleanup, _ = call(model, CLEANUP, [2])
+    assert [entry.cache for entry in model._prompt_caches] == [cleanup]
+
+
+def test_unloading_forgets_every_cache(monkeypatch):
     model = backend(monkeypatch)
     call(model, CLEANUP, [1])
     call(model, COMMAND, [2])
-    assert model._parked
+    assert len(model._prompt_caches) == 2
     model.tokenizer = object()
     monkeypatch.setattr("backend.backends.qwen_llm_backend.clear_mlx_cache", lambda: None)
     model.unload_model()
-    assert model._parked == [] and model._prompt_cache is None
+    assert model._prompt_caches == [] and model._entry is None

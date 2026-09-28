@@ -151,6 +151,10 @@ const settingsWritingStyleRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: '/writing-style',
   component: WritingStylePage,
+  // `?style=<id>` selects that style (a capture's settings button links here).
+  validateSearch: (search: Record<string, unknown>): { style?: string } => ({
+    style: typeof search.style === 'string' ? search.style : undefined,
+  }),
 });
 
 // Dictation, transcription and writing style used to share one page.

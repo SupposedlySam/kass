@@ -12,6 +12,10 @@ prompt style, how dictation phrases join across pauses, and a deterministic
 pass over refined text. The pass only ever changes punctuation and the case of
 a sentence's first letter, never words.
 
+Each writing style (styles.py) learns on its own: its calibration runs, and
+the corrections made in the apps assigned to it. ``style`` arguments are style
+ids; None is the default style.
+
 Everything is local: one JSON file in the data directory.
 """
 
@@ -244,15 +248,26 @@ def _path():
     return config.get_data_dir() / "writing-style.json"
 
 
+def _empty_style() -> dict:
+    return {"runs": 0, "last_run_at": None, "examples": [], "feedback_counts": _empty_counts()}
+
+
 def _empty_state() -> dict:
+    return {"version": 2, "styles": {}, "recent_paragraphs": [], "hidden_examples": []}
+
+
+def _migrate(loaded: dict) -> dict:
+    """Version 1 had one profile; it becomes the style the global settings moved into."""
+    if loaded.get("version", 1) >= 2:
+        return {**_empty_state(), **loaded}
+    from .styles import MIGRATED_STYLE
+
+    profile = {key: loaded[key] for key in _empty_style() if key in loaded}
     return {
-        "version": 1,
-        "runs": 0,
-        "last_run_at": None,
-        "examples": [],
-        "recent_paragraphs": [],
-        "feedback_counts": _empty_counts(),
-        "hidden_examples": [],
+        **_empty_state(),
+        "styles": {MIGRATED_STYLE: {**_empty_style(), **profile}},
+        "recent_paragraphs": loaded.get("recent_paragraphs", []),
+        "hidden_examples": loaded.get("hidden_examples", []),
     }
 
 
@@ -261,13 +276,30 @@ def _load() -> dict:
     with _lock:
         if _state is None:
             try:
-                _state = {**_empty_state(), **json.loads(_path().read_text())}
+                _state = _migrate(json.loads(_path().read_text()))
             except FileNotFoundError:
                 _state = _empty_state()
             except (OSError, ValueError):
                 logger.warning("Unreadable writing style profile; starting fresh", exc_info=True)
                 _state = _empty_state()
         return _state
+
+
+def _style_id(style: str | None) -> str:
+    if style is not None:
+        return style
+    from .styles import default_id
+
+    return default_id()
+
+
+def _profile(style: str | None) -> dict:
+    """``style``'s learned state; empty for a style that hasn't learned anything."""
+    return {**_empty_style(), **_load()["styles"].get(_style_id(style), {})}
+
+
+def _with_profile(state: dict, style: str | None, profile: dict) -> dict:
+    return {**state, "styles": {**state["styles"], _style_id(style): profile}}
 
 
 def _save(state: dict):
@@ -280,34 +312,34 @@ def _save(state: dict):
         _state = state
 
 
-def _counts(state: dict, extra: list | None = None) -> dict:
-    examples = state["examples"] + (extra or [])
-    return _merge(state["feedback_counts"], *(observe(e["shown"], e["written"]) for e in examples))
+def _counts(profile: dict, extra: list | None = None) -> dict:
+    examples = profile["examples"] + (extra or [])
+    return _merge(profile["feedback_counts"], *(observe(e["shown"], e["written"]) for e in examples))
 
 
-def habits() -> dict:
-    return decide(_counts(_load()))
+def habits(style: str | None = None) -> dict:
+    return decide(_counts(_profile(style)))
 
 
-def is_ready() -> bool:
-    state = _load()
-    return state["runs"] > 0 or sum(state["feedback_counts"]["boundary"].values()) >= 3
+def is_ready(style: str | None = None) -> bool:
+    profile = _profile(style)
+    return profile["runs"] > 0 or sum(profile["feedback_counts"]["boundary"].values()) >= 3
 
 
-def status() -> dict:
-    state = _load()
-    learned = habits()
+def status(style: str | None = None) -> dict:
+    profile = _profile(style)
+    learned = habits(style)
     return {
-        "ready": is_ready(),
-        "runs": state["runs"],
-        "last_run_at": state["last_run_at"],
-        "example_count": len(state["examples"]),
+        "ready": is_ready(style),
+        "runs": profile["runs"],
+        "last_run_at": profile["last_run_at"],
+        "example_count": len(profile["examples"]),
         "habits": summary(learned),
     }
 
 
-def apply_learned(text: str) -> str:
-    return apply_style(text, habits()) if is_ready() else text
+def apply_learned(text: str, style: str | None = None) -> str:
+    return apply_style(text, habits(style)) if is_ready(style) else text
 
 
 _INSTRUCTIONS = {
@@ -321,11 +353,11 @@ _INSTRUCTIONS = {
 }
 
 
-def prompt_section() -> str | None:
-    """Refinement instructions describing this user's own punctuation."""
-    if not is_ready():
+def prompt_section(style: str | None = None) -> str | None:
+    """Refinement instructions describing how the user punctuates in ``style``."""
+    if not is_ready(style):
         return None
-    codes = summary(habits())
+    codes = summary(habits(style))
     if not codes:
         return None
     lines = "\n".join(f"- {_INSTRUCTIONS[code]}" for code in codes)
@@ -337,51 +369,75 @@ def _as_spoken(text: str) -> str:
     return " ".join(re.sub(r"[^\w'\u2019$%-]", "", word) for word in text.split()).casefold()
 
 
-def prompt_example() -> tuple[str, str] | None:
-    """The user's latest calibration rewrite that differs from what was shown."""
-    if not is_ready():
+def prompt_example(style: str | None = None) -> tuple[str, str] | None:
+    """The user's latest calibration rewrite in ``style`` that differs from what was shown."""
+    if not is_ready(style):
         return None
-    for example in reversed(_load()["examples"]):
+    for example in reversed(_profile(style)["examples"]):
         if example["written"].strip() != example["shown"].strip():
             return example.get("said") or _as_spoken(example["shown"]), example["written"]
     return None
 
 
 def refresh_feedback(db) -> None:
-    """Recount refined-output corrections; called after a correction is saved."""
-    from ..database.models import CaptureFeedback
+    """Recount refined-output corrections for every style.
+
+    Called after a correction is saved and after an app moves to another
+    style: a correction counts for the style it teaches (``correction_style``).
+    """
+    from ..database.models import Capture, CaptureFeedback
+    from .styles import correction_style, snapshot
 
     rows = (
-        db.query(CaptureFeedback)
+        db.query(CaptureFeedback, Capture.teaches_style_id)
+        .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
         .filter(CaptureFeedback.target == "refined")
         .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
         .limit(200)
         .all()
     )
+    styles = snapshot()
     seen = set()
-    counts = []
-    for row in rows:
+    counts: dict[str, list] = {}
+    for row, teaches in rows:
         if row.capture_id in seen:
             continue
         seen.add(row.capture_id)
         try:
-            original = json.loads(row.snapshot).get("transcript_refined")
-        except (ValueError, TypeError):
+            captured = json.loads(row.snapshot)
+            original = captured.get("transcript_refined")
+        except (ValueError, TypeError, AttributeError):
             continue
         if original and max(len(original), len(row.expected_text)) <= 2000:
-            counts.append(observe(original, row.expected_text))
+            style = correction_style(styles, captured.get("app_bundle_id"), teaches)
+            counts.setdefault(style, []).append(observe(original, row.expected_text))
     with _lock:
-        state = dict(_load())
-        state["feedback_counts"] = _merge(*counts)
-        _save(state)
+        state = _load()
+        profiles = {
+            style_id: {**_empty_style(), **profile, "feedback_counts": _merge(*counts.get(style_id, []))}
+            for style_id, profile in state["styles"].items()
+        }
+        for style_id in counts.keys() - profiles.keys():
+            profiles[style_id] = {**_empty_style(), "feedback_counts": _merge(*counts[style_id])}
+        _save({**state, "styles": profiles})
 
 
-def reset() -> None:
+def reset(style: str | None = None) -> None:
+    """Forget ``style``'s calibration and habits; other styles keep theirs."""
     with _lock:
-        state = _empty_state()
-        state["recent_paragraphs"] = _load()["recent_paragraphs"]
-        _save(state)
-        _sessions.clear()
+        state = _load()
+        _save(_with_profile(state, style, _empty_style()))
+        for session_id in [key for key, value in _sessions.items() if value["style"] == _style_id(style)]:
+            del _sessions[session_id]
+    _examples_changed()
+
+
+def forget_style(style: str) -> None:
+    """Drop a deleted style's learned state."""
+    with _lock:
+        state = _load()
+        if style in state["styles"]:
+            _save({**state, "styles": {k: v for k, v in state["styles"].items() if k != style}})
     _examples_changed()
 
 
@@ -396,10 +452,10 @@ def _example_id(example: dict) -> str:
     return "calibration:" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def calibration_examples() -> list[dict]:
-    """Calibration rewrites the user edited, as "said, meant" examples."""
+def calibration_examples(style: str | None = None) -> list[dict]:
+    """``style``'s calibration rewrites the user edited, as "said, meant" examples."""
     examples = []
-    for example in _load()["examples"]:
+    for example in _profile(style)["examples"]:
         if example["written"].strip() == example["shown"].strip():
             continue
         examples.append(
@@ -458,13 +514,14 @@ def _session(session_id: str) -> dict:
     return session
 
 
-def start_calibration() -> dict:
-    """Pick this run's paragraphs; the caller cleans each one up before showing it."""
+def start_calibration(style: str | None = None) -> dict:
+    """Pick this run's paragraphs for ``style``; the caller cleans each one up before showing it."""
     with _lock:
         _expire_sessions()
         state = _load()
         session = {
             "id": uuid.uuid4().hex,
+            "style": _style_id(style),
             "paragraphs": _pick_paragraphs(state["recent_paragraphs"]),
             "step": 0,
             "examples": [],
@@ -474,6 +531,12 @@ def start_calibration() -> dict:
         }
         _sessions[session["id"]] = session
         return {"session_id": session["id"], "said": BY_ID[session["paragraphs"][0]].said}
+
+
+def session_style(session_id: str) -> str:
+    """The style a calibration run is teaching."""
+    with _lock:
+        return _session(session_id)["style"]
 
 
 def session_examples(session_id: str) -> list[tuple[str, str]]:
@@ -494,7 +557,7 @@ def present(session_id: str, shown: str) -> dict:
             "total": len(session["paragraphs"]),
             "said": BY_ID[session["paragraphs"][index]].said,
             "paragraph": shown,
-            "habits": summary(decide(_counts(_load(), session["examples"]))),
+            "habits": summary(decide(_counts(_profile(session["style"]), session["examples"]))),
             "changes": session["changes"],
             "done": False,
         }
@@ -532,7 +595,7 @@ def submit_step(session_id: str, written: str) -> dict:
             "total": len(session["paragraphs"]),
             "said": None,
             "paragraph": None,
-            "habits": summary(decide(_counts(_load(), session["examples"]))),
+            "habits": summary(decide(_counts(_profile(session["style"]), session["examples"]))),
             "changes": session["changes"],
             "done": True,
         }
@@ -546,17 +609,19 @@ def finish_calibration(session_id: str) -> dict:
             raise KeyError(session_id)
         if not session["examples"]:
             raise ValueError("Rewrite at least one paragraph before saving")
-        state = dict(_load())
+        style = session["style"]
+        profile = _profile(style)
         now = datetime.now(UTC).isoformat()
-        state["examples"] = (state["examples"] + [{**e, "created_at": now} for e in session["examples"]])[
+        profile["examples"] = (profile["examples"] + [{**e, "created_at": now} for e in session["examples"]])[
             -MAX_EXAMPLES:
         ]
-        state["runs"] += 1
-        state["last_run_at"] = now
+        profile["runs"] += 1
+        profile["last_run_at"] = now
+        state = _with_profile(_load(), style, profile)
         state["recent_paragraphs"] = (state["recent_paragraphs"] + session["paragraphs"])[-len(PARAGRAPHS) // 2 :]
         _save(state)
     _examples_changed()
-    return status()
+    return status(style)
 
 
 def discard_calibration(session_id: str) -> None:

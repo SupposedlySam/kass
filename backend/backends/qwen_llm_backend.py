@@ -41,14 +41,20 @@ generation_stop: ContextVar[Optional[threading.Event]] = ContextVar("generation_
 # still sampled from the model's own distribution, so the output is unchanged.
 generation_hint: ContextVar[Optional[str]] = ContextVar("generation_hint", default=None)
 
+# Set around a generate call to name the prompt it continues, such as a
+# writing style's cleanup prompt. Each name keeps its own KV cache, so a
+# dictation in one app never trims away another app's cached prompt
+# (docs/plans/PER_APP_STYLE.md). Styles' prompts can share most of their
+# tokens, so they need names; unnamed calls are told apart by their start.
+prompt_cache_key: ContextVar[Optional[str]] = ContextVar("prompt_cache_key", default=None)
+
 # Calls with the same system prompt share hundreds of tokens; calls with
-# different ones share only the chat template's first few. Below this, the
-# previous call's cache is parked for its own prompt instead of trimmed.
+# different ones (dictation cleanup, Command Mode) share only the chat
+# template's first few. An unnamed call's cache is named by this many.
 SAME_PROMPT_TOKENS = 64
-# Parked caches: one per other prompt in use (Command Mode's, while dictation
-# is current). Longer ones, from long selections, aren't worth their memory.
-PARKED_CACHES = 1
-PARKED_CACHE_TOKENS = 4096
+# A cache not in use that holds more than this (from a long selection) isn't
+# worth its memory.
+KEPT_CACHE_TOKENS = 4096
 
 # Off only to compare against plain decoding.
 LOOKUP_DECODING = True
@@ -56,6 +62,24 @@ LOOKUP_DECODING = True
 # costs about what one generated token does, so a good proposal saves most of
 # the work and a wrong one wastes little.
 LOOKUP_DRAFT_TOKENS = 24
+
+# Prompts kept cached at once, least recently used out first: up to six
+# writing styles' cleanup prompts (styles.MAX_STYLES), Command Mode's, and one
+# for calibration previews and rule checks. A 2k-token prompt's cache is ~330
+# MB on 4B (docs/plans/PER_APP_STYLE.md; ``kv_bytes_per_token``).
+MAX_PROMPT_CACHES = 8
+# mlx_lm's KVCache grows in steps of this many tokens.
+KV_CACHE_STEP = 256
+
+
+class _PromptCache:
+    """A KV cache, the tokens it holds, its name, and the adapter they were computed with."""
+
+    def __init__(self, cache, key: object, adapter: Optional[str]):
+        self.cache = cache
+        self.tokens: list[int] = []
+        self.key = key
+        self.adapter = adapter
 
 
 def propose_draft(generated: list[int], sources: list[list[int]], limit: int, cursor: dict) -> list[int]:
@@ -134,23 +158,55 @@ class MLXQwenLLMBackend:
         self.tokenizer = None
         self.model_size = model_size
         self._current_model_size: Optional[str] = None
+        # The adapter in effect, and the one loaded into the model. They differ
+        # while a loaded adapter is switched off (``_set_adapter_enabled``).
         self._adapter_path: Optional[str] = None
-        # KV cache of the previous call and the tokens it holds. Refinement
-        # repeats a ~1k-token system prompt and examples on every call;
-        # reusing them keeps a warm 4B dictation cleanup well under a second.
-        self._prompt_cache = None
+        self._loaded_adapter: Optional[str] = None
+        # KV caches of recent prompts, most recently used last. Refinement
+        # repeats a ~2k-token system prompt and examples on every call;
+        # reusing them keeps a warm 4B dictation cleanup well under a second,
+        # and one per prompt keeps it that way across writing styles.
+        self._prompt_caches: list[_PromptCache] = []
+        # The cache the current (or last) call used, and the tokens it holds.
+        self._entry: Optional[_PromptCache] = None
         self._cached_tokens: list[int] = []
-        # Caches of earlier calls with a different prompt, most recent first.
-        # Dictation cleanup and Command Mode share the model but not their
-        # prompts; each keeps its own cache, so switching between them
-        # doesn't process a ~1k-token prompt again after release.
-        self._parked: list[tuple[object, list[int]]] = []
         self._listener: Optional[Callable[[str], None]] = None
         self._stop: Optional[threading.Event] = None
         self._hint: Optional[str] = None
+        self._cache_key: Optional[str] = None
 
     def is_loaded(self) -> bool:
         return self.model is not None
+
+    def kv_bytes_per_token(self, model_size: str) -> Optional[int]:
+        """What one cached token costs for ``model_size``: keys and values in
+        every layer, in the model's 2-byte activations. None if not downloaded."""
+        import json
+
+        from huggingface_hub import try_to_load_from_cache
+
+        path = try_to_load_from_cache(self._get_model_path(model_size), "config.json")
+        if not isinstance(path, str):
+            return None
+        try:
+            with open(path, encoding="utf-8") as file:
+                config = json.load(file)
+            head_dim = config.get("head_dim") or config["hidden_size"] // config["num_attention_heads"]
+            return config["num_hidden_layers"] * config["num_key_value_heads"] * head_dim * 2 * 2
+        except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError):
+            return None
+
+    def prompt_tokens(self, system: str, examples: list[tuple[str, str]], model_size: str) -> Optional[int]:
+        """How many tokens a prompt of ``system`` and ``examples`` takes, when
+        ``model_size`` is loaded to count them. Called off the MLX thread; the
+        tokenizer doesn't touch the GPU."""
+        tokenizer = self.tokenizer
+        if tokenizer is None or self._current_model_size != model_size:
+            return None
+        text = tokenizer.apply_chat_template(
+            _build_messages("", system, examples), tokenize=False, add_generation_prompt=True, enable_thinking=False
+        )
+        return len(tokenizer.encode(text, add_special_tokens=False))
 
     def _get_model_path(self, model_size: str) -> str:
         if model_size not in MLX_HF_REPOS:
@@ -224,9 +280,10 @@ class MLXQwenLLMBackend:
         self.model = None
         self.tokenizer = None
         self._current_model_size = None
-        self._prompt_cache = None
+        self._loaded_adapter = None
+        self._prompt_caches = []
+        self._entry = None
         self._cached_tokens = []
-        self._parked = []
         clear_mlx_cache()
         logger.info("Qwen3 (MLX) unloaded")
 
@@ -243,6 +300,7 @@ class MLXQwenLLMBackend:
         listener = generation_listener.get()
         stop = generation_stop.get()
         hint = generation_hint.get()
+        cache_key = prompt_cache_key.get()
 
         # Load-if-needed and inference run as one job on the MLX worker so a
         # concurrent unload or different-size load can't land between them.
@@ -251,12 +309,14 @@ class MLXQwenLLMBackend:
             self._listener = listener
             self._stop = stop
             self._hint = hint
+            self._cache_key = cache_key
             try:
                 return self._generate_sync(prompt, system, max_tokens, temperature, examples)
             finally:
                 self._listener = None
                 self._stop = None
                 self._hint = None
+                self._cache_key = None
 
         return await run_on_mlx_thread(_load_and_generate)
 
@@ -269,10 +329,32 @@ class MLXQwenLLMBackend:
         await run_on_mlx_thread(self._ensure_ready_sync, model_size, adapter_path)
 
     def _ensure_ready_sync(self, model_size: Optional[str], adapter_path: Optional[str]) -> None:
-        if self._adapter_path != adapter_path:
+        size = model_size or self.model_size
+        loaded = self.model is not None and self._current_model_size == size
+        if loaded and self._loaded_adapter is not None and adapter_path in (None, self._loaded_adapter):
+            # The personal adapter covers some writing styles and not others.
+            # Switching it off and on, rather than reloading the model, keeps
+            # app switches as fast as staying in one app.
+            self._set_adapter_enabled(adapter_path is not None)
+            self._adapter_path = adapter_path
+            return
+        if self._adapter_path != adapter_path or self._loaded_adapter != adapter_path:
             self.unload_model()
             self._adapter_path = adapter_path
         self._ensure_loaded_sync(model_size)
+        self._loaded_adapter = adapter_path
+
+    def _set_adapter_enabled(self, enabled: bool) -> None:
+        """Scale the loaded LoRA layers to zero, or back.
+
+        A LoRA layer adds ``scale * lora(x)`` to its base layer, so with the
+        scale at zero it computes exactly what the base model does.
+        """
+        for _, module in self.model.named_modules():
+            if hasattr(module, "lora_a") and hasattr(module, "scale"):
+                if not hasattr(module, "voicebox_scale"):
+                    module.voicebox_scale = module.scale
+                module.scale = module.voicebox_scale if enabled else 0.0
 
     def _generate_sync(
         self,
@@ -300,7 +382,7 @@ class MLXQwenLLMBackend:
         reused = len(self._cached_tokens)
         # Only the cache's own tokens are trustworthy; forget them until this
         # generation finishes in case it fails partway through.
-        self._cached_tokens = []
+        self._set_cached_tokens([])
         if self._hint is not None and LOOKUP_DECODING:
             return self._generate_lookup(tokens, reused, cache, sampler, max_tokens, self._hint, prompt, started)
         generated: list[int] = []
@@ -325,7 +407,7 @@ class MLXQwenLLMBackend:
                 # cache still holds exactly tokens + generated.
                 logger.info("Qwen3 generate: stopped after %d tokens", len(generated))
                 break
-        self._cached_tokens = tokens + generated
+        self._set_cached_tokens(tokens + generated)
         logger.info(
             "Qwen3 generate: reused %d/%d prompt tokens, %d generated in %.3fs",
             reused,
@@ -407,7 +489,7 @@ class MLXQwenLLMBackend:
                     break
         detokenizer.finalize()
         text = detokenizer.text
-        self._cached_tokens = fed
+        self._set_cached_tokens(fed)
         logger.info(
             "Qwen3 generate: reused %d/%d prompt tokens, %d generated in %.3fs (%d model calls, %d proposed tokens kept)",
             reused,
@@ -419,46 +501,67 @@ class MLXQwenLLMBackend:
         )
         return text.strip()
 
-    def _reusable_cache(self, tokens: list[int]):
-        """The KV cache sharing the longest prefix with ``tokens``, trimmed to that prefix.
+    def _set_cached_tokens(self, tokens: list[int]) -> None:
+        self._cached_tokens = tokens
+        if self._entry is not None:
+            self._entry.tokens = tokens
 
-        A current cache with a different system prompt is parked for that
-        prompt's next call rather than trimmed away.
+    def _reusable_cache(self, tokens: list[int]):
+        """The KV cache to continue for ``tokens``, trimmed to the prefix they share.
+
+        Each prompt (with the adapter in effect) has its own cache, continued
+        call after call as one cache used to be: named by ``prompt_cache_key``,
+        or else by its first ``SAME_PROMPT_TOKENS`` tokens, which tell
+        dictation cleanup from Command Mode. A prompt seen for the first time
+        starts from a copy of the longest prefix another cache shares with
+        ``tokens``, so a new style whose prompt opens like an existing one's
+        doesn't prefill that part again. Once there are ``MAX_PROMPT_CACHES``,
+        the least recently used goes.
         """
         from mlx_lm.models.cache import can_trim_prompt_cache, make_prompt_cache, trim_prompt_cache
 
-        # Leave at least one prompt token to feed the model.
-        limit = len(tokens) - 1
+        def shared_with(entry: _PromptCache) -> int:
+            # Leave at least one prompt token to feed the model.
+            limit = min(len(entry.tokens), len(tokens) - 1)
+            shared = 0
+            while shared < limit and entry.tokens[shared] == tokens[shared]:
+                shared += 1
+            return shared
 
-        def shared_with(cached: list[int]) -> int:
-            end = min(len(cached), limit)
-            count = 0
-            while count < end and cached[count] == tokens[count]:
-                count += 1
-            return count
+        key = self._cache_key if self._cache_key is not None else tuple(tokens[:SAME_PROMPT_TOKENS])
+        same_adapter = [entry for entry in self._prompt_caches if entry.adapter == self._adapter_path]
+        entry = next((e for e in same_adapter if e.key == key), None)
+        if entry is not None and can_trim_prompt_cache(entry.cache):
+            shared = shared_with(entry)
+            trim_prompt_cache(entry.cache, len(entry.tokens) - shared)
+            entry.tokens = entry.tokens[:shared]
+            self._prompt_caches.remove(entry)
+        else:
+            if entry is not None:
+                self._prompt_caches.remove(entry)
+            entry = _PromptCache(make_prompt_cache(self.model), key, self._adapter_path)
+            donor = max(same_adapter, key=shared_with, default=None)
+            if donor is not None:
+                self._copy_prefix(donor, entry, shared_with(donor))
+        kept = [e for e in self._prompt_caches if len(e.tokens) <= KEPT_CACHE_TOKENS]
+        self._prompt_caches = [*kept[max(0, len(kept) - MAX_PROMPT_CACHES + 1) :], entry]
+        self._entry = entry
+        self._cached_tokens = entry.tokens
+        return entry.cache
 
-        current = shared_with(self._cached_tokens)
-        best = max(range(len(self._parked)), key=lambda i: shared_with(self._parked[i][1]), default=None)
-        if best is not None and shared_with(self._parked[best][1]) > current:
-            cache, cached = self._parked.pop(best)
-            self._park(self._prompt_cache, self._cached_tokens)
-            self._prompt_cache, self._cached_tokens = cache, cached
-        elif current < min(SAME_PROMPT_TOKENS, len(self._cached_tokens)):
-            # A different prompt: keep this one's cache for its next call.
-            self._park(self._prompt_cache, self._cached_tokens)
-            self._prompt_cache, self._cached_tokens = None, []
+    def _copy_prefix(self, donor: _PromptCache, entry: _PromptCache, shared: int) -> None:
+        """Start ``entry`` with ``donor``'s first ``shared`` tokens. MLX arrays are
+        values, so the two caches never write into each other."""
+        from mlx_lm.models.cache import make_prompt_cache
 
-        previous = self._cached_tokens
-        shared = shared_with(previous)
-        if self._prompt_cache is None or not shared or not can_trim_prompt_cache(self._prompt_cache):
-            self._prompt_cache = make_prompt_cache(self.model)
-            self._cached_tokens = []
-            return self._prompt_cache
-        trim_prompt_cache(self._prompt_cache, len(previous) - shared)
-        self._cached_tokens = previous[:shared]
-        return self._prompt_cache
-
-    def _park(self, cache, cached: list[int]) -> None:
-        if cache is None or not cached or len(cached) > PARKED_CACHE_TOKENS:
+        if not shared:
             return
-        self._parked = [(cache, cached), *self._parked][:PARKED_CACHES]
+        try:
+            for source, target in zip(donor.cache, entry.cache, strict=True):
+                keys, values = source.state
+                target.state = (keys[..., :shared, :], values[..., :shared, :])
+        except Exception:
+            logger.debug("Could not copy a cached prefix; prefilling it instead", exc_info=True)
+            entry.cache = make_prompt_cache(self.model)
+            return
+        entry.tokens = donor.tokens[:shared]

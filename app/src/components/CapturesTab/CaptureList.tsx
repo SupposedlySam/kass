@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Loader2, Search } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Kbd } from '@/components/ui/kbd';
 import { StyleCalibrationPrompt } from '@/components/WritingStyle/StyleCalibrationPrompt';
@@ -14,14 +14,25 @@ import {
   formatRowTime,
   snippetParts,
 } from './captureFormat';
+import { NewAppPrompt } from './NewAppPrompt';
+import type { AppStyles } from './useAppStyles';
 
 function CaptureRow({
   capture,
   active,
+  showApp,
+  styleLabel,
+  prompt,
   onSelect,
 }: {
   capture: CaptureResponse;
   active: boolean;
+  /** Off in one app's list, where every row is that app. */
+  showApp: boolean;
+  /** The style the capture was cleaned up with; "Work?" while its app's style is unconfirmed. */
+  styleLabel?: string;
+  /** The new-app prompt, under the newest capture of an app without a confirmed style. */
+  prompt?: ReactNode;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
@@ -29,80 +40,91 @@ function CaptureRow({
   const text = deliveredText(capture).trim();
   const parts = text ? snippetParts(text, capture.refinement_review?.added ?? []) : [];
   return (
-    <button
-      type="button"
-      data-capture-id={capture.id}
-      aria-current={active ? 'true' : undefined}
-      onClick={onSelect}
+    <div
       className={cn(
-        'w-full flex flex-col gap-2 p-3 rounded-lg text-left transition-colors',
-        'focus-visible:outline-none focus-visible:bg-muted',
+        'rounded-lg transition-colors has-[>button:focus-visible]:bg-muted',
         active ? 'bg-muted' : 'hover:bg-muted/50',
       )}
     >
-      <span className="text-[14px] leading-normal text-foreground line-clamp-2 [overflow-wrap:anywhere]">
-        {text
-          ? parts.map((part, i) =>
-              part.changed ? (
-                <mark
-                  // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
-                  key={i}
-                  className="rounded-[2px] px-0.5 bg-warning/10 text-warning border-b-[1.5px] border-dashed border-warning/70"
-                >
-                  {part.text}
-                </mark>
-              ) : (
-                part.text
-              ),
-            )
-          : t('captures.snippetEmpty')}
-      </span>
-      <span className="flex items-center gap-[7px] min-w-0 text-[11.5px] text-muted-foreground">
-        <AppIcon bundleId={capture.app_bundle_id} />
-        {capture.app_name && (
-          <>
-            <span className="min-w-0 truncate">{capture.app_name}</span>
-            <span className="shrink-0 text-muted-foreground/50">·</span>
-          </>
-        )}
-        <span className="shrink-0 whitespace-nowrap">
-          {formatRowTime(capture.created_at, t('captures.list.yesterday'))}
+      <button
+        type="button"
+        data-capture-id={capture.id}
+        aria-current={active ? 'true' : undefined}
+        onClick={onSelect}
+        className="w-full flex flex-col gap-2 p-3 rounded-lg text-left focus-visible:outline-none"
+      >
+        <span className="text-[14px] leading-normal text-foreground line-clamp-2 [overflow-wrap:anywhere]">
+          {text
+            ? parts.map((part, i) =>
+                part.changed ? (
+                  <mark
+                    // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
+                    key={i}
+                    className="rounded-[2px] px-0.5 bg-warning/10 text-warning border-b-[1.5px] border-dashed border-warning/70"
+                  >
+                    {part.text}
+                  </mark>
+                ) : (
+                  part.text
+                ),
+              )
+            : t('captures.snippetEmpty')}
         </span>
-        <span className="shrink-0 text-muted-foreground/50">·</span>
-        <span className="shrink-0 tabular-nums">{formatDuration(capture.duration_ms)}</span>
-        <span className="flex-1" />
-        {tag === 'review' && (
-          <span className="shrink-0 flex items-center gap-1.5 font-semibold text-warning">
-            <span className="size-1.5 rounded-full bg-warning" />
-            {t('captures.tag.review')}
+        <span className="flex items-center gap-[7px] min-w-0 text-[11.5px] text-muted-foreground">
+          {showApp && <AppIcon bundleId={capture.app_bundle_id} />}
+          {showApp && capture.app_name && (
+            <>
+              <span className="min-w-0 truncate">{capture.app_name}</span>
+              <span className="shrink-0 text-muted-foreground/50">·</span>
+            </>
+          )}
+          <span className="shrink-0 whitespace-nowrap">
+            {formatRowTime(capture.created_at, t('captures.list.yesterday'))}
           </span>
-        )}
-        {(tag === 'command' || tag === 'commandFailed') && (
-          <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
-            <span
-              className={cn(
-                'size-1.5 rounded-full',
-                tag === 'command' ? 'bg-accent' : 'border-[1.5px] border-accent',
-              )}
-            />
-            {capture.command_transform ??
-              t(tag === 'command' ? 'captures.tag.command' : 'captures.tag.commandFailed')}
-          </span>
-        )}
-        {tag === 'raw' && (
-          <span className="shrink-0 flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full border-[1.5px] border-muted-foreground/70" />
-            {t('captures.tag.raw')}
-          </span>
-        )}
-      </span>
-    </button>
+          <span className="shrink-0 text-muted-foreground/50">·</span>
+          <span className="shrink-0 tabular-nums">{formatDuration(capture.duration_ms)}</span>
+          <span className="flex-1" />
+          {styleLabel && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
+              <span className="size-1.5 rounded-full bg-accent" />
+              {styleLabel}
+            </span>
+          )}
+          {tag === 'review' && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-warning">
+              <span className="size-1.5 rounded-full bg-warning" />
+              {t('captures.tag.review')}
+            </span>
+          )}
+          {(tag === 'command' || tag === 'commandFailed') && (
+            <span className="shrink-0 flex items-center gap-1.5 font-semibold text-accent">
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  tag === 'command' ? 'bg-accent' : 'border-[1.5px] border-accent',
+                )}
+              />
+              {capture.command_transform ??
+                t(tag === 'command' ? 'captures.tag.command' : 'captures.tag.commandFailed')}
+            </span>
+          )}
+          {tag === 'raw' && (
+            <span className="shrink-0 flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full border-[1.5px] border-muted-foreground/70" />
+              {t('captures.tag.raw')}
+            </span>
+          )}
+        </span>
+      </button>
+      {prompt}
+    </div>
   );
 }
 
 /**
- * The 440px capture list: search (⌘K hint), the not-set-up
- * banner, the style calibration prompt, and one row per capture.
+ * The capture list: the selected app's card, search (⌘K hint), the
+ * not-set-up banner, the style calibration prompt, and one row per capture.
+ * It narrows from 440px to 400px while the app list beside it is open.
  */
 export function CaptureList({
   captures,
@@ -113,6 +135,10 @@ export function CaptureList({
   search,
   onSearchChange,
   allReady,
+  appName,
+  appHeader,
+  appStyles,
+  narrow,
 }: {
   captures: CaptureResponse[];
   /** The captures left after search, in display order. */
@@ -123,9 +149,46 @@ export function CaptureList({
   search: string;
   onSearchChange: (value: string) => void;
   allReady: boolean;
+  /** The app the list is filtered to, if any. */
+  appName?: string;
+  /** The filtered app's card, above search. */
+  appHeader?: ReactNode;
+  appStyles: AppStyles;
+  narrow: boolean;
 }) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const searchLabel = appName
+    ? t('captures.apps.searchPlaceholder', { app: appName })
+    : t('captures.searchPlaceholder');
+
+  const rowStyle = (capture: CaptureResponse) => {
+    const used = capture.style_id ? appStyles.byId.get(capture.style_id) : undefined;
+    if (!used) return undefined;
+    return appStyles.forApp(capture.app_bundle_id)?.confirmed ? used.name : `${used.name}?`;
+  };
+  // One prompt per app without a confirmed style, under its newest capture.
+  const prompted = useMemo(() => {
+    const prompts = new Map<string, ReactNode>();
+    const seen = new Set<string>();
+    for (const capture of visible) {
+      const bundleId = capture.app_bundle_id;
+      if (!bundleId || capture.source === 'command' || seen.has(bundleId)) continue;
+      seen.add(bundleId);
+      const current = appStyles.forApp(bundleId);
+      if (!current || current.confirmed) continue;
+      prompts.set(
+        capture.id,
+        <NewAppPrompt
+          bundleId={bundleId}
+          name={capture.app_name || bundleId}
+          suggested={current.suggested}
+          styles={appStyles.styles}
+        />,
+      );
+    }
+    return prompts;
+  }, [visible, appStyles]);
 
   // Keep the selected row in view as the arrow keys move through the list.
   useEffect(() => {
@@ -137,18 +200,22 @@ export function CaptureList({
 
   return (
     <section
-      aria-label={t('captures.title')}
-      className="w-[440px] shrink-0 flex flex-col border-r border-border"
+      aria-label={appName ? t('captures.apps.listLabel', { app: appName }) : t('captures.title')}
+      className={cn(
+        'shrink-0 flex flex-col border-r border-border',
+        narrow ? 'w-[400px]' : 'w-[440px]',
+      )}
     >
-      <div className="p-4 border-b border-border">
+      <div className="flex flex-col gap-2 p-4 border-b border-border">
+        {appHeader}
         <label className="flex items-center gap-2.5 h-10 px-3 rounded-lg border border-input bg-popover focus-within:border-ring">
           <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
           <input
             type="search"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t('captures.searchPlaceholder')}
-            aria-label={t('captures.searchPlaceholder')}
+            placeholder={searchLabel}
+            aria-label={searchLabel}
             className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
           />
           <Kbd>⌘K</Kbd>
@@ -190,6 +257,9 @@ export function CaptureList({
                 key={capture.id}
                 capture={capture}
                 active={capture.id === selectedId}
+                showApp={!appName}
+                styleLabel={rowStyle(capture)}
+                prompt={prompted.get(capture.id)}
                 onSelect={() => onSelect(capture.id)}
               />
             ))}

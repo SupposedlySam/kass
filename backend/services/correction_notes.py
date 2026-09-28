@@ -14,6 +14,9 @@ a bad rule from a small model cannot make cleanup worse or sink good ones. Eithe
 examples are marked considered, and the corrections stay recorded for the
 personal model.
 
+Each writing style (styles.py) has its own notes, summarized from its own
+examples. ``style`` arguments are style ids; None is the default style.
+
 Everything is local: one JSON file in the data directory.
 """
 
@@ -68,8 +71,8 @@ def _path():
 
 
 def _empty() -> dict:
+    """One style's notes."""
     return {
-        "version": 1,
         "notes": [],
         "considered_ids": [],
         "history": [],
@@ -79,16 +82,22 @@ def _empty() -> dict:
     }
 
 
-def _load() -> dict:
+def _read() -> dict:
+    """The whole file. Version 1 held one list; it becomes the migrated style's."""
     global _state
     with _lock:
         if _state is None:
-            state = _empty()
+            state = {"version": 2, "styles": {}}
             try:
                 loaded = json.loads(_path().read_text())
-                if loaded.get("version") != 1:
+                if loaded.get("version") == 1:
+                    from .styles import MIGRATED_STYLE
+
+                    state["styles"][MIGRATED_STYLE] = {k: v for k, v in loaded.items() if k != "version"}
+                elif loaded.get("version") == 2 and isinstance(loaded.get("styles"), dict):
+                    state = loaded
+                else:
                     raise ValueError("Unsupported correction notes")
-                state.update(loaded)
             except FileNotFoundError:
                 pass
             except (OSError, ValueError, TypeError):
@@ -97,7 +106,19 @@ def _load() -> dict:
         return _state
 
 
-def _save(state: dict) -> None:
+def _style_id(style: str | None) -> str:
+    if style is not None:
+        return style
+    from .styles import default_id
+
+    return default_id()
+
+
+def _load(style: str | None = None) -> dict:
+    return {**_empty(), **_read()["styles"].get(_style_id(style), {})}
+
+
+def _write(state: dict) -> None:
     global _state
     with _lock:
         path = _path()
@@ -108,55 +129,69 @@ def _save(state: dict) -> None:
         _state = state
 
 
-def notes() -> list[str]:
-    return list(_load()["notes"])
+def _save(notes_state: dict, style: str | None = None) -> None:
+    with _lock:
+        state = _read()
+        _write({**state, "styles": {**state["styles"], _style_id(style): notes_state}})
+
+
+def forget_style(style: str) -> None:
+    """Drop a deleted style's notes."""
+    with _lock:
+        state = _read()
+        if style in state["styles"]:
+            _write({**state, "styles": {k: v for k, v in state["styles"].items() if k != style}})
+
+
+def notes(style: str | None = None) -> list[str]:
+    return list(_load(style)["notes"])
 
 
 def note_id(note: str) -> str:
     return hashlib.sha256(note.encode()).hexdigest()[:12]
 
 
-def prompt_section(candidate: list[str] | None = None) -> str | None:
-    """Refinement instructions from the user's older corrections."""
-    current = notes() if candidate is None else candidate
+def prompt_section(style: str | None = None, candidate: list[str] | None = None) -> str | None:
+    """Refinement instructions from the user's older corrections in ``style``."""
+    current = notes(style) if candidate is None else candidate
     if not current:
         return None
     lines = "\n".join(f"- {note}" for note in current)
     return f"Rules this speaker taught in earlier corrections. Follow them:\n{lines}"
 
 
-def pending() -> list[dict]:
-    """Examples no longer in the prompt that no summary has considered, oldest first."""
+def pending(style: str | None = None) -> list[dict]:
+    """``style``'s examples no longer in the prompt that no summary has considered, oldest first."""
     from . import personal_examples
 
-    shown = {example["id"] for example in personal_examples.in_prompt()}
-    considered = set(_load()["considered_ids"])
+    shown = {example["id"] for example in personal_examples.in_prompt(style)}
+    considered = set(_load(style)["considered_ids"])
     return [
         example
-        for example in reversed(personal_examples.all_examples())
+        for example in reversed(personal_examples.all_examples(style))
         if example["id"] not in shown and example["id"] not in considered
     ]
 
 
-def status() -> dict:
-    state = _load()
+def status(style: str | None = None) -> dict:
+    state = _load(style)
     return {
         "notes": [{"id": note_id(note), "text": note} for note in state["notes"]],
-        "pending": len(pending()),
+        "pending": len(pending(style)),
         "last_run": state["last_run"],
         "outcome": state["outcome"],
     }
 
 
-def remove(identifier: str) -> bool:
+def remove(identifier: str, style: str | None = None) -> bool:
     with _lock:
-        state = json.loads(json.dumps(_load()))
+        state = json.loads(json.dumps(_load(style)))
         kept = [note for note in state["notes"] if note_id(note) != identifier]
         if len(kept) == len(state["notes"]):
             return False
         state["history"] = (state["history"] + [{"notes": state["notes"]}])[-MAX_HISTORY:]
         state["notes"] = kept
-        _save(state)
+        _save(state, style)
     return True
 
 
@@ -220,10 +255,11 @@ async def summarize(flags, model_size, generation) -> dict | None:
     from .llm import get_llm_model
     from .model_improvement import manager
 
-    batch = pending()[:MAX_BATCH]
+    style = flags.style
+    batch = pending(style)[:MAX_BATCH]
     if len(batch) < MIN_BATCH:
         return None
-    state = _load()
+    state = _load(style)
     current = list(state["notes"])
     reply = await get_llm_model().generate(
         prompt=_summary_request(current, batch),
@@ -240,7 +276,7 @@ async def summarize(flags, model_size, generation) -> dict | None:
 
     batch_ids = {example["id"] for example in batch}
     considered = set(state["considered_ids"])
-    retained = [example for example in personal_examples.all_examples() if example["id"] in considered][
+    retained = [example for example in personal_examples.all_examples(style) if example["id"] in considered][
         :RETAINED_CHECKS
     ]
     checks = batch + retained
@@ -278,7 +314,7 @@ async def summarize(flags, model_size, generation) -> dict | None:
         "unchanged_distance": sum(loss(example["said"], example["meant"]) for example in checks),
     }
     with _lock:
-        state = json.loads(json.dumps(_load()))
+        state = json.loads(json.dumps(_load(style)))
         if accepted:
             state["history"] = (state["history"] + [{"notes": state["notes"]}])[-MAX_HISTORY:]
             state["notes"] = chosen
@@ -288,28 +324,29 @@ async def summarize(flags, model_size, generation) -> dict | None:
             outcome="updated" if accepted else "no_change",
             metrics=metrics,
         )
-        _save(state)
+        _save(state, style)
     logger.info("Correction notes %s: %s", "updated" if accepted else "unchanged", metrics)
-    return status()
+    return status(style)
 
 
 async def run_once() -> dict | None:
-    """Summarize if the app is idle and enough examples have left the prompt."""
+    """Summarize one style's examples if the app is idle and enough have left its prompt."""
     from ..database import session as database_session
-    from .model_improvement import manager
-    from .refinement import RefinementFlags
     from . import settings as settings_service
+    from .model_improvement import manager
+    from .styles import flags_for, snapshot
 
     generation = manager.idle_generation()
-    if generation is None or len(pending()) < MIN_BATCH or database_session.SessionLocal is None:
+    if generation is None or database_session.SessionLocal is None:
+        return None
+    style = next((s for s in snapshot().styles if len(pending(s.id)) >= MIN_BATCH), None)
+    if style is None:
         return None
     with database_session.SessionLocal() as db:
         saved = settings_service.get_capture_settings(db)
         if not saved.auto_refine:
             return None
-        flags = RefinementFlags(
-            saved.smart_cleanup, saved.self_correction, saved.preserve_technical, saved.punctuation_style
-        )
+        flags = flags_for(style, saved)
         model_size = saved.llm_model
     return await summarize(flags, model_size, generation)
 

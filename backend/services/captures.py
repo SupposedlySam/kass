@@ -16,14 +16,21 @@ from pathlib import Path
 from typing import Optional
 
 import soundfile as sf
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..database import Capture as DBCapture
-from ..models import CaptureResponse, RefinementFlagsModel, RefinementReviewModel
+from ..models import (
+    CaptureAppCount,
+    CaptureAppsResponse,
+    CaptureResponse,
+    RefinementFlagsModel,
+    RefinementReviewModel,
+)
 from ..utils.audio import load_audio
 from .content_check import check_refinement, summarize_reviews
-from .refinement import RefinementFlags, refine_transcript
+from .refinement import RefinementFlags, refine_transcript, style_first_word
 from .transcribe import get_whisper_model
 from .voice_commands import mark_commands
 
@@ -40,15 +47,37 @@ WHISPER_NATIVE_FORMATS = (".wav", ".mp3", ".flac", ".ogg")
 MAX_APP_FIELD_CHARS = 255
 
 
+def _clean_app_field(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip()[:MAX_APP_FIELD_CHARS] or None
+
+
 def target_app(bundle_id: object, name: object) -> tuple[Optional[str], Optional[str]]:
     """The dictation's target app as stored: blank or non-string parts become None."""
+    return _clean_app_field(bundle_id), _clean_app_field(name)
 
-    def clean(value: object) -> Optional[str]:
-        if not isinstance(value, str):
-            return None
-        return value.strip()[:MAX_APP_FIELD_CHARS] or None
 
-    return clean(bundle_id), clean(name)
+def target_app_category(category: object) -> str | None:
+    """The target app's App Store category (``LSApplicationCategoryType``), as stored."""
+    return _clean_app_field(category)
+
+
+def app_categories(db: Session) -> dict[str, str | None]:
+    """Each app's App Store category, from its newest capture that has one."""
+    rows = (
+        db.query(DBCapture.app_bundle_id, DBCapture.app_category, func.max(DBCapture.created_at))
+        .filter(DBCapture.app_bundle_id.isnot(None))
+        .group_by(DBCapture.app_bundle_id, DBCapture.app_category)
+        .all()
+    )
+    categories: dict[str, str | None] = {}
+    latest: dict[str, object] = {}
+    for bundle_id, category, when in rows:
+        categories.setdefault(bundle_id, None)
+        if category and (bundle_id not in latest or (when and when > latest[bundle_id])):
+            categories[bundle_id], latest[bundle_id] = category, when
+    return categories
 
 
 def _to_response(row: DBCapture) -> CaptureResponse:
@@ -83,6 +112,7 @@ def _to_response(row: DBCapture) -> CaptureResponse:
         command_selection=row.command_selection,
         command_instruction=row.command_instruction,
         command_transform=row.command_transform,
+        style_id=row.style_id,
         created_at=row.created_at,
     )
 
@@ -194,16 +224,81 @@ async def create_capture(
     return _to_response(row)
 
 
-def list_captures(db: Session, limit: int = 50, offset: int = 0) -> tuple[list[CaptureResponse], int]:
-    total = db.query(DBCapture).count()
+def list_captures(
+    db: Session,
+    limit: int = 50,
+    offset: int = 0,
+    app_bundle_id: str | None = None,
+    unknown_app: bool = False,
+) -> tuple[list[CaptureResponse], int]:
+    """The newest captures first, optionally only one app's, or only those
+    with no app recorded (uploads, and dictation from before apps were saved)."""
+    query = db.query(DBCapture)
+    if unknown_app:
+        query = query.filter(DBCapture.app_bundle_id.is_(None))
+    elif app_bundle_id:
+        query = query.filter(DBCapture.app_bundle_id == app_bundle_id)
+    total = query.count()
     rows = (
-        db.query(DBCapture)
+        query
         .order_by(DBCapture.created_at.desc())
         .limit(limit)
         .offset(offset)
         .all()
     )
     return [_to_response(r) for r in rows], total
+
+
+def list_capture_apps(db: Session) -> CaptureAppsResponse:
+    """How many captures each app has, most first, counted over every row
+    rather than the page the list loads. An app is its bundle id; its name is
+    the one on its newest capture, since an app can be renamed. Each app
+    carries the style its dictation uses, whether the user chose it, and the
+    style suggested for it until they do."""
+    from .styles import snapshot, suggest_styles
+
+    styles = snapshot()
+    suggested = suggest_styles(app_categories(db), styles)
+    counts: dict[str, list] = {}
+    unknown = 0
+    rows = (
+        db.query(
+            DBCapture.app_bundle_id,
+            DBCapture.app_name,
+            func.count(DBCapture.id),
+            func.max(DBCapture.created_at),
+        )
+        .group_by(DBCapture.app_bundle_id, DBCapture.app_name)
+        .all()
+    )
+    for bundle_id, name, count, latest in rows:
+        if bundle_id is None:
+            unknown += count
+            continue
+        entry = counts.setdefault(bundle_id, [None, 0, None])
+        if name and (entry[2] is None or (latest and latest > entry[2])):
+            entry[0] = name
+        entry[1] += count
+        if latest and (entry[2] is None or latest > entry[2]):
+            entry[2] = latest
+    apps = [
+        CaptureAppCount(
+            app_bundle_id=bundle_id,
+            app_name=name,
+            count=count,
+            last_captured_at=latest,
+            style_id=styles.for_app(bundle_id).id,
+            confirmed=bundle_id in styles.apps,
+            suggested_style_id=suggested.get(bundle_id),
+        )
+        for bundle_id, (name, count, latest) in counts.items()
+    ]
+    apps.sort(key=lambda app: (-app.count, (app.app_name or app.app_bundle_id).lower()))
+    return CaptureAppsResponse(
+        total=sum(app.count for app in apps) + unknown,
+        unknown_count=unknown,
+        apps=apps,
+    )
 
 
 def get_capture(capture_id: str, db: Session) -> Optional[CaptureResponse]:
@@ -250,9 +345,10 @@ async def refine_capture(
 
     from .correction_learning import apply_learned_corrections
 
-    refined = apply_learned_corrections(refined, row.language)
+    refined = style_first_word(apply_learned_corrections(refined, row.language), flags)
 
     row.transcript_refined = refined
+    row.style_id = flags.style
     review = summarize_reviews([verdict])
     row.refinement_review = json.dumps(review) if review else None
     row.llm_model = llm_size

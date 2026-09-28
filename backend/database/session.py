@@ -34,6 +34,12 @@ def init_db() -> None:
     run_migrations(engine)
     Base.metadata.create_all(bind=engine)
 
+    # The preset writing styles, with the global settings moved into the default.
+    from ..services.styles import ensure_styles
+
+    with SessionLocal() as db:
+        ensure_styles(db)
+
 
 def get_db():
     """Yield a database session (FastAPI dependency)."""

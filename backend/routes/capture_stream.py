@@ -12,9 +12,9 @@ from fastapi.responses import JSONResponse
 
 from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
-from ..services.captures import target_app
+from ..services.captures import target_app, target_app_category
 from ..services.commands import MAX_SELECTION_CHARS
-from ..services.refinement import load_cleanup_model
+from ..services.refinement import load_cleanup_model, prefill_cleanup
 from ..services.settings import get_capture_settings
 from ..utils.origins import is_allowed_websocket_origin
 
@@ -55,6 +55,23 @@ async def _load_cleanup(session: StreamingCapture) -> None:
         logger.warning("Could not load the cleanup model ahead of time", exc_info=True)
 
 
+async def _prefill_style(session: StreamingCapture) -> None:
+    """Cache the prompt of the session's style while the user speaks (docs/plans/PER_APP_STYLE.md)."""
+    started = time.monotonic()
+    try:
+        await prefill_cleanup(session.flags, session.settings.llm_model)
+        logger.info("Prefilled the %s style in %.3fs", session.style.name, time.monotonic() - started)
+    except Exception:
+        # Only a head start: the first cleanup prefills it anyway.
+        logger.warning("Could not prefill the cleanup prompt", exc_info=True)
+
+
+def _start(coroutine) -> None:
+    task = asyncio.create_task(coroutine)
+    _loading.add(task)
+    task.add_done_callback(_loading.discard)
+
+
 @router.websocket("/captures/stream")
 async def stream_capture(websocket: WebSocket):
     if not is_allowed_websocket_origin(websocket) or len(_active_sessions) >= MAX_SESSIONS:
@@ -92,10 +109,9 @@ async def stream_capture(websocket: WebSocket):
         )
         worker = asyncio.create_task(session.run())
         # A command session prefills the same model when its selection arrives.
-        if settings.auto_refine and not session.is_command:
-            load = asyncio.create_task(_load_cleanup(session))
-            _loading.add(load)
-            load.add_done_callback(_loading.discard)
+        cleans = settings.auto_refine and not session.is_command
+        if cleans:
+            _start(_load_cleanup(session))
         while True:
             receiver = asyncio.create_task(websocket.receive())
             done, _ = await asyncio.wait({receiver, worker}, timeout=IDLE_TIMEOUT, return_when=asyncio.FIRST_COMPLETED)
@@ -123,17 +139,25 @@ async def stream_capture(websocket: WebSocket):
                 # The field's text before the caret, read just after key-down.
                 session.set_context(command.get("before"))
                 continue
+            if command.get("type") == "app":
+                # The target app, from the focus snapshot at key-down.
+                app = target_app(command.get("bundle_id"), command.get("name"))
+                if session.set_app(*app, target_app_category(command.get("category"))) and cleans:
+                    _start(_prefill_style(session))
+                continue
             if command.get("type") == "selection":
                 # A command session's selected text, read just after key-down.
                 session.set_selection(command.get("text"))
                 continue
             if command.get("type") != "finish":
-                raise ValueError("Expected context, selection, finish or cancel")
+                raise ValueError("Expected app, context, selection, finish or cancel")
             if not session.samples:
                 raise ValueError("Cannot finish empty audio")
             app = command.get("app")
             if isinstance(app, dict):
-                session.app_bundle_id, session.app_name = target_app(app.get("bundle_id"), app.get("name"))
+                session.set_app(
+                    *target_app(app.get("bundle_id"), app.get("name")), target_app_category(app.get("category"))
+                )
 
             async def send_finalizing(event):
                 # Finish is a commit request. Complete and retain the result if

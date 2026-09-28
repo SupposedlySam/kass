@@ -14,23 +14,34 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api/client';
-import { useCaptureSettings } from '@/lib/hooks/useSettings';
-import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
+import type { WritingStyle } from '@/lib/api/types';
+import {
+  useWritingStyle,
+  WRITING_STYLE_KEY,
+  WRITING_STYLES_KEY,
+} from '@/lib/hooks/useWritingStyle';
+import { CORRECTION_NOTES_KEY } from './CorrectionNotes';
 import { PERSONAL_EXAMPLES_KEY } from './PersonalExamples';
 
-/** Forgets calibration and learned habits, after a confirmation. */
-export function ResetWritingStyle() {
+/** Forgets one style's calibration, learned habits and rules, after a confirmation. */
+export function ResetWritingStyle({ style }: { style: WritingStyle }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: status } = useWritingStyle();
-  const { settings, update } = useCaptureSettings();
+  const { data: status } = useWritingStyle(style.id);
   const reset = useMutation({
-    mutationFn: () => apiClient.resetWritingStyle(),
+    mutationFn: async () => {
+      const result = await apiClient.resetWritingStyle(style.id);
+      // Nothing is left to match, so the style falls back to Standard.
+      if (style.punctuation_style === 'learned') {
+        await apiClient.updateWritingStyle(style.id, { punctuation_style: 'standard' });
+      }
+      return result;
+    },
     onSuccess: (data) => {
-      queryClient.setQueryData(WRITING_STYLE_KEY, data);
+      queryClient.setQueryData([...WRITING_STYLE_KEY, style.id], data);
       queryClient.invalidateQueries({ queryKey: PERSONAL_EXAMPLES_KEY });
-      // Nothing is left to match, so fall back to the default style.
-      if (settings?.punctuation_style === 'learned') update({ punctuation_style: 'standard' });
+      queryClient.invalidateQueries({ queryKey: CORRECTION_NOTES_KEY });
+      queryClient.invalidateQueries({ queryKey: WRITING_STYLES_KEY });
     },
   });
 
@@ -39,8 +50,8 @@ export function ResetWritingStyle() {
 
   return (
     <SettingRow
-      title={t('writingStyle.settings.reset.title')}
-      description={t('writingStyle.settings.reset.description')}
+      title={t('writingStyle.settings.reset.title', { style: style.name })}
+      description={t('writingStyle.settings.reset.description', { style: style.name })}
       action={
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -55,9 +66,11 @@ export function ResetWritingStyle() {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{t('writingStyle.settings.reset.confirmTitle')}</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t('writingStyle.settings.reset.confirmTitle', { style: style.name })}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                {t('writingStyle.settings.reset.description')}
+                {t('writingStyle.settings.reset.description', { style: style.name })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

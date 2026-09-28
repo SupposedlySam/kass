@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import type { WritingStyle } from '@/lib/api/types';
 import { useWritingStyle } from '@/lib/hooks/useWritingStyle';
 import { StyleCalibrationDialog } from './StyleCalibrationDialog';
 import { WritingStyleHabitChips } from './WritingStyleHabits';
 
-/** The invitation to calibrate, with what the last runs learned. */
-export function CalibrationCard() {
+/** The invitation to calibrate a style, with what its last runs learned. */
+export function CalibrationCard({ style, apps }: { style: WritingStyle; apps: string[] }) {
   const { t } = useTranslation();
-  const { data: status } = useWritingStyle();
+  const { data: status } = useWritingStyle(style.id);
   const [open, setOpen] = useState(false);
   const runs = status?.runs ?? 0;
 
@@ -16,9 +17,13 @@ export function CalibrationCard() {
     <section className="mb-7 flex flex-col gap-3.5 rounded-[10px] border border-accent/20 bg-accent/[0.04] p-5">
       <div className="flex items-start justify-between gap-6">
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">{t('writingStyle.settings.calibrate.title')}</h2>
+          <h2 className="text-base font-semibold">
+            {t('writingStyle.settings.calibrate.title', { style: style.name })}
+          </h2>
           <p className="text-xs text-muted-foreground">
-            {t('writingStyle.settings.calibrate.description')}
+            {apps.length
+              ? t('writingStyle.settings.calibrate.descriptionApps', { apps: apps.join(', ') })
+              : t('writingStyle.settings.calibrate.description')}
           </p>
         </div>
         <Button className="shrink-0 font-semibold" onClick={() => setOpen(true)}>
@@ -31,7 +36,9 @@ export function CalibrationCard() {
       {runs > 0 && (
         <>
           <p className="font-mono text-[11px] text-muted-foreground">
-            <span className="uppercase">{t('writingStyle.settings.calibrate.habitsLabel')}</span>
+            <span className="uppercase">
+              {t('writingStyle.settings.calibrate.habitsLabel', { style: style.name })}
+            </span>
             {status?.last_run_at &&
               ` · ${t('writingStyle.settings.calibrate.lastRun', {
                 date: new Date(status.last_run_at).toLocaleDateString(undefined, {
@@ -49,7 +56,7 @@ export function CalibrationCard() {
         </>
       )}
 
-      <StyleCalibrationDialog open={open} onOpenChange={setOpen} />
+      <StyleCalibrationDialog open={open} onOpenChange={setOpen} style={style} />
     </section>
   );
 }
