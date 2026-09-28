@@ -497,7 +497,7 @@
       "words_other": "{{formatted}} words",
       "noDictation": "No dictation",
       "on": "{{value}} on {{date}}",
-      "change": "{{pct}}% vs {{period}}",
+      "change": "{{pct}} vs {{period}}",
       "today": "today",
       "thisWeek": "this week",
       "weekOf": "Week of {{date}}",

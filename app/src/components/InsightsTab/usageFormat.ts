@@ -61,6 +61,16 @@ export function percentChange(current: number, previous: number): number | null 
 }
 
 /**
+ * A percent change as people read it: "18%", or a multiple once it's at least
+ * tripled ("16×"), where a percentage like 1550% stops meaning much. Unsigned;
+ * callers add the arrow.
+ */
+export function formatChange(pct: number): string {
+  if (pct >= 200) return `${Math.round((pct + 100) / 100)}×`;
+  return `${Math.abs(pct)}%`;
+}
+
+/**
  * A smooth path through points, as monotone cubic Béziers (Fritsch–Carlson):
  * the curve never swings above a peak or below a zero between two points,
  * so it never shows words that weren't there. Points go left to right.

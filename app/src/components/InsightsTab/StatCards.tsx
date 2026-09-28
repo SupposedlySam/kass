@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { UsageStatsResponse } from '@/lib/api/types';
 import { cn } from '@/lib/utils/cn';
 import {
+  formatChange,
   formatCount,
   formatDay,
   formatSaved,
@@ -117,7 +118,7 @@ export function StatCards({ stats }: { stats: UsageStatsResponse }) {
                 : t('insights.stats.noChange')
               : pct === 0
                 ? t('insights.stats.noChange')
-                : `${arrow(trend)}${Math.abs(pct)}%`;
+                : `${arrow(trend)}${formatChange(pct)}`;
           return {
             note,
             trend,

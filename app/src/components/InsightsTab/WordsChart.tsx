@@ -3,6 +3,7 @@ import type { UsagePoint, UsageStatsResponse } from '@/lib/api/types';
 import { cn } from '@/lib/utils/cn';
 import { ChartTip, tipAlign } from './ChartTip';
 import {
+  formatChange,
   formatCount,
   formatDay,
   formatShortDate,
@@ -226,7 +227,7 @@ export function WordsChart({ stats, appName }: { stats: UsageStatsResponse; appN
                       )}
                     >
                       {t('insights.chart.change', {
-                        pct: `${change > 0 ? '▲' : '▼'} ${Math.abs(change)}`,
+                        pct: `${change > 0 ? '▲' : '▼'} ${formatChange(change)}`,
                         period: legendPrevious.toLowerCase(),
                       })}
                     </span>
