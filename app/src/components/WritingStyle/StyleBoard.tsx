@@ -15,8 +15,9 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { StyledApp, WritingStyle, WritingStylesResponse } from '@/lib/api/types';
-import { useAssignAppStyle, WRITING_STYLES_KEY } from '@/lib/hooks/useWritingStyle';
+import { WRITING_STYLES_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
+import { useMoveApp } from './MoveAppDialog';
 
 const DRAG_TYPE = 'application/x-voicebox-app';
 
@@ -46,13 +47,13 @@ export function StyleBoard({
   selectedId: string;
   onSelect: (styleId: string) => void;
 }) {
-  const assign = useAssignAppStyle();
+  const mover = useMoveApp();
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
   const move = (bundleId: string, styleId: string) => {
     const app = data.apps.find((a) => a.bundle_id === bundleId);
-    if (app && (app.style_id !== styleId || !app.confirmed)) assign.mutate({ app, styleId });
+    if (app) mover.move(app, styleId);
   };
 
   return (
@@ -79,7 +80,12 @@ export function StyleBoard({
           onMove={move}
         />
       ))}
-      <NewStyleColumn onCreated={onSelect} />
+      <NewStyleColumn
+        onCreated={onSelect}
+        full={data.styles.length >= data.max_styles}
+        max={data.max_styles}
+      />
+      {mover.dialog}
     </div>
   );
 }
@@ -225,7 +231,16 @@ function StyleColumn({
 }
 
 /** The "+ New style" column: a button that becomes a name field. */
-function NewStyleColumn({ onCreated }: { onCreated: (styleId: string) => void }) {
+function NewStyleColumn({
+  onCreated,
+  full,
+  max,
+}: {
+  onCreated: (styleId: string) => void;
+  /** At the limit: each style keeps a prompt cache, so there are at most `max`. */
+  full: boolean;
+  max: number;
+}) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -247,15 +262,24 @@ function NewStyleColumn({ onCreated }: { onCreated: (styleId: string) => void })
       }),
   });
 
-  if (!naming) {
+  if (!naming || full) {
     return (
       <button
         type="button"
+        disabled={full}
+        aria-describedby={full ? 'style-limit' : undefined}
         onClick={() => setNaming(true)}
-        className="min-h-[200px] flex items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-input text-[13px] text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-[200px] flex flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-input px-3 text-center text-[13px] text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:hover:border-input disabled:hover:text-muted-foreground"
       >
-        <Plus className="size-3.5" />
-        {t('writingStyle.styles.new')}
+        <span className="flex items-center gap-1.5">
+          <Plus className="size-3.5" />
+          {t('writingStyle.styles.new')}
+        </span>
+        {full && (
+          <span id="style-limit" className="text-[11.5px] leading-snug">
+            {t('writingStyle.styles.limit', { count: max })}
+          </span>
+        )}
       </button>
     );
   }

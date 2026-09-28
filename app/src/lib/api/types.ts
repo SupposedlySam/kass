@@ -70,19 +70,31 @@ export interface WritingStyle {
   preserve_technical: boolean;
 }
 
-/** An app and the style its dictation uses; `confirmed` once the user chose it. */
+/**
+ * An app and the style its dictation uses; `confirmed` once the user chose
+ * it. `corrections` counts its captures whose corrections teach that style;
+ * `suggested_style_id` is what most apps of its App Store category use.
+ */
 export interface StyledApp {
   bundle_id: string;
   name?: string | null;
   style_id: string;
   confirmed: boolean;
   count: number;
+  corrections: number;
+  suggested_style_id?: string | null;
 }
 
 export interface WritingStylesResponse {
   styles: WritingStyle[];
   apps: StyledApp[];
+  max_styles: number;
+  /** Memory one style's cached prompt takes in the cleanup model, estimated. */
+  cache_mb_per_style?: number | null;
 }
+
+/** What happens to an app's corrections when it moves to another style. */
+export type MovedCorrections = 'bring' | 'leave';
 
 export type WritingStyleUpdate = Partial<
   Pick<
@@ -183,6 +195,7 @@ export interface CaptureAppCount {
   /** The style the app's dictation uses; the default until the user chooses. */
   style_id?: string | null;
   confirmed: boolean;
+  suggested_style_id?: string | null;
 }
 
 /**

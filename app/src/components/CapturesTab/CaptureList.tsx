@@ -182,7 +182,7 @@ export function CaptureList({
         <NewAppPrompt
           bundleId={bundleId}
           name={capture.app_name || bundleId}
-          suggested={current.style}
+          suggested={current.suggested}
           styles={appStyles.styles}
         />,
       );

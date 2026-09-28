@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
-import type { StyledApp, WritingStyle, WritingStylesResponse } from '@/lib/api/types';
+import type {
+  MovedCorrections,
+  StyledApp,
+  WritingStyle,
+  WritingStylesResponse,
+} from '@/lib/api/types';
 
 /** Per style: `[...WRITING_STYLE_KEY, styleId]`. Invalidating the prefix refreshes every style. */
 export const WRITING_STYLE_KEY = ['writing-style'] as const;
@@ -36,8 +41,9 @@ export function defaultStyle(data: WritingStylesResponse | undefined): WritingSt
 }
 
 /**
- * Put an app in a style, which also confirms a new app's style. The app's
- * corrections now teach that style, so everything learned is refetched.
+ * Put an app in a style, which also confirms a new app's style. Its
+ * corrections come along or stay (`corrections`), so everything learned is
+ * refetched. Ask first with `useMoveApp`.
  */
 export function useAssignAppStyle() {
   const { t } = useTranslation();
@@ -47,10 +53,12 @@ export function useAssignAppStyle() {
     mutationFn: ({
       app,
       styleId,
+      corrections = 'bring',
     }: {
       app: Pick<StyledApp, 'bundle_id' | 'name'>;
       styleId: string;
-    }) => apiClient.assignAppStyle(app.bundle_id, styleId, app.name),
+      corrections?: MovedCorrections;
+    }) => apiClient.assignAppStyle(app.bundle_id, styleId, app.name, corrections),
     onMutate: async ({ app, styleId }) => {
       // Moves at once, so a dragged chip lands where it was dropped.
       await queryClient.cancelQueries({ queryKey: WRITING_STYLES_KEY });
@@ -71,6 +79,7 @@ export function useAssignAppStyle() {
                   style_id: styleId,
                   confirmed: true,
                   count: 0,
+                  corrections: 0,
                 },
               ],
         });

@@ -7,12 +7,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useMoveApp } from '@/components/WritingStyle/MoveAppDialog';
 import type { WritingStyle } from '@/lib/api/types';
-import { useAssignAppStyle } from '@/lib/hooks/useWritingStyle';
 
 /**
  * Under an app's newest capture until the user confirms its style: "New app.
- * Use Work for WhatsApp?", with the style it uses now or any other.
+ * Use Code for Zed?", suggesting the style most apps of its App Store
+ * category use, or any other.
  */
 export function NewAppPrompt({
   bundleId,
@@ -26,9 +27,8 @@ export function NewAppPrompt({
   styles: WritingStyle[];
 }) {
   const { t } = useTranslation();
-  const assign = useAssignAppStyle();
-  const choose = (styleId: string) =>
-    assign.mutate({ app: { bundle_id: bundleId, name }, styleId });
+  const mover = useMoveApp();
+  const choose = (styleId: string) => mover.move({ bundle_id: bundleId, name }, styleId);
 
   return (
     <div className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground">
@@ -38,7 +38,7 @@ export function NewAppPrompt({
       <Button
         size="sm"
         className="h-[26px] shrink-0 px-2.5 text-xs font-semibold"
-        disabled={assign.isPending}
+        disabled={mover.isPending}
         onClick={() => choose(suggested.id)}
       >
         {t('captures.apps.use', { style: suggested.name })}
@@ -49,7 +49,7 @@ export function NewAppPrompt({
             size="sm"
             variant="outline"
             className="h-[26px] shrink-0 gap-1 px-2.5 text-xs"
-            disabled={assign.isPending}
+            disabled={mover.isPending}
           >
             {t('captures.apps.pickAnother')}
             <ChevronDown className="size-3" />
@@ -65,6 +65,7 @@ export function NewAppPrompt({
             ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {mover.dialog}
     </div>
   );
 }

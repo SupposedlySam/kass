@@ -19,6 +19,7 @@ import type {
   HealthResponse,
   ModelDownloadRequest,
   ModelStatusListResponse,
+  MovedCorrections,
   PersonalExample,
   WhisperModelSize,
   WritingStyle,
@@ -213,10 +214,14 @@ class ApiClient {
     bundleId: string,
     styleId: string,
     appName?: string | null,
+    corrections: MovedCorrections = 'bring',
   ): Promise<WritingStylesResponse> {
     return this.request<WritingStylesResponse>(
       `/writing-styles/apps/${encodeURIComponent(bundleId)}`,
-      { method: 'PUT', body: JSON.stringify({ style_id: styleId, app_name: appName ?? null }) },
+      {
+        method: 'PUT',
+        body: JSON.stringify({ style_id: styleId, app_name: appName ?? null, corrections }),
+      },
     );
   }
 

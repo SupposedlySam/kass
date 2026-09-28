@@ -907,6 +907,17 @@
       "namePlaceholder": "Name",
       "createFailed": "Could not add the style",
       "assignFailed": "Could not change the app's style",
+      "memory": "Each style keeps its own model cache of about {{mb}} MB, which keeps switching apps fast. More styles use more memory.",
+      "limit_one": "Voicebox keeps at most {{count}} style, one model cache each.",
+      "limit_other": "Voicebox keeps at most {{count}} styles, one model cache each.",
+      "moveDialog": {
+        "title": "Move {{app}} to {{to}}",
+        "description_one": "{{app}} has {{count}} correction teaching {{from}}. Bring it to {{to}}, or leave it with {{from}}? Either way, new corrections in {{app}} teach {{to}}.",
+        "description_other": "{{app}} has {{count}} corrections teaching {{from}}. Bring them to {{to}}, or leave them with {{from}}? Either way, new corrections in {{app}} teach {{to}}.",
+        "bring_one": "Bring it to {{to}}",
+        "bring_other": "Bring {{count}} to {{to}}",
+        "leave": "Leave with {{from}}"
+      },
       "settings": {
         "title": "{{style}} settings",
         "name": "Name",

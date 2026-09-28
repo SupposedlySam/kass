@@ -43,6 +43,11 @@ export function WritingStylePage() {
       >
         <div className="py-3.5">
           <StyleBoard data={data} selectedId={style.id} onSelect={select} />
+          {data.cache_mb_per_style ? (
+            <p className="mt-2.5 text-xs text-muted-foreground">
+              {t('writingStyle.styles.memory', { mb: data.cache_mb_per_style.toLocaleString() })}
+            </p>
+          ) : null}
         </div>
       </SettingSection>
       <StyleSettings key={style.id} style={style} onDeleted={() => select(undefined)} />

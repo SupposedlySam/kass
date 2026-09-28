@@ -6,6 +6,8 @@ export interface AppStyle {
   style: WritingStyle;
   /** False while the app only uses the default because the user hasn't chosen. */
   confirmed: boolean;
+  /** Until confirmed: the style most apps of its App Store category use. */
+  suggested: WritingStyle;
 }
 
 export interface AppStyles {
@@ -30,7 +32,9 @@ export function useAppStyles(): AppStyles {
       forApp: (bundleId) => {
         const app = bundleId ? apps.get(bundleId) : undefined;
         const style = (app && byId.get(app.style_id)) || fallback;
-        return style ? { style, confirmed: !!app?.confirmed } : undefined;
+        if (!style) return undefined;
+        const suggested = (app?.suggested_style_id && byId.get(app.suggested_style_id)) || style;
+        return { style, confirmed: !!app?.confirmed, suggested };
       },
     };
   }, [data]);

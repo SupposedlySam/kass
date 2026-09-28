@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAssignAppStyle } from '@/lib/hooks/useWritingStyle';
+import { useMoveApp } from '@/components/WritingStyle/MoveAppDialog';
 import { AppTile } from './CaptureAppList';
 import type { AppStyles } from './useAppStyles';
 
@@ -27,7 +27,7 @@ export function CaptureAppHeader({
   appStyles: AppStyles;
 }) {
   const { t } = useTranslation();
-  const assign = useAssignAppStyle();
+  const mover = useMoveApp();
   const current = appStyles.forApp(bundleId);
   const formatted = count.toLocaleString();
 
@@ -45,9 +45,7 @@ export function CaptureAppHeader({
       {current && (
         <Select
           value={current.confirmed ? current.style.id : ''}
-          onValueChange={(styleId) =>
-            assign.mutate({ app: { bundle_id: bundleId, name }, styleId })
-          }
+          onValueChange={(styleId) => mover.move({ bundle_id: bundleId, name }, styleId)}
         >
           <SelectTrigger
             className="h-[30px] w-auto max-w-[140px] shrink-0 gap-2 bg-background text-[12.5px]"
@@ -67,6 +65,7 @@ export function CaptureAppHeader({
           </SelectContent>
         </Select>
       )}
+      {mover.dialog}
     </div>
   );
 }
