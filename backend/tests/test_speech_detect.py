@@ -18,16 +18,27 @@ def room_noise(seconds, level=300, seed=0):
 
 
 def voice(seconds, seed=1):
-    """A crude vowel: a pitched pulse train through vowel-like resonances,
-    with a syllable rhythm. Enough for Silero to hear a voice."""
+    """A crude voice: the harmonics of a wavering pitch, weighted by vowel
+    resonances that glide from vowel to vowel, with a syllable rhythm.
+    Silero hears it as clearly as real speech."""
     rng = np.random.default_rng(seed)
     t = np.arange(round(seconds * RATE)) / RATE
     pitch = 120 + 20 * np.sin(2 * np.pi * 3 * t)
     phase = 2 * np.pi * np.cumsum(pitch) / RATE
-    source = sum(np.sin(k * phase) / k for k in range(1, 30))
-    formants = sum(np.sin(2 * np.pi * f * t) for f in (700, 1200, 2600))
-    syllables = np.clip(np.sin(2 * np.pi * 4 * t), 0, 1)
-    signal = source * (1 + 0.3 * formants) * syllables + rng.normal(0, 0.02, len(t))
+    first = 600 + 200 * np.sin(2 * np.pi * 2 * t)
+    second = 1300 + 400 * np.sin(2 * np.pi * 1.3 * t)
+    signal = np.zeros_like(t)
+    for k in range(1, 40):
+        f = k * pitch
+        gain = (
+            np.exp(-(((f - first) / 150) ** 2))
+            + 0.6 * np.exp(-(((f - second) / 200) ** 2))
+            + 0.2 * np.exp(-(((f - 2600) / 300) ** 2))
+            + 0.02
+        )
+        signal += gain * np.sin(k * phase)
+    syllables = np.clip(np.sin(2 * np.pi * 4 * t), 0, 1) ** 0.5
+    signal = signal * syllables + rng.normal(0, 0.01, len(t))
     return (signal / np.abs(signal).max() * 12000).astype(np.int16)
 
 
@@ -45,13 +56,26 @@ def test_a_voice_is_speech():
     assert has_speech(np.concatenate([room_noise(0.5), voice(1.5), room_noise(0.5)]), RATE)
 
 
-def with_start_cue(take, mic_open_ms):
-    """``take`` with the dictation start cue picked up by the microphone
-    ``mic_open_ms`` after it began, as loud as the file itself."""
+def start_cue():
+    """The bundled dictation start cue, at 48 kHz."""
     with wave.open(str(SOUNDS / "start.wav")) as w:
         rate = w.getframerate()
         cue = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
-    cue = np.interp(np.arange(0, len(cue), rate / RATE), np.arange(len(cue)), cue)
+    return np.interp(np.arange(0, len(cue), rate / RATE), np.arange(len(cue)), cue)
+
+
+def loud_chime():
+    """The app's first start cue: a bright 220 ms C major chord with a 5 ms
+    attack, which Silero hears as a voice."""
+    t = np.arange(round(0.22 * RATE)) / RATE
+    chord = sum(np.sin(2 * np.pi * f * t) + 0.15 * np.sin(4 * np.pi * f * t) for f in (523.25, 659.25, 783.99)) / 3
+    return chord * np.minimum(1, t / 0.005) * np.exp(-t * 9) * 0.35 * 32767
+
+
+def with_cue(take, mic_open_ms, cue=None):
+    """``take`` with a cue (the start cue unless given) picked up by the
+    microphone ``mic_open_ms`` after it began, as loud as the file itself."""
+    cue = start_cue() if cue is None else cue
     heard = cue[round(mic_open_ms * RATE / 1000) :]
     mixed = take.astype(np.float32)
     mixed[: len(heard)] += heard
@@ -62,8 +86,8 @@ START_CUE_SPAN = RATE * 300 // 1000  # sound_cues::START_CUE_SPAN_MS
 
 
 @pytest.mark.parametrize("mic_open_ms", [20, 100, 160])
-def test_the_start_cue_in_a_silent_take_is_not_speech(mic_open_ms):
-    take = with_start_cue(room_noise(2, level=30), mic_open_ms)
+def test_a_voice_where_the_start_cue_can_be_does_not_count(mic_open_ms):
+    take = with_cue(room_noise(2, level=30), mic_open_ms, loud_chime())
     # A loud chime reads as a voice to Silero...
     unaware = SpeechDetector(RATE)
     unaware.feed(take)
@@ -74,8 +98,16 @@ def test_the_start_cue_in_a_silent_take_is_not_speech(mic_open_ms):
     assert not detector.heard(0, len(take))
 
 
+@pytest.mark.parametrize("mic_open_ms", [20, 100, 160])
+def test_the_start_cue_in_a_silent_take_is_not_speech(mic_open_ms):
+    take = with_cue(room_noise(2, level=30), mic_open_ms)
+    detector = SpeechDetector(RATE, ignore_before=START_CUE_SPAN)
+    detector.feed(take)
+    assert not detector.heard(0, len(take))
+
+
 def test_speech_after_the_start_cue_is_heard():
-    take = with_start_cue(np.concatenate([room_noise(0.3, level=30), voice(1.0)]), 0)
+    take = with_cue(np.concatenate([room_noise(0.3, level=30), voice(1.0)]), 0)
     detector = SpeechDetector(RATE, ignore_before=START_CUE_SPAN)
     detector.feed(take)
     assert detector.heard(0, len(take))
