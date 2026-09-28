@@ -467,6 +467,24 @@ async def refine_transcript(
     return text, resolved_size
 
 
+async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
+    """Load the model (and personal adapter) ``refine_transcript`` will use, without generating.
+
+    Called when a dictation starts: after a command has run on another model,
+    the switch back happens while the user speaks, not after release.
+    """
+    backend = llm_service.get_llm_model()
+    prepare = getattr(backend, "prepare", None)
+    if prepare is None:
+        return
+    adapter_path = None
+    if getattr(backend, "supports_adapters", False):
+        from .model_improvement.manager import active_adapter
+
+        adapter_path = active_adapter(model_size, flags.to_dict())
+    await prepare(model_size, adapter_path)
+
+
 def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, str | None]:
     """Shared production/training preprocessing, including deterministic edits."""
 

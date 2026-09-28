@@ -232,10 +232,7 @@ class MLXQwenLLMBackend:
         # Load-if-needed and inference run as one job on the MLX worker so a
         # concurrent unload or different-size load can't land between them.
         def _load_and_generate() -> str:
-            if self._adapter_path != adapter_path:
-                self.unload_model()
-                self._adapter_path = adapter_path
-            self._ensure_loaded_sync(model_size)
+            self._ensure_ready_sync(model_size, adapter_path)
             self._listener = listener
             self._stop = stop
             self._hint = hint
@@ -247,6 +244,20 @@ class MLXQwenLLMBackend:
                 self._hint = None
 
         return await run_on_mlx_thread(_load_and_generate)
+
+    async def prepare(self, model_size: Optional[str] = None, adapter_path: Optional[str] = None) -> None:
+        """Load what a later ``generate`` with these arguments needs, without generating.
+
+        Dictation and Command Mode can use different models; a session loads
+        its own while the user speaks rather than after release.
+        """
+        await run_on_mlx_thread(self._ensure_ready_sync, model_size, adapter_path)
+
+    def _ensure_ready_sync(self, model_size: Optional[str], adapter_path: Optional[str]) -> None:
+        if self._adapter_path != adapter_path:
+            self.unload_model()
+            self._adapter_path = adapter_path
+        self._ensure_loaded_sync(model_size)
 
     def _generate_sync(
         self,

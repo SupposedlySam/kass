@@ -421,3 +421,37 @@ def test_only_command_sessions_take_a_bounded_selection(stream, tmp_path, monkey
     stream.source = "dictation"
     with pytest.raises(ValueError, match="Only command"):
         stream.set_selection("x")
+
+
+# --- Switching models between dictation and commands --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_dictation_loads_its_cleanup_model_before_the_first_phrase(monkeypatch):
+    from backend.services import llm as llm_service, refinement
+
+    prepared = []
+
+    class Backend:
+        supports_adapters = False
+
+        async def prepare(self, model_size, adapter_path=None):
+            prepared.append((model_size, adapter_path))
+
+    monkeypatch.setattr(llm_service, "get_llm_model", lambda: Backend())
+    await refinement.load_cleanup_model(RefinementFlags(), "0.6B")
+    assert prepared == [("0.6B", None)]
+
+
+def test_preparing_swaps_the_adapter_and_size_exactly_as_generate_would(monkeypatch):
+    from backend.backends.qwen_llm_backend import MLXQwenLLMBackend
+
+    backend = MLXQwenLLMBackend()
+    calls = []
+    monkeypatch.setattr(backend, "unload_model", lambda: calls.append("unload"))
+    monkeypatch.setattr(backend, "_ensure_loaded_sync", lambda size: calls.append(size))
+    backend._ensure_ready_sync("1.7B", None)
+    assert calls == ["1.7B"]
+    backend._ensure_ready_sync("0.6B", "adapters/a")
+    assert calls == ["1.7B", "unload", "0.6B"]
+    assert backend._adapter_path == "adapters/a"

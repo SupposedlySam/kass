@@ -14,6 +14,7 @@ from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
 from ..services.captures import target_app
 from ..services.commands import MAX_SELECTION_CHARS
+from ..services.refinement import load_cleanup_model
 from ..services.settings import get_capture_settings
 from ..utils.origins import is_allowed_websocket_origin
 
@@ -28,6 +29,8 @@ MAX_COMMAND_CHARS = 4096
 MAX_SELECTION_MESSAGE_CHARS = 2 * MAX_SELECTION_CHARS + MAX_COMMAND_CHARS
 _results: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _running: set[str] = set()
+# Cleanup models loading ahead of a dictation's first phrase.
+_loading: set[asyncio.Task] = set()
 
 
 @router.get("/captures/stream/{session_id}/result")
@@ -41,6 +44,15 @@ async def streaming_result(session_id: str):
     if session_id in _running:
         return JSONResponse(status_code=202, content={"type": "pending"})
     raise HTTPException(status_code=404, detail="Streaming result unavailable; inspect Captures before retrying")
+
+
+async def _load_cleanup(session: StreamingCapture) -> None:
+    """Have the cleanup model resident before the first phrase needs it."""
+    try:
+        await load_cleanup_model(session.flags, session.settings.llm_model)
+    except Exception:
+        # The cleanup loads it anyway, just later.
+        logger.warning("Could not load the cleanup model ahead of time", exc_info=True)
 
 
 @router.websocket("/captures/stream")
@@ -79,6 +91,11 @@ async def stream_capture(websocket: WebSocket):
             )
         )
         worker = asyncio.create_task(session.run())
+        # A command session prefills its own model when its selection arrives.
+        if settings.auto_refine and not session.is_command:
+            load = asyncio.create_task(_load_cleanup(session))
+            _loading.add(load)
+            load.add_done_callback(_loading.discard)
         while True:
             receiver = asyncio.create_task(websocket.receive())
             done, _ = await asyncio.wait({receiver, worker}, timeout=IDLE_TIMEOUT, return_when=asyncio.FIRST_COMPLETED)
