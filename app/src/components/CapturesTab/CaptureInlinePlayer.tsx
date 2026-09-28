@@ -58,13 +58,27 @@ export function CaptureInlinePlayer({
       setIsLoading(false);
       setError(null);
     });
+    // At the end, stop and rewind so the next play starts over.
+    const rewind = () => {
+      if (ws.isPlaying()) ws.pause();
+      ws.seekTo(0);
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
     ws.on('play', () => setIsPlaying(true));
     ws.on('pause', () => setIsPlaying(false));
-    ws.on('finish', () => {
-      setIsPlaying(false);
-      setCurrentTime(ws.getDuration());
+    ws.on('finish', rewind);
+    ws.on('timeupdate', (t) => {
+      // The WebAudio backend only reports the end when its clock has reached
+      // the duration as the sound stops; in WebKit it can stop a moment
+      // short, leaving the player "playing" past the end forever.
+      const end = ws.getDuration();
+      if (end > 0 && t >= end && ws.isPlaying()) {
+        rewind();
+        return;
+      }
+      setCurrentTime(t);
     });
-    ws.on('timeupdate', (t) => setCurrentTime(t));
     ws.on('seeking', (t) => setCurrentTime(t));
     ws.on('error', (err) => {
       debug.error('Inline waveform error', err);
