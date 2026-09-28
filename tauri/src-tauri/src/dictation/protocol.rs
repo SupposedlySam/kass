@@ -60,6 +60,13 @@ pub struct TargetApp {
     pub name: Option<String>,
 }
 
+/// The take's target app, from the focus snapshot taken at key-down. The
+/// server picks the app's writing style from it before the first phrase is
+/// cleaned (docs/plans/PER_APP_STYLE.md).
+pub fn app_message(app: &TargetApp) -> String {
+    serde_json::json!({ "type": "app", "bundle_id": app.bundle_id, "name": app.name }).to_string()
+}
+
 /// `app` is the dictation's target app, when known; older servers ignore it.
 pub fn finish_message(app: Option<&TargetApp>) -> String {
     let mut finish = serde_json::json!({ "type": "finish" });
@@ -198,6 +205,23 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({ "type": "selection", "text": "the \"text\"\n" })
+        );
+    }
+
+    #[test]
+    fn app_message_names_the_target_app() {
+        let app = TargetApp {
+            bundle_id: Some("com.tinyspeck.slackmacgap".into()),
+            name: Some("Slack".into()),
+        };
+        let value: Value = serde_json::from_str(&app_message(&app)).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "type": "app",
+                "bundle_id": "com.tinyspeck.slackmacgap",
+                "name": "Slack",
+            })
         );
     }
 
