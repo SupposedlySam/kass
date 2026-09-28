@@ -138,9 +138,7 @@ impl<T: LiveTarget> Live<T> {
                 LiveStart::Declined(_) => State::Declined,
                 LiveStart::Broken(message) => State::Broken(message),
             },
-            State::Active(owned)
-                if text.len() > owned.text.len() && text.starts_with(owned.text.as_str()) =>
-            {
+            State::Active(owned) if owned.grows_to(&text) => {
                 match self.target.extend(owned.clone(), text).await {
                     Ok(grown) => State::Active(grown),
                     Err(LiveError::NotApplied) => State::Stalled(owned),
@@ -220,7 +218,11 @@ mod tests {
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or(LiveStart::Started(Owned { start: 0, text }));
+                .unwrap_or(LiveStart::Started(Owned {
+                    start: 0,
+                    text,
+                    join: Default::default(),
+                }));
             async move { out }
         }
         fn extend(
@@ -240,6 +242,7 @@ mod tests {
                 .unwrap_or(Ok(Owned {
                     start: owned.start,
                     text,
+                    join: owned.join.clone(),
                 }));
             async move { out }
         }

@@ -26,6 +26,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use crate::insert_chain::{Attempt, Inserter, Method, Request};
+use crate::join;
 
 /// A range in the element's text, in UTF-16 code units (what AX reports).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,6 +245,78 @@ pub fn probe<T: AxTextTarget>(target: &T) -> Capabilities {
     }
 }
 
+// ========================================================================
+// Caret context: the text the dictation joins
+// (docs/plans/MID_SENTENCE_DICTATION.md)
+// ========================================================================
+
+/// UTF-16 units read before the caret: enough to see the end of a word or
+/// sentence.
+const CONTEXT_BEFORE: i64 = 16;
+/// UTF-16 units read after the caret or selection.
+const CONTEXT_AFTER: i64 = 4;
+
+/// The text on each side of `before.selection`, as far as it can be read.
+/// `before` is an observation taken before anything was written.
+pub fn context_at<T: AxTextTarget>(target: &T, before: Observation) -> join::Context {
+    let Some(sel) = before.selection else {
+        return join::Context::default();
+    };
+    let start = (sel.location - CONTEXT_BEFORE).max(0);
+    let end = sel.location + sel.length;
+    join::Context {
+        before: side(target, start, sel.location, true),
+        after: before
+            .char_count
+            .and_then(|count| side(target, end, (end + CONTEXT_AFTER).min(count), false)),
+    }
+}
+
+/// The text in `from..to`. An edge away from the caret can split a
+/// surrogate pair, which does not read as a string: then one unit less is
+/// read on that side. `caret_at_end` says which side the caret is on.
+fn side<T: AxTextTarget>(target: &T, from: i64, to: i64, caret_at_end: bool) -> Option<String> {
+    if from >= to {
+        return (from == to).then(String::new);
+    }
+    let range = |from: i64, to: i64| TextRange {
+        location: from,
+        length: to - from,
+    };
+    text_in(target, range(from, to)).or_else(|| {
+        let shorter = if caret_at_end {
+            range(from + 1, to)
+        } else {
+            range(from, to - 1)
+        };
+        (shorter.length > 0)
+            .then(|| text_in(target, shorter))
+            .flatten()
+    })
+}
+
+/// The text around the caret in `target`, where dictated text may be
+/// fitted to it: not in secure fields, and not in apps whose AX text is not
+/// the input (terminals).
+pub fn caret_context<T: AxTextTarget>(target: &T, bundle_id: Option<&str>) -> join::Context {
+    let secure = [target.role(), target.subrole()]
+        .iter()
+        .any(|r| r.as_deref() == Some(SECURE_ROLE));
+    if secure || bundle_id.is_some_and(|id| CLIPBOARD_ONLY_BUNDLES.contains(&id)) {
+        return join::Context::default();
+    }
+    context_at(target, target.observe())
+}
+
+/// `text` fitted to the text around the caret in `pid`'s focused element,
+/// or unchanged where that can't be read. Blocking.
+pub fn fit_to_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> String {
+    match macos::FocusedElement::of_app(pid) {
+        Some(element) => caret_context(&element, bundle_id).fit(text),
+        None => text.to_string(),
+    }
+}
+
 /// Try to insert `text` into `target`, verifying the result. `sleep` is
 /// called between re-reads (a real sleep in production, recorded in tests).
 pub fn insert_into<T: AxTextTarget>(
@@ -308,10 +381,19 @@ pub fn insert_into<T: AxTextTarget>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Owned {
     pub start: i64,
+    /// The text as written, already fitted to [`Owned::join`].
     pub text: String,
+    /// The field around the caret when the first live text was written.
+    pub join: join::Context,
 }
 
 impl Owned {
+    /// Whether `text`, once fitted, grows the owned text.
+    pub fn grows_to(&self, text: &str) -> bool {
+        let text = self.join.lead(text);
+        text.len() > self.text.len() && text.starts_with(self.text.as_str())
+    }
+
     fn range(&self) -> TextRange {
         TextRange {
             location: self.start,
@@ -408,6 +490,7 @@ fn rewrite<T: AxTextTarget>(
     let written = Owned {
         start: owned.start,
         text: text.to_string(),
+        join: owned.join.clone(),
     };
     let expected = Observation {
         selection: Some(TextRange {
@@ -471,11 +554,15 @@ pub fn begin_live<T: AxTextTarget>(
     if text_in(target, selection).is_none() {
         return LiveStart::Declined(FallbackReason::Unverifiable);
     }
-    match insert_into(target, bundle_id, text, sleep) {
+    // Read once: after this, the text around the caret includes our own.
+    let join = context_at(target, caps.before);
+    let text = join.lead(text);
+    match insert_into(target, bundle_id, &text, sleep) {
         Outcome::Inserted { .. } => {
             let owned = Owned {
                 start: selection.location,
-                text: text.to_string(),
+                text,
+                join,
             };
             match intact(target, &owned) {
                 Some(_) => LiveStart::Started(owned),
@@ -489,13 +576,14 @@ pub fn begin_live<T: AxTextTarget>(
     }
 }
 
-/// Grow the owned text to `text`, which must start with it.
+/// Grow the owned text to `text`, which must start with it once fitted.
 pub fn extend_live<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     text: &str,
     sleep: impl FnMut(Duration),
 ) -> Result<Owned, LiveError> {
+    let text = &owned.join.lead(text);
     if !text.starts_with(owned.text.as_str()) {
         return Err(LiveError::Uncertain("Live text can only grow.".into()));
     }
@@ -506,15 +594,16 @@ pub fn extend_live<T: AxTextTarget>(
     rewrite(target, owned, before, text, sleep)
 }
 
-/// Make the owned text exactly `final_text` (empty removes it), unless the
-/// user has touched the field since.
+/// Make the owned text exactly `final_text`, fitted to the text around it
+/// (empty removes it), unless the user has touched the field since.
 pub fn finish_live<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     final_text: &str,
     sleep: impl FnMut(Duration),
 ) -> Result<(), LiveError> {
-    if final_text == owned.text {
+    let final_text = &owned.join.fit(final_text);
+    if *final_text == owned.text {
         return Ok(());
     }
     let before = intact(target, owned).ok_or(LiveError::Edited)?;
@@ -1383,7 +1472,8 @@ mod tests {
             let t = self.text.borrow();
             let start = r.location as usize;
             let end = start + r.length as usize;
-            t.get(start..end).map(|s| String::from_utf16(s).unwrap())
+            // A split surrogate pair does not read, as with a real element.
+            t.get(start..end).and_then(|s| String::from_utf16(s).ok())
         }
     }
 
@@ -1485,6 +1575,80 @@ mod tests {
         assert_eq!(sleeps.len(), VERIFY_POLLS as usize);
     }
 
+    // ---- caret context ----
+
+    #[test]
+    fn context_is_read_around_the_caret() {
+        let field = FakeField::new("I think we should move it now", range(17, 0));
+        assert_eq!(
+            caret_context(&field, None),
+            join::Context {
+                before: Some(" think we should".into()),
+                after: Some(" mov".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn context_is_read_around_a_selection() {
+        let field = FakeField::new("Hello world, friend", range(6, 5));
+        let ctx = caret_context(&field, None);
+        assert_eq!(ctx.before.as_deref(), Some("Hello "));
+        assert_eq!(ctx.after.as_deref(), Some(", fr"));
+    }
+
+    #[test]
+    fn context_is_limited_to_a_few_characters() {
+        let field = FakeField::new("0123456789abcdefghijXYZ", range(20, 0));
+        assert_eq!(
+            caret_context(&field, None).before.as_deref(),
+            Some("456789abcdefghij")
+        );
+    }
+
+    #[test]
+    fn field_edges_read_as_empty() {
+        let field = FakeField::new("", range(0, 0));
+        assert_eq!(
+            caret_context(&field, None),
+            join::Context {
+                before: Some(String::new()),
+                after: Some(String::new()),
+            }
+        );
+    }
+
+    #[test]
+    fn context_skips_a_split_surrogate_pair() {
+        // 👍 is two UTF-16 units; 16 units back lands between them.
+        let field = FakeField::new("👍abcdefghijklmno pq", range(17, 0));
+        assert_eq!(
+            caret_context(&field, None).before.as_deref(),
+            Some("abcdefghijklmno")
+        );
+        let field = FakeField::new("ab cd👍", range(2, 0));
+        assert_eq!(caret_context(&field, None).after.as_deref(), Some(" cd"));
+    }
+
+    #[test]
+    fn unreadable_text_gives_no_context() {
+        let mut field = FakeField::new("abc", range(1, 0));
+        field.ranges_unreadable = true;
+        assert_eq!(caret_context(&field, None), join::Context::default());
+    }
+
+    #[test]
+    fn terminals_and_secure_fields_give_no_context() {
+        let field = FakeField::new("$ ", range(2, 0));
+        assert_eq!(
+            caret_context(&field, Some("com.apple.Terminal")),
+            join::Context::default()
+        );
+        let mut field = FakeField::new("secret", range(6, 0));
+        field.subrole = Some("AXSecureTextField".into());
+        assert_eq!(caret_context(&field, None), join::Context::default());
+    }
+
     #[test]
     fn terminal_is_never_touched() {
         let field = FakeField::new("$ ", range(2, 0));
@@ -1514,7 +1678,11 @@ mod tests {
             owned,
             Owned {
                 start: 11,
-                text: "The first".into()
+                text: "The first".into(),
+                join: join::Context {
+                    before: Some("Dear team, ".into()),
+                    after: Some(String::new()),
+                },
             }
         );
         let owned = extend_live(&field, &owned, "The first part is", |_| {}).unwrap();
@@ -1546,9 +1714,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             field.contents(),
-            "Before. Do not send the update to the team.After"
+            "Before. Do not send the update to the team. After"
         );
-        assert_eq!(field.sel.get(), range(8 + 35, 0));
+        assert_eq!(field.sel.get(), range(8 + 36, 0));
     }
 
     #[test]
@@ -1577,7 +1745,29 @@ mod tests {
         let owned = started(live(&field, "Café 👍"));
         let owned = extend_live(&field, &owned, "Café 👍 and", |_| {}).unwrap();
         finish_live(&field, &owned, "Café 👍 and naïve.", |_| {}).unwrap();
-        assert_eq!(field.contents(), "xCafé 👍 and naïve.");
+        assert_eq!(field.contents(), "x Café 👍 and naïve.");
+    }
+
+    #[test]
+    fn live_text_joins_the_sentence_around_the_caret() {
+        let field = FakeField::new("Can you before lunch?", range(7, 0));
+        let owned = started(live(&field, "send"));
+        assert_eq!(field.contents(), "Can you send before lunch?");
+        assert!(owned.grows_to("send the"));
+        let owned = extend_live(&field, &owned, "send the", |_| {}).unwrap();
+        finish_live(&field, &owned, "send the report.", |_| {}).unwrap();
+        assert_eq!(field.contents(), "Can you send the report before lunch?");
+    }
+
+    #[test]
+    fn live_text_after_a_word_gets_a_space() {
+        let field = FakeField::new("I think we should", range(17, 0));
+        let owned = started(live(&field, "move"));
+        assert_eq!(owned.text, " move");
+        assert!(owned.grows_to("move it"));
+        assert!(!owned.grows_to("move"));
+        finish_live(&field, &owned, "move it.", |_| {}).unwrap();
+        assert_eq!(field.contents(), "I think we should move it.");
     }
 
     #[test]

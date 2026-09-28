@@ -10,6 +10,7 @@ mod input_monitoring;
 mod insert_chain;
 #[cfg(test)]
 mod insert_bench;
+mod join;
 #[cfg(desktop)]
 mod key_codes;
 mod keyboard_layout;
@@ -1033,6 +1034,9 @@ fn run_insert_chain(
         inner,
         bring_front: &bring_front,
     };
+    // Every method inserts the same text, fitted to what is around the caret
+    // (docs/plans/MID_SENTENCE_DICTATION.md).
+    let text = &text_insert::fit_to_focused(pid, bundle_id, text);
     let keys = keystroke_insert::Keystrokes::new();
     let paste = clipboard::Paste::new(prepared);
     let (keys, paste) = (in_front(&keys), in_front(&paste));

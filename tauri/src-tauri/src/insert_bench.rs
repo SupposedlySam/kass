@@ -203,3 +203,34 @@ fn insert_bench() {
         },
     );
 }
+
+/// What reading the text around the caret adds to each dictation, and that
+/// it reads the real field (docs/plans/MID_SENTENCE_DICTATION.md).
+#[test]
+#[ignore = "drives TextEdit; run by hand"]
+fn caret_context_bench() {
+    assert!(
+        crate::accessibility::is_trusted(),
+        "grant this terminal Accessibility"
+    );
+    let pid = textedit_pid();
+    assert!(crate::text_insert::clear_focused(pid), "could not clear");
+    let ax = crate::text_insert::Accessibility;
+    let setup = ax.attempt(&Request {
+        pid,
+        bundle_id: Some("com.apple.TextEdit"),
+        role: Some("AXTextArea"),
+        text: "I think we should",
+    });
+    assert!(matches!(setup, Attempt::Inserted { .. }), "{setup:?}");
+
+    let mut samples = Vec::new();
+    for _ in 0..RUNS {
+        let started = Instant::now();
+        let fitted =
+            crate::text_insert::fit_to_focused(pid, Some("com.apple.TextEdit"), "move it.");
+        samples.push(started.elapsed());
+        assert_eq!(fitted, " move it.");
+    }
+    println!("\nReading the caret context: {}", stats(&mut samples));
+}
