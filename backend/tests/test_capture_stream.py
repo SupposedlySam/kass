@@ -670,7 +670,7 @@ def test_websocket_uses_database_factory_initialized_at_startup(tmp_path, monkey
 
 @pytest.mark.parametrize(("source", "loads"), [("dictation", True), ("command", False)])
 def test_a_dictation_loads_its_cleanup_model_while_the_user_speaks(tmp_path, monkeypatch, source, loads):
-    # After a command ran on another model, switching back must not wait for release.
+    # Loading the model (or swapping its adapter back) must not wait for release.
     from fastapi.testclient import TestClient
 
     from backend.routes import capture_stream as route

@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 
-from ..services.commands import DEFAULT_COMMAND_MODEL, default_transforms
+from ..services.commands import default_transforms
 from ..utils.capture_chords import (
     default_command_chord,
     default_push_to_talk_chord,
@@ -57,10 +57,10 @@ class CaptureSettings(Base):
     chord_toggle_to_talk_keys = Column(
         JSON, nullable=False, default=default_toggle_to_talk_chord
     )
-    # Command Mode (docs/plans/COMMAND_MODE.md): its chord (empty = off), the
-    # model that rewrites, and the saved transforms ({id, name, instruction}).
+    # Command Mode (docs/plans/COMMAND_MODE.md): its chord (empty = off) and
+    # the saved transforms ({id, name, instruction}). It rewrites on the
+    # cleanup model, llm_model.
     chord_command_keys = Column(JSON, nullable=False, default=default_command_chord)
-    command_llm_model = Column(String, nullable=False, default=DEFAULT_COMMAND_MODEL)
     command_transforms = Column(JSON, nullable=False, default=default_transforms)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

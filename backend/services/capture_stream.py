@@ -324,8 +324,8 @@ class StreamingCapture:
 
     async def prefill_command(self) -> None:
         try:
-            ensure_model_ready(self.settings.command_llm_model)
-            await prefill(self.selection, self.settings.command_llm_model)
+            ensure_model_ready(self.settings.llm_model)
+            await prefill(self.selection, self.settings.llm_model)
         except Exception:
             # Only a head start: the rewrite at finish reports real failures.
             logger.warning("Command prefill failed", exc_info=True)
@@ -336,11 +336,11 @@ class StreamingCapture:
             if self.selection is None:
                 raise ValueError("Select text to rewrite first")
             instruction, transform = resolve_instruction(self.raw, settings_transforms(self.settings))
-            ensure_model_ready(self.settings.command_llm_model)
+            ensure_model_ready(self.settings.llm_model)
             started = time.monotonic()
             try:
                 self.refined, self.llm_model = await rewrite(
-                    self.selection, instruction, self.settings.command_llm_model
+                    self.selection, instruction, self.settings.llm_model
                 )
             finally:
                 self._spent("refine", started)
