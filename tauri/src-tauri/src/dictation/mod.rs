@@ -307,11 +307,18 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
 }
 
 /// The app a take went to, for its capture. None before focus is known.
+/// Its category is read from the app bundle once per app, off the
+/// microphone's path.
 fn target_app(focus: &Mutex<Option<FocusSnapshot>>) -> Option<TargetApp> {
     let focus = focus.lock().ok()?.clone()?;
+    let category = focus
+        .bundle_id
+        .as_deref()
+        .and_then(crate::app_icon::app_category);
     Some(TargetApp {
         bundle_id: focus.bundle_id,
         name: focus.app_name,
+        category,
     })
 }
 

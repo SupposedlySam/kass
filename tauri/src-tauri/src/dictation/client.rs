@@ -506,6 +506,7 @@ mod tests {
             Some(TargetApp {
                 bundle_id: Some("com.apple.Notes".into()),
                 name: Some("Notes".into()),
+                category: None,
             })
         });
         client.set_format(48_000);
@@ -535,6 +536,7 @@ mod tests {
         *focus.lock().unwrap() = Some(TargetApp {
             bundle_id: Some("com.tinyspeck.slackmacgap".into()),
             name: Some("Slack".into()),
+            category: None,
         });
         let actions = client.push_audio(&[2]);
         // Ahead of the audio, so the style is set before anything is cleaned.
@@ -556,6 +558,7 @@ mod tests {
             Some(TargetApp {
                 bundle_id: Some("com.apple.mail".into()),
                 name: Some("Mail".into()),
+                category: None,
             })
         });
         client.set_format(48_000);

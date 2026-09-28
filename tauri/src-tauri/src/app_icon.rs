@@ -1,13 +1,61 @@
-//! App icons for Captures, which shows the app each dictation went to.
+//! App icons for Captures, which shows the app each dictation went to, and
+//! app categories, which suggest a writing style for a new app.
 //!
 //! The icon is looked up by bundle id at display time rather than saved with
 //! the capture, so it follows the installed app and costs nothing to store.
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 use crate::focus_capture::{ns_string_to_rust, AutoreleasePool};
 use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 
 type Id = *mut Object;
+
+/// The App Store category the app with `bundle_id` declares in its
+/// Info.plist (`LSApplicationCategoryType`, e.g.
+/// `public.app-category.developer-tools`). `None` when the app isn't
+/// installed or declares none. Read once per app per launch.
+pub fn app_category(bundle_id: &str) -> Option<String> {
+    static CATEGORIES: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+    let cache = CATEGORIES.get_or_init(Default::default);
+    if let Some(known) = cache.lock().ok()?.get(bundle_id) {
+        return known.clone();
+    }
+    let category = read_category(bundle_id);
+    if let Ok(mut known) = cache.lock() {
+        known.insert(bundle_id.to_string(), category.clone());
+    }
+    category
+}
+
+fn read_category(bundle_id: &str) -> Option<String> {
+    let bundle_id = std::ffi::CString::new(bundle_id).ok()?;
+    unsafe {
+        let _pool = AutoreleasePool::new();
+        let workspace: Id = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let id: Id = msg_send![class!(NSString), stringWithUTF8String: bundle_id.as_ptr()];
+        let url: Id = msg_send![workspace, URLForApplicationWithBundleIdentifier: id];
+        if url.is_null() {
+            return None;
+        }
+        let bundle: Id = msg_send![class!(NSBundle), bundleWithURL: url];
+        if bundle.is_null() {
+            return None;
+        }
+        let key: Id = msg_send![class!(NSString), stringWithUTF8String: c"LSApplicationCategoryType".as_ptr()];
+        let value: Id = msg_send![bundle, objectForInfoDictionaryKey: key];
+        if value.is_null() {
+            return None;
+        }
+        let is_string: bool = msg_send![value, isKindOfClass: class!(NSString)];
+        if !is_string {
+            return None;
+        }
+        ns_string_to_rust(value).filter(|category| !category.is_empty())
+    }
+}
 
 /// Pixel size of the rendered icon: sharp at 2x for a 16pt display.
 const ICON_PIXELS: i64 = 64;
@@ -87,7 +135,21 @@ pub fn icon_data_url(bundle_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::icon_data_url;
+    use super::{app_category, icon_data_url};
+
+    #[test]
+    fn reads_an_installed_apps_category() {
+        assert_eq!(
+            app_category("com.apple.TextEdit").as_deref(),
+            Some("public.app-category.productivity")
+        );
+        // Cached: the second read gives the same answer.
+        assert_eq!(
+            app_category("com.apple.TextEdit").as_deref(),
+            Some("public.app-category.productivity")
+        );
+        assert_eq!(app_category("sh.voicebox.no-such-app"), None);
+    }
 
     #[test]
     fn renders_an_installed_apps_icon() {
@@ -100,4 +162,3 @@ mod tests {
         assert_eq!(icon_data_url("sh.voicebox.no-such-app"), None);
     }
 }
-

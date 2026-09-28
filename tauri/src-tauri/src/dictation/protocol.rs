@@ -53,25 +53,40 @@ pub fn start_message(
     start.to_string()
 }
 
-/// The app a dictation went to, saved with its capture.
+/// The app a dictation went to, saved with its capture. `category` is its
+/// App Store category (`LSApplicationCategoryType`), which the server uses to
+/// suggest a writing style for a new app.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TargetApp {
     pub bundle_id: Option<String>,
     pub name: Option<String>,
+    pub category: Option<String>,
+}
+
+fn app_fields(app: &TargetApp) -> serde_json::Map<String, Value> {
+    let mut fields = serde_json::Map::new();
+    fields.insert("bundle_id".into(), serde_json::json!(app.bundle_id));
+    fields.insert("name".into(), serde_json::json!(app.name));
+    if let Some(category) = &app.category {
+        fields.insert("category".into(), Value::from(category.as_str()));
+    }
+    fields
 }
 
 /// The take's target app, from the focus snapshot taken at key-down. The
 /// server picks the app's writing style from it before the first phrase is
 /// cleaned (docs/plans/PER_APP_STYLE.md).
 pub fn app_message(app: &TargetApp) -> String {
-    serde_json::json!({ "type": "app", "bundle_id": app.bundle_id, "name": app.name }).to_string()
+    let mut message = app_fields(app);
+    message.insert("type".into(), Value::from("app"));
+    Value::Object(message).to_string()
 }
 
 /// `app` is the dictation's target app, when known; older servers ignore it.
 pub fn finish_message(app: Option<&TargetApp>) -> String {
     let mut finish = serde_json::json!({ "type": "finish" });
     if let Some(app) = app {
-        finish["app"] = serde_json::json!({ "bundle_id": app.bundle_id, "name": app.name });
+        finish["app"] = Value::Object(app_fields(app));
     }
     finish.to_string()
 }
@@ -213,6 +228,7 @@ mod tests {
         let app = TargetApp {
             bundle_id: Some("com.tinyspeck.slackmacgap".into()),
             name: Some("Slack".into()),
+            category: Some("public.app-category.business".into()),
         };
         let value: Value = serde_json::from_str(&app_message(&app)).unwrap();
         assert_eq!(
@@ -221,6 +237,7 @@ mod tests {
                 "type": "app",
                 "bundle_id": "com.tinyspeck.slackmacgap",
                 "name": "Slack",
+                "category": "public.app-category.business",
             })
         );
     }
@@ -254,6 +271,7 @@ mod tests {
         let app = TargetApp {
             bundle_id: Some("com.apple.mail".into()),
             name: Some("Mail".into()),
+            category: None,
         };
         let value: Value = serde_json::from_str(&finish_message(Some(&app))).unwrap();
         assert_eq!(
