@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
-import type { CaptureAppFilter, CaptureListResponse, CaptureResponse } from '@/lib/api/types';
+import type { CaptureListResponse, CaptureResponse } from '@/lib/api/types';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { useUIStore } from '@/stores/uiStore';
 import { CaptureAppHeader } from './CaptureAppHeader';
@@ -12,9 +12,11 @@ import { appDisplayName, CaptureAppList } from './CaptureAppList';
 import { CaptureDetail } from './CaptureDetail';
 import { CaptureDetailHeader } from './CaptureDetailHeader';
 import { CaptureList } from './CaptureList';
-import { ALL_APPS, CAPTURE_APPS_KEY, capturesKey, matchesAppFilter } from './captureApps';
+import { CaptureWeekCard } from './CaptureWeekCard';
+import { ALL_APPS, capturesKey, matchesAppFilter } from './captureApps';
 import { isInOverlay, isTypingTarget, matchesSearch, wentIntoVoicebox } from './captureFormat';
 import { EmptyDetail } from './EmptyDetail';
+import { useAppFilter } from './useAppFilter';
 import { useAppStyles } from './useAppStyles';
 
 /**
@@ -30,7 +32,7 @@ export function CapturesTab() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [appFilter, setAppFilter] = useState<CaptureAppFilter>(ALL_APPS);
+  const { apps, appFilter, setAppFilter, filteredApp } = useAppFilter();
   const appsCollapsed = useUIStore((s) => s.capturesAppsCollapsed);
   const appStyles = useAppStyles();
   const styleNames = useMemo(
@@ -49,23 +51,6 @@ export function CapturesTab() {
     placeholderData: keepPreviousData,
   });
   const captures = capturesData?.items ?? [];
-  const { data: apps } = useQuery({
-    queryKey: CAPTURE_APPS_KEY,
-    queryFn: () => apiClient.listCaptureApps(),
-  });
-  const filteredApp =
-    appFilter.kind === 'app'
-      ? apps?.apps.find((app) => app.app_bundle_id === appFilter.bundleId)
-      : undefined;
-
-  // An app whose captures were all deleted leaves the list; show every app's.
-  useEffect(() => {
-    if (!apps) return;
-    const gone =
-      (appFilter.kind === 'app' && !filteredApp) ||
-      (appFilter.kind === 'unknown' && !apps.unknown_count);
-    if (gone) setAppFilter(ALL_APPS);
-  }, [apps, appFilter, filteredApp]);
 
   const visible = useMemo(
     () => captures.filter((c) => matchesSearch(c, search)),
@@ -118,7 +103,16 @@ export function CapturesTab() {
     setSelectedId(linkedId);
     setSearch('');
     navigate({ search: {}, replace: true });
-  }, [linkedId, capturesData, capturesPlaceholder, captures, appFilter, navigate, queryClient]);
+  }, [
+    linkedId,
+    capturesData,
+    capturesPlaceholder,
+    captures,
+    appFilter,
+    setAppFilter,
+    navigate,
+    queryClient,
+  ]);
 
   // Live sync from sibling Tauri webviews (the floating dictate window).
   // ``capture:created`` carries the full row so we can seed the cache before
@@ -221,6 +215,7 @@ export function CapturesTab() {
         onSearchChange={setSearch}
         allReady={readiness.isLoading || readiness.allReady}
         appName={appName}
+        summary={apps && apps.total > 0 && <CaptureWeekCard filter={appFilter} appName={appName} />}
         appHeader={
           filteredApp && (
             <CaptureAppHeader

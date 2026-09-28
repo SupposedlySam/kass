@@ -208,6 +208,81 @@ export interface CaptureAppsResponse {
   apps: CaptureAppCount[];
 }
 
+/** A period of ``GET /captures/stats``. */
+export type UsagePeriod = 'today' | '7d' | '30d' | 'all';
+
+/** Words dictated on one local day ("2026-09-28"). */
+export interface UsageDay {
+  date: string;
+  words: number;
+}
+
+/** One period's dictation, for all apps or one. */
+export interface UsageTotals {
+  words: number;
+  captures: number;
+  speaking_ms: number;
+  /** Median pace of captures of 2 s and longer; null when there are none. */
+  pace_wpm: number | null;
+  /** Typing time the words would have taken, less the time spent speaking them. */
+  time_saved_ms: number;
+  /** Captures with a saved correction. */
+  fixed_captures: number;
+  weekdays_dictated: number;
+  weekdays_in_period: number;
+  weekend_days: UsageDay[];
+  hours_dictated: number;
+}
+
+/**
+ * One point of the words chart, at a local hour ("2026-09-28T14:00"), day or
+ * week start. ``words`` is null for an hour still to come today.
+ */
+export interface UsagePoint {
+  start: string;
+  words: number | null;
+  previous_start: string | null;
+  previous_words: number | null;
+}
+
+/** One app's words in the period; a null bundle id is no app recorded. */
+export interface UsageApp {
+  app_bundle_id: string | null;
+  words: number;
+  captures: number;
+}
+
+export interface UsageLengths {
+  bin_edges_s: number[];
+  counts: number[];
+  p25_ms: number | null;
+  median_ms: number | null;
+  p75_ms: number | null;
+}
+
+/**
+ * Response of ``GET /captures/stats``, in the Mac's local days. ``current``
+ * and everything after it follow the app filter; ``all_apps`` and ``apps``
+ * are always every app's. ``heatmap`` is words by weekday (Monday first) and
+ * hour.
+ */
+export interface UsageStatsResponse {
+  period: UsagePeriod;
+  bucket: 'hour' | 'day' | 'week';
+  start: string;
+  end: string;
+  previous_start: string | null;
+  previous_end: string | null;
+  typing_wpm: number;
+  current: UsageTotals;
+  previous: UsageTotals | null;
+  all_apps: UsageTotals;
+  series: UsagePoint[];
+  apps: UsageApp[];
+  heatmap: number[][];
+  lengths: UsageLengths;
+}
+
 /** Which captures the list shows: every app's, one app's, or those with no app. */
 export type CaptureAppFilter =
   | { kind: 'all' }

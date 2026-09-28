@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { CaptureAppFilter, UsagePeriod } from '@/lib/api/types';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -21,6 +22,12 @@ interface UIStore {
   // The Captures app list, shrunk to icons.
   capturesAppsCollapsed: boolean;
   setCapturesAppsCollapsed: (collapsed: boolean) => void;
+  // The app Captures and Insights show, shared so each opens on the other's.
+  appFilter: CaptureAppFilter;
+  setAppFilter: (filter: CaptureAppFilter) => void;
+  // The period Insights shows.
+  insightsPeriod: UsagePeriod;
+  setInsightsPeriod: (period: UsagePeriod) => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -33,6 +40,10 @@ export const useUIStore = create<UIStore>()(
       },
       capturesAppsCollapsed: false,
       setCapturesAppsCollapsed: (capturesAppsCollapsed) => set({ capturesAppsCollapsed }),
+      appFilter: { kind: 'all' },
+      setAppFilter: (appFilter) => set({ appFilter }),
+      insightsPeriod: '7d',
+      setInsightsPeriod: (insightsPeriod) => set({ insightsPeriod }),
     }),
     {
       name: 'voicebox-ui',
