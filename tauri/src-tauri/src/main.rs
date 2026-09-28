@@ -965,10 +965,7 @@ pub(crate) async fn paste_final_text_with(
         return Ok(false);
     }
     if !accessibility::is_trusted() {
-        return Err(
-            "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Voicebox."
-                .into(),
-        );
+        return Err(ACCESSIBILITY_REQUIRED.into());
     }
 
     // Only re-activate the target when the user actually left it. When it is
@@ -1008,6 +1005,51 @@ pub(crate) async fn paste_final_text_with(
             Err("Could not insert the dictated text into this app. Copy it from Captures.".into())
         }
     }
+}
+
+const ACCESSIBILITY_REQUIRED: &str = "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Voicebox.";
+
+/// Paste the clipboard as it is (every format, not just text) into the
+/// target focused at chord start: the "paste from clipboard" command.
+pub(crate) async fn paste_clipboard_into(
+    focus: focus_capture::FocusSnapshot,
+) -> Result<bool, String> {
+    if !accessibility::is_trusted() {
+        return Err(ACCESSIBILITY_REQUIRED.into());
+    }
+    let pid = focus.pid;
+    tokio::task::spawn_blocking(move || {
+        clipboard::restore_pending();
+        if focus_capture::frontmost_pid() != Some(pid) {
+            focus_capture::activate_pid(pid)?;
+            std::thread::sleep(POST_ACTIVATE_SETTLE);
+        }
+        synthetic_keys::send_paste()?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Insert `parts` with the clipboard pasted as it is between each: for an
+/// image or file named mid-dictation. Each ⌘V is given time to land before
+/// the next words go in, which may not wait on the event queue.
+pub(crate) async fn paste_around_clipboard(
+    parts: Vec<String>,
+    focus: focus_capture::FocusSnapshot,
+) -> Result<bool, String> {
+    for (i, part) in parts.into_iter().enumerate() {
+        if i > 0 {
+            paste_clipboard_into(focus.clone()).await?;
+            tokio::time::sleep(clipboard::PASTE_CONSUME).await;
+        }
+        let part = part.trim();
+        if !part.is_empty() && !paste_final_text_with(part.to_string(), focus.clone(), None).await?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// Settle time after activating the target, so AppKit finishes re-ordering

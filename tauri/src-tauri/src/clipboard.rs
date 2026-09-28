@@ -20,7 +20,7 @@
 use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::insert_chain::{Attempt, Inserter, Method, Request};
 
@@ -131,6 +131,26 @@ pub fn current_change_count() -> Result<i64, String> {
         let pb = general_pasteboard()?;
         let c: i64 = msg_send![pb, changeCount];
         Ok(c)
+    }
+}
+
+/// The clipboard's text, when text is what was copied: `None` for images and
+/// files, whose plain-text form is only a name. Reads just the text, so an
+/// app that renders its clipboard lazily isn't asked for every format.
+pub fn read_text() -> Result<Option<String>, String> {
+    unsafe {
+        let _pool = AutoreleasePool::new();
+        let pb = general_pasteboard()?;
+        let not_text: Id = msg_send![class!(NSMutableArray), array];
+        for uti in ["public.image", "public.file-url"] {
+            let _: () = msg_send![not_text, addObject: ns_string(uti)];
+        }
+        let has_other: bool = msg_send![pb, canReadItemWithDataConformingToTypes: not_text];
+        if has_other {
+            return Ok(None);
+        }
+        let text: Id = msg_send![pb, stringForType: ns_string("public.utf8-plain-text")];
+        Ok(ns_string_to_rust(text).filter(|t| !t.trim().is_empty()))
     }
 }
 
@@ -285,6 +305,8 @@ pub const PASTE_CONSUME: Duration = Duration::from_millis(400);
 struct PendingRestore {
     original: ClipboardSnapshot,
     staged_count: i64,
+    /// When the ⌘V was sent, for [`restore_pending`] to wait out [`PASTE_CONSUME`].
+    pasted_at: Instant,
 }
 
 static PENDING: Mutex<Option<PendingRestore>> = Mutex::new(None);
@@ -308,6 +330,22 @@ fn original_to_restore(
 /// has written to the clipboard since our text was staged.
 fn should_restore(latest_staged: Option<i64>, ours: i64, current: Option<i64>) -> bool {
     latest_staged == Some(ours) && current == Some(ours)
+}
+
+/// Put the user's clipboard back as soon as the last paste has been read, if
+/// its restore is still waiting, so a ⌘V sent next pastes their content, not
+/// dictated text. Blocking.
+pub fn restore_pending() {
+    let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(p) = pending.take() else {
+        return;
+    };
+    std::thread::sleep(PASTE_CONSUME.saturating_sub(p.pasted_at.elapsed()));
+    if current_change_count().ok() == Some(p.staged_count) {
+        if let Err(e) = restore_clipboard(&p.original) {
+            eprintln!("[voicebox] clipboard restore failed: {e}");
+        }
+    }
 }
 
 /// Stage `text`, send ⌘V to the frontmost app, and restore the user's
@@ -357,6 +395,7 @@ impl Inserter for Paste {
         *pending = Some(PendingRestore {
             original,
             staged_count,
+            pasted_at: Instant::now(),
         });
         drop(pending);
 
@@ -402,6 +441,7 @@ mod paste_tests {
         let pending = PendingRestore {
             original: snap(b"user", 10),
             staged_count: 11,
+            pasted_at: Instant::now(),
         };
         let key_down = snap(b"first dictation", 11);
         let got = original_to_restore(Some(pending), Some(key_down), Some(11)).unwrap();
@@ -413,6 +453,7 @@ mod paste_tests {
         let pending = PendingRestore {
             original: snap(b"user", 10),
             staged_count: 11,
+            pasted_at: Instant::now(),
         };
         let key_down = snap(b"new copy", 12);
         let got = original_to_restore(Some(pending), Some(key_down), Some(12)).unwrap();

@@ -25,6 +25,7 @@ from ..utils.audio import load_audio
 from .content_check import check_refinement, summarize_reviews
 from .refinement import RefinementFlags, refine_transcript
 from .transcribe import get_whisper_model
+from .voice_commands import mark_commands
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ async def create_capture(
         from .model_improvement.manager import speech_model
         resolved_stt = speech_model(resolved_stt)
         transcription_started = time.monotonic()
-        transcript = await whisper.transcribe(str(audio_path), language, resolved_stt)
+        transcript = mark_commands(await whisper.transcribe(str(audio_path), language, resolved_stt))
         logger.info("Capture %s transcription (including model load/queue): %.3fs for %sms audio", capture_id, time.monotonic() - transcription_started, duration_ms)
 
         row = DBCapture(
@@ -274,7 +275,7 @@ async def retranscribe_capture(
 
     whisper = get_whisper_model()
     resolved_stt = stt_model or whisper.model_size
-    transcript = await whisper.transcribe(str(resolved), language, resolved_stt)
+    transcript = mark_commands(await whisper.transcribe(str(resolved), language, resolved_stt))
 
     row.transcript_raw = transcript
     row.stt_model = resolved_stt

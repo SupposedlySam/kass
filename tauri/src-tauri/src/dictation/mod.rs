@@ -14,6 +14,7 @@ pub mod client;
 pub mod delivery;
 pub mod http;
 pub mod live;
+pub mod paste_command;
 pub mod protocol;
 pub mod stream;
 pub mod take;
@@ -32,6 +33,7 @@ use crate::DICTATE_WINDOW_LABEL;
 use capture::{CaptureHooks, NativeInputDevice};
 use client::StreamClient;
 use live::{Finish, Live, LiveTarget};
+use paste_command::Plan;
 use protocol::TargetApp;
 use stream::{AudioMsg, Recovery, Timeouts};
 use take::{PillEvent, TakeEnv};
@@ -200,7 +202,12 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
             .with_field_before(move || field_before_task.lock().ok()?.clone());
         let client = if live_text {
             let offer = live.clone();
-            client.with_provisional(move |text| offer.offer(text))
+            client.with_provisional(move |text| {
+                // The clipboard is only read for the final text.
+                if !paste_command::contains_marker(&text) {
+                    offer.offer(text);
+                }
+            })
         } else {
             client
         };
@@ -282,6 +289,29 @@ async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bo
     };
     app.unlisten(listener);
     result
+}
+
+/// Take back live text: the final text is delivered another way.
+async fn withdraw_live(live: &Live<AxLive>) {
+    if let Finish::Done(result) = live.finish(None).await {
+        eprintln!("[dictation] live text withdrawn: {result:?}");
+    }
+}
+
+/// The clipboard's text, once the user's clipboard is back from the last
+/// paste; `None` when what was copied isn't text.
+async fn clipboard_text() -> Option<String> {
+    let read = tauri::async_runtime::spawn_blocking(|| {
+        crate::clipboard::restore_pending();
+        crate::clipboard::read_text()
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|read| read);
+    read.unwrap_or_else(|e| {
+        eprintln!("[dictation] clipboard unreadable: {e}");
+        None
+    })
 }
 
 /// Record the paste target for a take (captured right after [`start`], so
@@ -521,6 +551,23 @@ impl TakeEnv for AppEnv {
                 // Started from Voicebox itself: the capture is the result.
                 return Ok(true);
             }
+            let text = match paste_command::plan(&text) {
+                Plan::Text(text) => text,
+                Plan::Clipboard => {
+                    withdraw_live(&live).await;
+                    let focus = focus.ok_or_else(|| delivery::NO_FOCUS_MESSAGE.to_string())?;
+                    return crate::paste_clipboard_into(focus).await;
+                }
+                Plan::Around(parts) => match clipboard_text().await {
+                    Some(clipboard) => paste_command::fill(&parts, &clipboard),
+                    None => {
+                        // An image or file: pasted between the words.
+                        withdraw_live(&live).await;
+                        let focus = focus.ok_or_else(|| delivery::NO_FOCUS_MESSAGE.to_string())?;
+                        return crate::paste_around_clipboard(parts, focus).await;
+                    }
+                },
+            };
             // Text already written live is made final in place.
             if let Finish::Done(result) = live.finish(Some(text.clone())).await {
                 return result;

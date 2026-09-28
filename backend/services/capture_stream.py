@@ -56,6 +56,7 @@ from .refinement import RefinementFlags, prepare_refinement, refine_transcript
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
 from .transcribe import get_whisper_model
+from .voice_commands import mark_commands
 from .writing_style import apply_learned, apply_style, habits, is_ready
 
 logger = logging.getLogger(__name__)
@@ -462,6 +463,8 @@ class StreamingCapture:
             else:
                 self.raw = join_overlap(self.raw, text)
                 self.tail_raw = join_overlap(self.tail_raw, text)
+            # Across phrases too: "paste from" may end one and "clipboard" start the next.
+            self.raw, self.tail_raw = mark_commands(self.raw), mark_commands(self.tail_raw)
             self.tail_dirty = True
             self.paused = paused
         await self.emit("transcript", accepted_text=self.raw, provisional_text="", text=self.raw, final=False)
@@ -664,6 +667,7 @@ class StreamingCapture:
             ).strip()
             if self.continues:
                 self.raw = continue_phrase(self.raw, self.field_before, self.names)
+            self.raw = mark_commands(self.raw)
         else:
             self.raw = ""
         if self.abort:

@@ -5,7 +5,8 @@ sentence, fix grammar. It must not add ideas, summarize, or leave something
 out. Three rules, by comparing words (no second model):
 
 1. What the speaker said that carries meaning must survive: every number,
-   technical term and name, and whether they said "not". Losing one rejects.
+   technical term, name and spoken command, and whether they said "not".
+   Losing one rejects.
 2. Anything the cleanup added is listed for review, never rejected on its own,
    except a "not" nobody said. Formatting such as list numbers lands here.
 3. Many added words, a cleanup that is mostly (or only) words nobody said, or
@@ -21,6 +22,8 @@ set of real dictations, not in new rules here.
 import re
 import unicodedata
 from dataclasses import dataclass, field
+
+from .voice_commands import count_commands
 
 _FUNCTION_WORDS = frozenset(
     re.findall(
@@ -162,6 +165,8 @@ def check(said: str, cleaned: str, allow_retractions: bool = False) -> Verdict:
             added=sorted(negations_after - negations_before),
             missing=sorted(negations_before - negations_after),
         )
+    if count_commands(cleaned) != count_commands(said):
+        return Verdict("reject", reason="command")
     lost_terms = sorted({t for t in before if _is_technical(t) and t not in kept and not retracted(t)})
     if lost_terms:
         return Verdict("reject", reason="technical", missing=lost_terms)

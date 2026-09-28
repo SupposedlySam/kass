@@ -15,6 +15,7 @@ from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits
 from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
+from .voice_commands import commands_alone
 
 # A run that repeats this many times gets collapsed before the LLM sees
 # the transcript. Whisper occasionally loops content hundreds of times
@@ -412,6 +413,10 @@ async def refine_transcript(
     """
     backend = backend_override or llm_service.get_llm_model()
     resolved_size = model_size or backend.model_size
+
+    if (alone := commands_alone(transcript)) is not None:
+        # Carried out by the client, not typed: nothing to clean.
+        return alone, resolved_size
 
     cleaned_input, resolved_edit = prepare_refinement(transcript, flags)
     if resolved_edit is not None:
