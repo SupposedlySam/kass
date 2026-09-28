@@ -4,7 +4,15 @@ export type WhisperModelSize = 'base' | 'small' | 'medium' | 'large' | 'turbo';
 
 export type Qwen3ModelSize = '0.6B' | '1.7B' | '4B';
 
-export type CaptureSource = 'dictation' | 'recording' | 'file';
+/** ``command``: a Command Mode rewrite of selected text (docs/plans/COMMAND_MODE.md). */
+export type CaptureSource = 'dictation' | 'recording' | 'file' | 'command';
+
+/** A saved Command Mode instruction, run by saying its name or from ⌘K. */
+export interface Transform {
+  id: string;
+  name: string;
+  instruction: string;
+}
 
 /**
  * Snapshot of the accessibility-focused UI element at chord-start. Emitted
@@ -110,6 +118,12 @@ export interface CaptureResponse {
   /** The app dictated into, when the capture came from the global shortcut. */
   app_bundle_id?: string | null;
   app_name?: string | null;
+  /** Command captures: the text that was selected, the instruction that ran
+   *  (a transform's, when one was named) and that transform's name. The
+   *  rewrite is ``transcript_refined``; ``transcript_raw`` is what was said. */
+  command_selection?: string | null;
+  command_instruction?: string | null;
+  command_transform?: string | null;
   created_at: string;
 }
 
@@ -160,6 +174,11 @@ export interface CaptureSettings {
   chord_push_to_talk_keys: string[];
   /** keytap key names. Toggle adds Space to the platform-specific PTT chord. */
   chord_toggle_to_talk_keys: string[];
+  /** keytap key names for Command Mode; empty turns it off. */
+  chord_command_keys: string[];
+  /** The model that rewrites selections in Command Mode. */
+  command_llm_model: Qwen3ModelSize;
+  command_transforms: Transform[];
 }
 
 export type CaptureSettingsUpdate = Partial<CaptureSettings>;

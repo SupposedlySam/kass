@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse } from '@/lib/api/types';
 import { CaptureInspector } from './CaptureInspector';
+import { CommandDetail } from './CommandDetail';
 import { RefinementReviewNotice } from './RefinementReviewNotice';
 import { useTeachCorrection } from './TeachCorrection';
 import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './TranscriptCard';
@@ -11,9 +12,15 @@ import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './Transcript
  * refinement changed and what was heard, and the inspector beside them.
  * The card corrects the refined text, or the raw text when there is no
  * refinement; fixing a misheard word there teaches it too. Mount it keyed
- * by capture id so drafts reset between captures.
+ * by capture id so drafts reset between captures. A Command Mode rewrite
+ * has its own view: it isn't a dictation to correct.
  */
 export function CaptureDetail({ capture }: { capture: CaptureResponse }) {
+  if (capture.source === 'command') return <CommandDetail capture={capture} />;
+  return <DictationDetail capture={capture} />;
+}
+
+function DictationDetail({ capture }: { capture: CaptureResponse }) {
   const raw = capture.transcript_raw || '';
   const refined = capture.transcript_refined || null;
   const teach = useTeachCorrection(capture, refined ? 'refined' : 'raw', refined ?? raw);

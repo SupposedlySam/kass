@@ -7,10 +7,15 @@
 //! pasted through `paste_final_text` into the target focused at chord start,
 //! unless provisional text was already written into it live (see [`live`]).
 //! The dictate webview only renders the pill from `dictation:state` events.
+//!
+//! A command take ([`TakeMode::Command`], docs/plans/COMMAND_MODE.md) is the
+//! same take with an instruction for selected text: the selection is read
+//! while the user speaks ([`command`]) and the rewrite replaces it.
 
 pub mod audio;
 pub mod capture;
 pub mod client;
+pub mod command;
 pub mod delivery;
 pub mod http;
 pub mod live;
@@ -76,6 +81,11 @@ impl Default for Config {
 struct ActiveTake {
     id: u64,
     origin: TakeOrigin,
+    mode: TakeMode,
+    /// The take's audio channel, for a command take's selection reader.
+    audio: tokio::sync::mpsc::UnboundedSender<AudioMsg>,
+    /// A command take's selection, once read.
+    selection: Arc<Mutex<Option<String>>>,
     stop: std_mpsc::Sender<()>,
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
     /// The focused field's text before the caret, read after key-down.
@@ -98,6 +108,21 @@ impl DictationState {
     fn http(&self) -> reqwest::Client {
         self.http.get_or_init(http::client).clone()
     }
+
+    /// A new id for the pill's events, shared with takes so they never clash.
+    pub fn next_take_id(&self) -> u64 {
+        self.next_take.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// The server URL and HTTP client takes use.
+    pub fn server(&self) -> (String, reqwest::Client) {
+        let url = self
+            .config
+            .lock()
+            .map(|c| c.server_url.clone())
+            .unwrap_or_else(|_| DEFAULT_SERVER_URL.to_string());
+        (url, self.http())
+    }
 }
 
 /// Where a take was started, which decides where its text goes.
@@ -109,17 +134,30 @@ pub enum TakeOrigin {
     App,
 }
 
+/// What a take's words are for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TakeMode {
+    /// Text to insert.
+    Dictation,
+    /// An instruction for the text selected in the target app, which the
+    /// rewrite replaces (docs/plans/COMMAND_MODE.md).
+    Command,
+}
+
 /// Begin a take at chord start. `keydown` is the chord's event time, used for
 /// latency logging. Returns the take id, or `None` if one is already recording.
-pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u64> {
+pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMode) -> Option<u64> {
     let state = app.state::<DictationState>();
     let mut active = state.active.lock().ok()?;
     if active.is_some() {
         return None;
     }
     let config = state.config.lock().map(|c| c.clone()).unwrap_or_default();
-    let live_text = config.live_text;
-    let take_id = state.next_take.fetch_add(1, Ordering::Relaxed) + 1;
+    // Live text writes a dictation as it is cleaned up; a command's result
+    // replaces the selection once, when it is complete.
+    let live_text = config.live_text && mode == TakeMode::Dictation;
+    let take_id = state.next_take_id();
+    let selection: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let focus: Arc<Mutex<Option<FocusSnapshot>>> = Arc::new(Mutex::new(None));
     let field_before: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let released: Arc<OnceLock<Instant>> = Arc::new(OnceLock::new());
@@ -137,6 +175,8 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
         clipboard: Arc::new(Mutex::new(None)),
         pastes: origin == TakeOrigin::Shortcut,
         live: live.clone(),
+        mode,
+        selection: selection.clone(),
     };
     env.emit(PillEvent::Preparing);
 
@@ -165,6 +205,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
             }),
         }
     };
+    let audio = audio_tx.clone();
     let capture = capture::spawn(config.input_device_id.clone(), keydown, audio_tx, hooks);
     // Right behind the microphone thread, never ahead of it. Only a message
     // to the player thread, so it costs the take nothing.
@@ -208,6 +249,10 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
             } else {
                 0
             });
+        let client = match env.mode {
+            TakeMode::Dictation => client,
+            TakeMode::Command => client.with_command(),
+        };
         let client = if live_text {
             let offer = live.clone();
             client.with_provisional(move |text| {
@@ -230,6 +275,10 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
             outcome_label(&outcome),
             since_release(&released_for_task)
         );
+        if matches!(outcome, client::Outcome::Declined(_)) {
+            // Declined while the chord is still held: stop listening now.
+            stop_matching(&env.app, |take| take.id == take_id);
+        }
         let recorded = async move { done.await.ok().flatten() };
         take::settle(&env, outcome, recorded).await;
         // A take that ended without a paste must not leave live text behind.
@@ -246,6 +295,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin) -> Option<u6
     *active = Some(ActiveTake {
         id: take_id,
         origin,
+        mode,
+        audio,
+        selection,
         stop,
         focus,
         field_before,
@@ -332,7 +384,9 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
     let Some(take) = active.as_ref().filter(|t| t.id == take_id) else {
         return;
     };
-    if let Some(focus) = focus.as_ref() {
+    if take.mode == TakeMode::Command {
+        read_selection(take, focus.clone());
+    } else if let Some(focus) = focus.as_ref() {
         let (pid, bundle_id) = (focus.pid, focus.bundle_id.clone());
         let in_voicebox = bundle_id.as_deref() == Some(crate::VOICEBOX_BUNDLE_ID);
         let field_before = take.field_before.clone();
@@ -354,6 +408,30 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
     if let Ok(mut slot) = take.focus.lock() {
         *slot = focus;
     };
+}
+
+/// Read a command take's selection on a blocking thread, while the user
+/// speaks, and hand it to the stream (or decline the take).
+fn read_selection(take: &ActiveTake, focus: Option<FocusSnapshot>) {
+    let audio = take.audio.clone();
+    let slot = take.selection.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = match focus {
+            // The pill never takes focus, so the target is still in front.
+            Some(focus) => command::read_selection(&focus, true),
+            None => Err(delivery::NO_FOCUS_MESSAGE),
+        };
+        let message = match found {
+            Ok(text) => {
+                if let Ok(mut slot) = slot.lock() {
+                    *slot = Some(text.clone());
+                }
+                AudioMsg::Selection(text)
+            }
+            Err(message) => AudioMsg::Decline(message.to_string()),
+        };
+        let _ = audio.send(message);
+    });
 }
 
 /// End the recording take. Finalization continues in the background, so a
@@ -391,6 +469,7 @@ fn outcome_label(outcome: &client::Outcome) -> String {
             "connection lost after finish; recovering".into()
         }
         client::Outcome::Cancelled => "cancelled".into(),
+        client::Outcome::Declined(message) => format!("declined ({message})"),
     }
 }
 
@@ -406,6 +485,9 @@ struct AppEnv {
     /// False for takes started from Voicebox's own window: nothing to paste into.
     pastes: bool,
     live: Arc<Live<AxLive>>,
+    mode: TakeMode,
+    /// A command take's selection, once read.
+    selection: Arc<Mutex<Option<String>>>,
 }
 
 impl AppEnv {
@@ -603,13 +685,31 @@ impl TakeEnv for AppEnv {
         let http = self.http.clone();
         let server_url = self.server_url.clone();
         let app = target_app(&self.focus);
-        async move { http::upload(&http, &server_url, wav, app).await }
+        let source = match self.mode {
+            TakeMode::Dictation => "dictation",
+            TakeMode::Command => "command",
+        };
+        async move { http::upload(&http, &server_url, wav, source, app).await }
     }
 
+    /// For a command take, the uploaded instruction's rewrite of the selection.
     fn refine(&self, capture_id: String) -> impl Future<Output = Result<Value, String>> + Send {
         let http = self.http.clone();
         let server_url = self.server_url.clone();
-        async move { http::refine(&http, &server_url, &capture_id).await }
+        let command = (self.mode == TakeMode::Command)
+            .then(|| self.selection.lock().ok().and_then(|s| s.clone()));
+        async move {
+            match command {
+                None => http::refine(&http, &server_url, &capture_id).await,
+                Some(None) => Err(command::NO_SELECTION_MESSAGE.to_string()),
+                Some(Some(selection)) => {
+                    let input = http::CommandInput::Recording {
+                        capture_id: &capture_id,
+                    };
+                    http::run_command(&http, &server_url, &selection, input).await
+                }
+            }
+        }
     }
 }
 
@@ -702,11 +802,18 @@ pub fn dictation_stop(app: AppHandle) {
 /// take is already recording.
 #[tauri::command]
 pub fn dictation_start(app: AppHandle) -> Option<u64> {
-    let take = start(&app, Instant::now(), TakeOrigin::App);
+    let take = start(&app, Instant::now(), TakeOrigin::App, TakeMode::Dictation);
     if take.is_some() {
         show_hud(&app);
     }
     take
+}
+
+/// Run an instruction, or a transform by name, on the text selected in the
+/// app the user came to Voicebox from (the ⌘K palette's transforms).
+#[tauri::command]
+pub async fn command_run(app: AppHandle, instruction: String) -> Result<(), String> {
+    command::run_from_voicebox(&app, instruction).await
 }
 
 /// Bring the HUD up bottom-center without taking key focus from the app

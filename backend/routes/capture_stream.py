@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
 from ..services.captures import target_app
+from ..services.commands import MAX_SELECTION_CHARS
+from ..services.refinement import load_cleanup_model
 from ..services.settings import get_capture_settings
 from ..utils.origins import is_allowed_websocket_origin
 
@@ -21,8 +23,14 @@ logger = logging.getLogger(__name__)
 _active_sessions: set[str] = set()
 MAX_SESSIONS = 2
 IDLE_TIMEOUT = 30
+MAX_COMMAND_CHARS = 4096
+# A command session's selection message carries up to MAX_SELECTION_CHARS of
+# text, some of it escaped.
+MAX_SELECTION_MESSAGE_CHARS = 2 * MAX_SELECTION_CHARS + MAX_COMMAND_CHARS
 _results: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _running: set[str] = set()
+# Cleanup models loading ahead of a dictation's first phrase.
+_loading: set[asyncio.Task] = set()
 
 
 @router.get("/captures/stream/{session_id}/result")
@@ -36,6 +44,15 @@ async def streaming_result(session_id: str):
     if session_id in _running:
         return JSONResponse(status_code=202, content={"type": "pending"})
     raise HTTPException(status_code=404, detail="Streaming result unavailable; inspect Captures before retrying")
+
+
+async def _load_cleanup(session: StreamingCapture) -> None:
+    """Have the cleanup model resident before the first phrase needs it."""
+    try:
+        await load_cleanup_model(session.flags, session.settings.llm_model)
+    except Exception:
+        # The cleanup loads it anyway, just later.
+        logger.warning("Could not load the cleanup model ahead of time", exc_info=True)
 
 
 @router.websocket("/captures/stream")
@@ -74,6 +91,11 @@ async def stream_capture(websocket: WebSocket):
             )
         )
         worker = asyncio.create_task(session.run())
+        # A command session prefills its own model when its selection arrives.
+        if settings.auto_refine and not session.is_command:
+            load = asyncio.create_task(_load_cleanup(session))
+            _loading.add(load)
+            load.add_done_callback(_loading.discard)
         while True:
             receiver = asyncio.create_task(websocket.receive())
             done, _ = await asyncio.wait({receiver, worker}, timeout=IDLE_TIMEOUT, return_when=asyncio.FIRST_COMPLETED)
@@ -90,7 +112,7 @@ async def stream_capture(websocket: WebSocket):
                 session.append(message["bytes"])
                 continue
             text = message.get("text") or "{}"
-            if len(text) > 4096:
+            if len(text) > (MAX_SELECTION_MESSAGE_CHARS if session.is_command else MAX_COMMAND_CHARS):
                 raise ValueError("Command too large")
             command = json.loads(text)
             if not isinstance(command, dict):
@@ -101,8 +123,12 @@ async def stream_capture(websocket: WebSocket):
                 # The field's text before the caret, read just after key-down.
                 session.set_context(command.get("before"))
                 continue
+            if command.get("type") == "selection":
+                # A command session's selected text, read just after key-down.
+                session.set_selection(command.get("text"))
+                continue
             if command.get("type") != "finish":
-                raise ValueError("Expected context, finish or cancel")
+                raise ValueError("Expected context, selection, finish or cancel")
             if not session.samples:
                 raise ValueError("Cannot finish empty audio")
             app = command.get("app")

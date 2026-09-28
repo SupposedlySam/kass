@@ -647,6 +647,8 @@ def test_websocket_uses_database_factory_initialized_at_startup(tmp_path, monkey
     monkeypatch.setattr(database_session, "SessionLocal", None)
     monkeypatch.setattr(database_session, "_db_path", None)
     monkeypatch.setattr(route, "is_allowed_websocket_origin", lambda _: True)
+    # The default settings refine, which would load the real cleanup model.
+    monkeypatch.setattr(route, "load_cleanup_model", AsyncMock())
 
     @asynccontextmanager
     async def lifespan(_):
@@ -664,6 +666,28 @@ def test_websocket_uses_database_factory_initialized_at_startup(tmp_path, monkey
         socket.send_json({"type": "cancel"})
         assert socket.receive()["type"] == "websocket.close"
     assert not route._active_sessions
+
+
+@pytest.mark.parametrize(("source", "loads"), [("dictation", True), ("command", False)])
+def test_a_dictation_loads_its_cleanup_model_while_the_user_speaks(tmp_path, monkeypatch, source, loads):
+    # After a command ran on another model, switching back must not wait for release.
+    from fastapi.testclient import TestClient
+
+    from backend.routes import capture_stream as route
+
+    app, _ = socket_app(tmp_path, monkeypatch)
+    monkeypatch.setattr(route, "get_capture_settings", lambda _: CaptureSettingsResponse(auto_refine=True))
+    load = AsyncMock()
+    monkeypatch.setattr(route, "load_cleanup_model", load)
+    start = dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le")
+    with TestClient(app) as client, client.websocket_connect("/captures/stream") as socket:
+        socket.send_json({**start, "source": source})
+        assert socket.receive_json()["type"] == "ready"
+        socket.send_json({"type": "cancel"})
+        assert socket.receive()["type"] == "websocket.close"
+    assert load.await_count == (1 if loads else 0)
+    if loads:
+        assert load.await_args.args[1] == "0.6B"
 
 
 async def _dictate(tmp_path, monkeypatch, style, phrases):

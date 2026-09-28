@@ -116,13 +116,16 @@
       "calibrate": "Run style calibration…",
       "themeLight": "Switch to light theme",
       "themeDark": "Switch to dark theme",
-      "themeSystem": "Match system theme"
+      "themeSystem": "Match system theme",
+      "settingsCommandMode": "Settings: Command Mode",
+      "transform": "Transform selection: {{name}}"
     },
     "keys": {
       "go": "go",
       "settings": "settings",
       "theme": "theme",
-      "style": "style"
+      "style": "style",
+      "transform": "transform"
     }
   },
   "captures": {
@@ -188,7 +191,9 @@
     "captureCardLabel": "Capture · {{when}}",
     "tag": {
       "review": "Reworded",
-      "raw": "Raw"
+      "raw": "Raw",
+      "command": "Command",
+      "commandFailed": "Not rewritten"
     },
     "list": {
       "yesterday": "yest"
@@ -341,7 +346,8 @@
     "source": {
       "dictation": "Dictation",
       "recording": "Recording",
-      "file": "Imported file"
+      "file": "Imported file",
+      "command": "Command"
     },
     "detail": {
       "today": "Today",
@@ -374,12 +380,26 @@
       "correctionsCount": "Corrections · {{count}}",
       "noCorrections": "None yet. Alter the text to teach Voicebox.",
       "showing": "Showing"
+    },
+    "command": {
+      "result": "Rewrite",
+      "original": "Original selection",
+      "instruction": "Instruction",
+      "said": "Said",
+      "transform": "Transform",
+      "copyResult": "Copy rewrite",
+      "copyOriginal": "Copy original",
+      "copied": "Copied",
+      "failed": "This command didn’t produce a rewrite, so the selection was left as it was.",
+      "undoHint": "To undo a rewrite, press ⌘Z in the app, or copy the original back in.",
+      "rewriting": "Rewriting"
     }
   },
   "settings": {
     "tabs": {
       "general": "General",
       "dictation": "Dictation",
+      "commandMode": "Command Mode",
       "transcription": "Transcription & refinement",
       "writingStyle": "Writing style",
       "logs": "Logs"
@@ -577,6 +597,49 @@
       "empty": "No log output yet.",
       "noErrors": "No errors in the log.",
       "devHint": "Server logs are only captured when the app manages the server process (production builds)."
+    },
+    "commandMode": {
+      "sectionShortcut": "Command Mode",
+      "description": "Select text in any app, hold the command shortcut and say what to do with it: “make this more concise”, “translate to Spanish”, or a transform’s name. The rewrite replaces the selection, and the original stays in Captures.",
+      "chord": {
+        "title": "Command shortcut",
+        "description": "Hold to speak an instruction for the selected text, let go to rewrite it.",
+        "needsShortcut": "Turn on the global shortcut in Dictation settings first.",
+        "off": "Off",
+        "turnOff": "Turn off",
+        "set": "Set",
+        "change": "Change",
+        "changeLabel": "Change the Command Mode shortcut",
+        "pickerTitle": "Set the Command Mode shortcut",
+        "pickerDescription": "Hold the keys you want to use, then release and click Save. Pick something distinct from your dictation shortcuts.",
+        "taken": "That shortcut already starts dictation. Pick different keys."
+      },
+      "model": {
+        "title": "Rewriting model",
+        "description": "Following an instruction takes more model than cleaning up dictation. 1.7B is the best balance; 0.6B sometimes misreads instructions.",
+        "size06": "Qwen3 0.6B · fastest",
+        "size17": "Qwen3 1.7B · recommended",
+        "size40": "Qwen3 4B · slowest"
+      },
+      "transforms": {
+        "title": "Transforms",
+        "description": "Saved instructions. Say a transform’s name with the command shortcut (“polish this”), or run it on the selection from ⌘K.",
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteLabel": "Delete {{name}}",
+        "add": "Add transform",
+        "empty": "No transforms yet.",
+        "saveFailed": "Couldn’t save transforms"
+      },
+      "dialog": {
+        "addTitle": "Add a transform",
+        "editTitle": "Edit transform",
+        "description": "The name is what you say to run it. The instruction is what it does to the selected text.",
+        "name": "Name",
+        "namePlaceholder": "Shorten",
+        "instruction": "Instruction",
+        "instructionPlaceholder": "Make this about half as long. Keep every fact and my tone."
+      }
     }
   },
   "models": {

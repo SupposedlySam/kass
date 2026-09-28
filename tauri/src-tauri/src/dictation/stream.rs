@@ -26,6 +26,11 @@ pub enum AudioMsg {
     End,
     /// Abandon the take.
     Cancel,
+    /// From the selection reader of a command take: the text to rewrite.
+    Selection(String),
+    /// From the selection reader: nothing to rewrite; end the take with this
+    /// message.
+    Decline(String),
 }
 
 /// Events from the transport.
@@ -67,6 +72,9 @@ pub async fn drive(
     let handshake_deadline = Instant::now() + timeouts.handshake;
     let mut finalize_deadline: Option<Instant> = None;
     let mut audio_open = true;
+    // Recording ended normally. A command take's selection may still follow
+    // on the same channel, so it stays open until every sender is gone.
+    let mut ended = false;
     let mut incoming_open = true;
     loop {
         if let Some(outcome) = client.outcome() {
@@ -95,8 +103,17 @@ pub async fn drive(
                 Some(AudioMsg::Format(rate)) => client.set_format(rate),
                 Some(AudioMsg::Frame(pcm)) => client.push_audio(&pcm),
                 Some(AudioMsg::End) => {
-                    audio_open = false;
+                    ended = true;
                     client.request_finish()
+                }
+                Some(AudioMsg::Selection(text)) => client.set_selection(text),
+                Some(AudioMsg::Decline(message)) => {
+                    audio_open = false;
+                    client.decline(&message)
+                }
+                None if ended => {
+                    audio_open = false;
+                    Vec::new()
                 }
                 Some(AudioMsg::Cancel) | None => {
                     audio_open = false;
@@ -209,16 +226,14 @@ mod tests {
     }
 
     fn spawn(timeouts: Timeouts) -> Harness {
+        spawn_with(StreamClient::new(1 << 20), timeouts)
+    }
+
+    fn spawn_with(client: StreamClient, timeouts: Timeouts) -> Harness {
         let (out_tx, out_rx) = unbounded_channel();
         let (in_tx, in_rx) = unbounded_channel();
         let (audio_tx, audio_rx) = unbounded_channel();
-        let task = tokio::spawn(drive(
-            StreamClient::new(1 << 20),
-            out_tx,
-            in_rx,
-            audio_rx,
-            timeouts,
-        ));
+        let task = tokio::spawn(drive(client, out_tx, in_rx, audio_rx, timeouts));
         Harness {
             out_rx,
             incoming: in_tx,
@@ -277,6 +292,61 @@ mod tests {
         assert_eq!(binary, 2);
         h.incoming.send(Incoming::Text(final_event())).unwrap();
         assert!(matches!(h.task.await.unwrap(), Outcome::Final(_)));
+    }
+
+    #[tokio::test]
+    async fn a_command_released_before_its_selection_is_read_finishes_after_it() {
+        let mut h = spawn_with(
+            StreamClient::new(1 << 20).with_command(),
+            Timeouts::default(),
+        );
+        h.audio.send(AudioMsg::Format(16_000)).unwrap();
+        h.incoming.send(Incoming::Open).unwrap();
+        assert_eq!(next_text(&mut h).await["source"], "command");
+        h.incoming
+            .send(Incoming::Text(
+                r#"{"type":"ready","session_id":"s1"}"#.into(),
+            ))
+            .unwrap();
+        h.audio.send(AudioMsg::Frame(vec![1; 1600])).unwrap();
+        h.audio.send(AudioMsg::End).unwrap();
+        // The selection reader is still working: nothing may finish yet.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(matches!(h.out_rx.try_recv(), Ok(Action::Binary(_))));
+        assert!(h.out_rx.try_recv().is_err());
+        h.audio
+            .send(AudioMsg::Selection("the text".into()))
+            .unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "selection");
+        assert_eq!(next_text(&mut h).await["type"], "finish");
+        // Every sender gone after a normal end is not a cancel.
+        drop(h.audio);
+        h.incoming.send(Incoming::Text(final_event())).unwrap();
+        assert!(matches!(h.task.await.unwrap(), Outcome::Final(_)));
+    }
+
+    #[tokio::test]
+    async fn a_command_with_nothing_selected_is_declined_at_once() {
+        let mut h = spawn_with(
+            StreamClient::new(1 << 20).with_command(),
+            Timeouts::default(),
+        );
+        h.audio.send(AudioMsg::Format(16_000)).unwrap();
+        h.incoming.send(Incoming::Open).unwrap();
+        h.incoming
+            .send(Incoming::Text(
+                r#"{"type":"ready","session_id":"s1"}"#.into(),
+            ))
+            .unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "start");
+        h.audio
+            .send(AudioMsg::Decline("Select text".into()))
+            .unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "cancel");
+        assert_eq!(
+            h.task.await.unwrap(),
+            Outcome::Declined("Select text".into())
+        );
     }
 
     #[tokio::test]

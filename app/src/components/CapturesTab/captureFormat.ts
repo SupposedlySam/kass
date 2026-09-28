@@ -1,7 +1,7 @@
 import type { CaptureResponse } from '@/lib/api/types';
 
 /** The row tag: REVIEW wins over REFINED, since it asks the user to look. */
-export type CaptureTag = 'refined' | 'review' | 'raw';
+export type CaptureTag = 'refined' | 'review' | 'raw' | 'command' | 'commandFailed';
 
 export function formatDuration(ms?: number | null): string {
   if (!ms || ms < 0) return '0:00';
@@ -86,6 +86,7 @@ export function languageName(code: string): string {
 }
 
 export function captureTag(capture: CaptureResponse): CaptureTag {
+  if (capture.source === 'command') return capture.transcript_refined ? 'command' : 'commandFailed';
   if (capture.refinement_review) return 'review';
   return capture.transcript_refined ? 'refined' : 'raw';
 }
@@ -96,6 +97,7 @@ export function matchesSearch(capture: CaptureResponse, query: string): boolean 
   return (
     (capture.transcript_raw || '').toLowerCase().includes(q) ||
     (capture.transcript_refined || '').toLowerCase().includes(q) ||
+    (capture.command_selection || '').toLowerCase().includes(q) ||
     (capture.app_name || '').toLowerCase().includes(q)
   );
 }
@@ -178,6 +180,12 @@ export function buildCaptureMarkdown(capture: CaptureResponse): string {
   }
   if (capture.transcript_raw?.trim()) {
     lines.push('## Raw transcript', '', capture.transcript_raw.trim(), '');
+  }
+  if (capture.command_instruction?.trim()) {
+    lines.push('## Instruction', '', capture.command_instruction.trim(), '');
+  }
+  if (capture.command_selection?.trim()) {
+    lines.push('## Original selection', '', capture.command_selection.trim(), '');
   }
   return lines.join('\n');
 }

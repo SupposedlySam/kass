@@ -14,6 +14,9 @@
 //! (delivered to the main runloop). The hot path ([`paste_keycode_v`])
 //! only reads an [`AtomicU16`], so paste latency is unchanged.
 //!
+//! The copy key (`'c'`) is resolved the same way, for the ⌘C that reads a
+//! selection Accessibility can't (Command Mode, docs/plans/COMMAND_MODE.md).
+//!
 //! The same main-thread refresh also caches whether the selected keyboard
 //! input source is ASCII-capable ([`input_source_is_ascii_capable`]), which
 //! the keystroke inserter reads off the main thread: with an IME such as
@@ -29,12 +32,22 @@ const FALLBACK_V_KEYCODE: u16 = 9;
 
 static V_KEYCODE: AtomicU16 = AtomicU16::new(FALLBACK_V_KEYCODE);
 
+/// `kVK_ANSI_C`, the fallback for [`copy_keycode_c`].
+const FALLBACK_C_KEYCODE: u16 = 8;
+
+static C_KEYCODE: AtomicU16 = AtomicU16::new(FALLBACK_C_KEYCODE);
+
 /// Returns the keycode whose current-layout translation is `'v'`. Falls
 /// back to `kVK_ANSI_V` when resolution hasn't run, the active input
 /// source carries no Unicode key layout data, or no keycode in the layout
 /// produces `v`.
 pub fn paste_keycode_v() -> u16 {
     V_KEYCODE.load(Ordering::Relaxed)
+}
+
+/// [`paste_keycode_v`] for `'c'`, falling back to `kVK_ANSI_C`.
+pub fn copy_keycode_c() -> u16 {
+    C_KEYCODE.load(Ordering::Relaxed)
 }
 
 /// Whether the selected keyboard input source is ASCII-capable: 0 unknown
@@ -57,7 +70,7 @@ pub fn init() {
 }
 
 mod macos {
-    use super::{ASCII_CAPABLE, FALLBACK_V_KEYCODE, V_KEYCODE};
+    use super::{ASCII_CAPABLE, C_KEYCODE, FALLBACK_C_KEYCODE, FALLBACK_V_KEYCODE, V_KEYCODE};
     use core_foundation_sys::base::CFRelease;
     use core_foundation_sys::data::{CFDataGetBytePtr, CFDataRef};
     use core_foundation_sys::dictionary::CFDictionaryRef;
@@ -85,7 +98,6 @@ mod macos {
     /// full range so non-US-extended layouts (ISO, JIS) can still be
     /// resolved if their `v` lives outside the ANSI range.
     const MAX_KEYCODE: u16 = 127;
-    const TARGET_CHAR: u16 = b'v' as u16;
 
     #[link(name = "Carbon", kind = "framework")]
     extern "C" {
@@ -117,8 +129,10 @@ mod macos {
     }
 
     fn resolve_into_cache() {
-        let kc = resolve_v_keycode().unwrap_or(FALLBACK_V_KEYCODE);
+        let kc = resolve_keycode(b'v').unwrap_or(FALLBACK_V_KEYCODE);
         V_KEYCODE.store(kc, Ordering::Relaxed);
+        let kc = resolve_keycode(b'c').unwrap_or(FALLBACK_C_KEYCODE);
+        C_KEYCODE.store(kc, Ordering::Relaxed);
         let ascii = match resolve_ascii_capable() {
             None => 0,
             Some(false) => 1,
@@ -144,7 +158,8 @@ mod macos {
         }
     }
 
-    fn resolve_v_keycode() -> Option<u16> {
+    /// The keycode whose current-layout translation is `target`.
+    fn resolve_keycode(target: u8) -> Option<u16> {
         unsafe {
             let source = TISCopyCurrentKeyboardLayoutInputSource();
             if source.is_null() {
@@ -180,7 +195,7 @@ mod macos {
                     &mut actual_len,
                     chars.as_mut_ptr(),
                 );
-                if status == 0 && actual_len == 1 && chars[0] == TARGET_CHAR {
+                if status == 0 && actual_len == 1 && chars[0] == target as u16 {
                     return Some(keycode);
                 }
             }

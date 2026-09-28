@@ -6,7 +6,9 @@ import uuid
 from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 
+from ..services.commands import DEFAULT_COMMAND_MODEL, default_transforms
 from ..utils.capture_chords import (
+    default_command_chord,
     default_push_to_talk_chord,
     default_toggle_to_talk_chord,
 )
@@ -55,6 +57,11 @@ class CaptureSettings(Base):
     chord_toggle_to_talk_keys = Column(
         JSON, nullable=False, default=default_toggle_to_talk_chord
     )
+    # Command Mode (docs/plans/COMMAND_MODE.md): its chord (empty = off), the
+    # model that rewrites, and the saved transforms ({id, name, instruction}).
+    chord_command_keys = Column(JSON, nullable=False, default=default_command_chord)
+    command_llm_model = Column(String, nullable=False, default=DEFAULT_COMMAND_MODEL)
+    command_transforms = Column(JSON, nullable=False, default=default_transforms)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -70,7 +77,7 @@ class Capture(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     audio_path = Column(String, nullable=False)
-    source = Column(String, nullable=False, default="file")  # dictation | recording | file
+    source = Column(String, nullable=False, default="file")  # dictation | recording | file | command
     language = Column(String, nullable=True)
     duration_ms = Column(Integer, nullable=True)
     transcript_raw = Column(Text, nullable=False, default="")
@@ -84,6 +91,12 @@ class Capture(Base):
     # for dictation inside Voicebox itself).
     app_bundle_id = Column(String, nullable=True)
     app_name = Column(String, nullable=True)
+    # Command captures: the text that was selected, the instruction that ran
+    # (a transform's, when one was named) and that transform's name.
+    # transcript_raw is what was said, transcript_refined the rewrite.
+    command_selection = Column(Text, nullable=True)
+    command_instruction = Column(Text, nullable=True)
+    command_transform = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

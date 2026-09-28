@@ -103,9 +103,20 @@ mod ffi {
 /// so callers should sleep briefly afterwards to let the target app
 /// process the paste before any follow-up (e.g. clipboard restore).
 pub fn send_paste() -> Result<(), String> {
-    use ffi::*;
+    send_command_key(crate::keyboard_layout::paste_keycode_v())
+}
 
-    let v_keycode = crate::keyboard_layout::paste_keycode_v();
+/// Post Cmd+C the same way as [`send_paste`]: the copy that reads a
+/// selection Accessibility can't (Command Mode). Every event sets its flags
+/// explicitly, so the command chord's keys, still held, can't turn it into
+/// another shortcut.
+pub fn send_copy() -> Result<(), String> {
+    send_command_key(crate::keyboard_layout::copy_keycode_c())
+}
+
+/// Cmd down, `key_code` down and up with Cmd, Cmd up.
+fn send_command_key(key_code: u16) -> Result<(), String> {
+    use ffi::*;
 
     unsafe {
         let source = CGEventSourceCreate(K_CG_EVENT_SOURCE_STATE_HID_SYSTEM_STATE);
@@ -127,8 +138,8 @@ pub fn send_paste() -> Result<(), String> {
             // regardless, which is why native apps worked but Electron
             // targets (Slack, VS Code) silently no-op'd.
             (KEYCODE_LEFT_CMD, true, K_CG_EVENT_FLAG_MASK_COMMAND),
-            (v_keycode, true, K_CG_EVENT_FLAG_MASK_COMMAND),
-            (v_keycode, false, K_CG_EVENT_FLAG_MASK_COMMAND),
+            (key_code, true, K_CG_EVENT_FLAG_MASK_COMMAND),
+            (key_code, false, K_CG_EVENT_FLAG_MASK_COMMAND),
             (KEYCODE_LEFT_CMD, false, 0),
         ];
 

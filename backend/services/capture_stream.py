@@ -20,6 +20,12 @@ A client that asks for it (``"provisional": true`` in start) also gets
 unlikely to change, while the last phrase is still being cleaned up. It is a
 prediction, not a promise; ``final`` is the only authoritative text
 (docs/plans/STREAMING_INSERTION.md).
+
+A ``command`` session (docs/plans/COMMAND_MODE.md) records a spoken
+instruction for text selected in another app. It is recognized like a
+dictation but never cleaned up; the client sends the selection while the user
+speaks, the model is prefilled with it, and at finish the selection is
+rewritten by the instruction.
 """
 
 import asyncio
@@ -39,6 +45,15 @@ from .. import config, models
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
 from .captures import _to_response
+from .commands import (
+    MAX_SELECTION_CHARS,
+    ensure_model_ready,
+    prefill,
+    record_command,
+    resolve_instruction,
+    rewrite,
+    settings_transforms,
+)
 from .content_check import Verdict, check_refinement, summarize_reviews
 from .known_names import known_names
 from .phrase_seams import (
@@ -145,8 +160,13 @@ class StreamingCapture:
         self.names = frozenset()
         self.names_loading = None
         self.source = start.get("source", "dictation")
-        if not isinstance(self.source, str) or self.source not in {"dictation", "recording"}:
+        if not isinstance(self.source, str) or self.source not in {"dictation", "recording", "command"}:
             raise ValueError("Invalid streaming capture source")
+        # Command sessions: the selected text, from the selection command, and
+        # what ran on it.
+        self.selection = None
+        self.prefilling = None
+        self.command = None
         self.settings = settings
         self.language = start.get("language", settings.language)
         if self.language is not None and (
@@ -282,6 +302,54 @@ class StreamingCapture:
             raise ValueError("Context must be text")
         self.field_before = before[-FIELD_CONTEXT_CHARS:]
         self.continues = continues_sentence(self.field_before)
+
+    @property
+    def is_command(self) -> bool:
+        return self.source == "command"
+
+    def set_selection(self, text) -> None:
+        """The text a command session rewrites, read in the target app at key-down.
+
+        The model is prefilled with it at once, while the user is still
+        speaking the instruction.
+        """
+        if not self.is_command:
+            raise ValueError("Only command sessions take a selection")
+        if not isinstance(text, str):
+            raise ValueError("Selection must be text")
+        if len(text) > MAX_SELECTION_CHARS:
+            raise ValueError(f"Selection is too long for Command Mode ({MAX_SELECTION_CHARS:,} characters at most)")
+        self.selection = text
+        self.prefilling = asyncio.create_task(self.prefill_command())
+
+    async def prefill_command(self) -> None:
+        try:
+            ensure_model_ready(self.settings.command_llm_model)
+            await prefill(self.selection, self.settings.command_llm_model)
+        except Exception:
+            # Only a head start: the rewrite at finish reports real failures.
+            logger.warning("Command prefill failed", exc_info=True)
+
+    async def finish_command(self) -> None:
+        """Rewrite the selection by what was said, or by the transform it names."""
+        try:
+            if self.selection is None:
+                raise ValueError("Select text to rewrite first")
+            instruction, transform = resolve_instruction(self.raw, settings_transforms(self.settings))
+            ensure_model_ready(self.settings.command_llm_model)
+            started = time.monotonic()
+            try:
+                self.refined, self.llm_model = await rewrite(
+                    self.selection, instruction, self.settings.command_llm_model
+                )
+            finally:
+                self._spent("refine", started)
+            self.command = (instruction, transform)
+            self.refinement_error = None
+            await self.emit("refined", text=self.refined)
+        except Exception as error:
+            logger.warning("Command failed: %s", error)
+            self.refinement_error = str(error)
 
     def start_like_raw(self, text: str) -> str:
         """``text`` with the first word cased as in the raw transcript.
@@ -473,7 +541,8 @@ class StreamingCapture:
             self.tail_dirty = True
             self.paused = paused
         await self.emit("transcript", accepted_text=self.raw, provisional_text="", text=self.raw, final=False)
-        if not self.settings.auto_refine:
+        # A command's instruction is never cleaned up: it isn't the output.
+        if not self.settings.auto_refine or self.is_command:
             return
         try:
             # Explicit corrections operate on the entire raw session so a later
@@ -652,6 +721,8 @@ class StreamingCapture:
             if self.finished:
                 if self.degraded_reason:
                     await self.reconcile_full_audio()
+                elif self.is_command:
+                    await self.finish_command()
                 elif self.needs_final_refinement:
                     await self.reconcile_refinement()
                 elif self.settings.auto_refine:
@@ -683,7 +754,9 @@ class StreamingCapture:
 
     async def reconcile_refinement(self):
         """Resolve ambiguous spoken corrections with complete session context."""
-        if self.settings.auto_refine:
+        if self.is_command:
+            await self.finish_command()
+        elif self.settings.auto_refine:
             try:
                 started = time.monotonic()
                 refined, self.llm_model = await refine_transcript(
@@ -727,6 +800,8 @@ class StreamingCapture:
 
     def persist(self, db):
         self.archive.close()
+        if self.is_command:
+            return self.persist_command(db)
         row = Capture(
             id=self.id,
             audio_path=config.to_storage_path(self.path),
@@ -753,6 +828,36 @@ class StreamingCapture:
             auto_refine=self.settings.auto_refine,
             allow_auto_paste=self.settings.allow_auto_paste,
         )
+
+    def persist_command(self, db):
+        row = Capture(
+            id=self.id,
+            audio_path=config.to_storage_path(self.path),
+            source=self.source,
+            language=self.language,
+            duration_ms=round(self.samples / self.rate * 1000),
+            transcript_raw=self.raw,
+            stt_model=self.stt_model,
+            app_bundle_id=self.app_bundle_id,
+            app_name=self.app_name,
+            command_selection=self.selection,
+        )
+        if self.command is not None and not self.refinement_error:
+            instruction, transform = self.command
+            record_command(
+                row,
+                selection=self.selection,
+                instruction=instruction,
+                transform=transform,
+                text=self.refined,
+                model=self.llm_model,
+            )
+        db.add(row)
+        db.commit()
+        self.persisted = True
+        db.refresh(row)
+        # A command replaces its selection whatever the paste setting says.
+        return models.CaptureCreateResponse(**_to_response(row).model_dump(), auto_refine=True, allow_auto_paste=True)
 
     def close(self):
         self.archive.close()

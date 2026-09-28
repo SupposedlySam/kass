@@ -40,6 +40,14 @@ pub enum PillEvent {
 }
 
 impl PillEvent {
+    /// A short note rather than a failure, shown as briefly as a too-short take.
+    pub fn notice(message: impl Into<String>) -> Self {
+        Self::Error {
+            message: message.into(),
+            visible_ms: BRIEF_NOTICE_MS,
+        }
+    }
+
     pub fn error(message: impl Into<String>) -> Self {
         let message = message.into();
         let visible_ms = if message == delivery::SHORT_RECORDING_MESSAGE {
@@ -146,6 +154,12 @@ where
                     env.emit(PillEvent::error(delivery::SHORT_RECORDING_MESSAGE));
                 }
             }
+        }
+        Outcome::Declined(message) => {
+            // After the microphone has stopped, so its own last state
+            // doesn't replace the message.
+            let _ = recorded.await;
+            env.emit(PillEvent::notice(message));
         }
     }
 }
@@ -475,6 +489,23 @@ mod tests {
             visible_ms: BRIEF_NOTICE_MS,
         };
         assert_eq!(env.events(), vec![brief.clone(), brief]);
+    }
+
+    #[tokio::test]
+    async fn a_declined_command_says_why_once_recording_has_stopped() {
+        let env = FakeEnv::default();
+        settle(
+            &env,
+            Outcome::Declined("Select text to rewrite first".into()),
+            async { Some(recorded(0.2)) },
+        )
+        .await;
+        assert_eq!(
+            env.events(),
+            vec![PillEvent::notice("Select text to rewrite first")]
+        );
+        assert!(env.pasted().is_empty());
+        assert!(env.uploads.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -28,15 +28,21 @@ pub fn encode_frame(sequence: u32, sample_offset: u32, pcm: &[i16]) -> Vec<u8> {
 /// asks for provisional cleaned text after release; `start_cue_ms`, when not
 /// zero, says the take's first milliseconds may hold Voicebox's own start
 /// cue, so a voice detected there alone doesn't make the take speech. Older
-/// servers ignore both.
-pub fn start_message(sample_rate: u32, provisional: bool, start_cue_ms: u32) -> String {
+/// servers ignore both. A `command` take's words are an instruction for
+/// selected text (docs/plans/COMMAND_MODE.md).
+pub fn start_message(
+    sample_rate: u32,
+    provisional: bool,
+    start_cue_ms: u32,
+    command: bool,
+) -> String {
     let mut start = serde_json::json!({
         "type": "start",
         "protocol_version": 1,
         "sample_rate": sample_rate,
         "channels": 1,
         "encoding": "pcm_s16le",
-        "source": "dictation",
+        "source": if command { "command" } else { "dictation" },
     });
     if provisional {
         start["provisional"] = Value::Bool(true);
@@ -68,6 +74,11 @@ pub fn finish_message(app: Option<&TargetApp>) -> String {
 /// (docs/plans/MID_SENTENCE_DICTATION.md).
 pub fn context_message(before: &str) -> String {
     serde_json::json!({ "type": "context", "before": before }).to_string()
+}
+
+/// The text a command take rewrites, read just after key-down.
+pub fn selection_message(text: &str) -> String {
+    serde_json::json!({ "type": "selection", "text": text }).to_string()
 }
 
 pub fn cancel_message() -> String {
@@ -165,7 +176,7 @@ mod tests {
 
     #[test]
     fn start_message_matches_protocol_v1() {
-        let value: Value = serde_json::from_str(&start_message(48_000, false, 0)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 0, false)).unwrap();
         assert_eq!(
             value,
             serde_json::json!({
@@ -180,6 +191,17 @@ mod tests {
     }
 
     #[test]
+    fn a_command_take_says_so_and_sends_its_selection() {
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 0, true)).unwrap();
+        assert_eq!(value["source"], "command");
+        let value: Value = serde_json::from_str(&selection_message("the \"text\"\n")).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({ "type": "selection", "text": "the \"text\"\n" })
+        );
+    }
+
+    #[test]
     fn context_message_carries_the_text_before_the_caret() {
         let value: Value = serde_json::from_str(&context_message("we \"should\"\n")).unwrap();
         assert_eq!(value["type"], "context");
@@ -188,16 +210,16 @@ mod tests {
 
     #[test]
     fn start_message_can_ask_for_provisional_text() {
-        let value: Value = serde_json::from_str(&start_message(16_000, true, 0)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(16_000, true, 0, false)).unwrap();
         assert_eq!(value["provisional"], Value::Bool(true));
         assert_eq!(value["protocol_version"], 1);
     }
 
     #[test]
     fn start_message_marks_the_start_cue_only_when_it_played() {
-        let value: Value = serde_json::from_str(&start_message(48_000, false, 300)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 300, false)).unwrap();
         assert_eq!(value["start_cue_ms"], 300);
-        let value: Value = serde_json::from_str(&start_message(48_000, false, 0)).unwrap();
+        let value: Value = serde_json::from_str(&start_message(48_000, false, 0, false)).unwrap();
         assert_eq!(value.get("start_cue_ms"), None);
     }
 

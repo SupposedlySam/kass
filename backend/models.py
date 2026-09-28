@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
 
+from .services.commands import DEFAULT_COMMAND_MODEL, default_transforms
 from .utils.capture_chords import (
+    default_command_chord,
     default_push_to_talk_chord,
     default_toggle_to_talk_chord,
 )
@@ -60,6 +62,10 @@ class CaptureResponse(BaseModel):
     refinement_review: Optional[RefinementReviewModel] = None
     app_bundle_id: Optional[str] = None
     app_name: Optional[str] = None
+    # Command captures (docs/plans/COMMAND_MODE.md).
+    command_selection: Optional[str] = None
+    command_instruction: Optional[str] = None
+    command_transform: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -102,6 +108,14 @@ class CaptureRetranscribeRequest(BaseModel):
     language: Optional[str] = Field(None, pattern="^(en|zh|ja|ko|de|fr|ru|pt|es|it)$")
 
 
+class Transform(BaseModel):
+    """A saved Command Mode instruction, run by saying its name."""
+
+    id: Optional[str] = None
+    name: str
+    instruction: str
+
+
 class CaptureSettingsResponse(BaseModel):
     """Server-persisted defaults for the capture / refine flow."""
 
@@ -127,6 +141,9 @@ class CaptureSettingsResponse(BaseModel):
     chord_toggle_to_talk_keys: List[str] = Field(
         default_factory=default_toggle_to_talk_chord
     )
+    chord_command_keys: List[str] = Field(default_factory=default_command_chord)
+    command_llm_model: str = Field(default=DEFAULT_COMMAND_MODEL, pattern="^(0\\.6B|1\\.7B|4B)$")
+    command_transforms: List[Transform] = Field(default_factory=default_transforms)
 
     class Config:
         from_attributes = True
@@ -153,6 +170,24 @@ class CaptureSettingsUpdate(BaseModel):
     hotkey_enabled: Optional[bool] = None
     chord_push_to_talk_keys: Optional[List[str]] = Field(default=None, min_length=1, max_length=6)
     chord_toggle_to_talk_keys: Optional[List[str]] = Field(default=None, min_length=1, max_length=6)
+    # Empty turns Command Mode's chord off.
+    chord_command_keys: Optional[List[str]] = Field(default=None, max_length=6)
+    command_llm_model: Optional[str] = Field(default=None, pattern="^(0\\.6B|1\\.7B|4B)$")
+    command_transforms: Optional[List[Transform]] = None
+
+
+class CommandRunRequest(BaseModel):
+    """``POST /commands/run``: rewrite a selection without a recording.
+
+    With ``capture_id``, the instruction is that capture's transcript (a
+    command recording saved through the batch upload).
+    """
+
+    selection: str
+    instruction: Optional[str] = None
+    capture_id: Optional[str] = None
+    app_bundle_id: Optional[str] = None
+    app_name: Optional[str] = None
 
 
 class LLMGenerateRequest(BaseModel):

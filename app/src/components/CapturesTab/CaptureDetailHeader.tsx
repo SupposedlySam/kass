@@ -32,17 +32,23 @@ export function CaptureDetailHeader({ capture }: { capture: CaptureResponse | nu
               })}
             </p>
           </div>
-          <CaptureInlinePlayer
-            audioUrl={apiClient.getCaptureAudioUrl(capture.id)}
-            fallbackDurationMs={capture.duration_ms}
-            className="w-60 shrink-0"
-          />
+          {/* A command run from ⌘K has no recording. */}
+          {capture.audio_path && (
+            <CaptureInlinePlayer
+              audioUrl={apiClient.getCaptureAudioUrl(capture.id)}
+              fallbackDurationMs={capture.duration_ms}
+              className="w-60 shrink-0"
+            />
+          )}
         </>
       ) : (
         <span className="flex-1" />
       )}
       <Button variant="ghost" size="icon" asChild>
-        <Link to="/settings/dictation" aria-label={t('captures.actions.configure')}>
+        <Link
+          to={capture?.source === 'command' ? '/settings/command-mode' : '/settings/dictation'}
+          aria-label={t('captures.actions.configure')}
+        >
           <Settings2 />
         </Link>
       </Button>
