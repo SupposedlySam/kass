@@ -122,10 +122,6 @@ export function CalibrationStepView({
 
       <div className="flex items-center gap-2 border-t border-border px-7 py-4">
         <span className="flex-1" />
-        {/* Sends Voicebox's paragraph back untouched: it already reads like the user. */}
-        <Button variant="outline" disabled={busy || !original} onClick={() => onSubmit(original)}>
-          {t('writingStyle.calibration.looksLikeMe')}
-        </Button>
         <Button className="font-semibold" disabled={!canSave} onClick={save}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {isLast
