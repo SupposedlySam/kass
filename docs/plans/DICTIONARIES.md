@@ -17,17 +17,17 @@ Capitals are fixed only for terms that aren't common words, using `phrase_seams.
 
 ## Scopes
 
-An entry belongs to exactly one scope:
+An entry applies in one or more places, each a scope:
 
 - **Everywhere**: every dictation.
 - **A writing style**: every app assigned to that style (`app_styles`, or the default style for a new app).
 - **An app**: one bundle id.
 
-A dictation merges the three scopes for its app. For terms, the lists are combined and duplicates dropped. For replacements with the same spoken phrase, the most specific scope wins: app, then style, then everywhere. Deleting a style moves its entries to the default style, the same way it moves the style's apps. An app entry keeps its bundle id even while the app has no captures.
+Everywhere excludes the others: choosing it clears the rest. A dictation merges the three scopes for its app. For terms, the lists are combined and duplicates dropped. For replacements with the same spoken phrase, the most specific scope wins: app, then style, then everywhere. Deleting a style moves its entries to the default style, the same way it moves the style's apps. An app entry keeps its bundle id even while the app has no captures.
 
 ## Storage
 
-The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `created_at`. The table is created by `Base.metadata.create_all`, so it needs no column migration. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`).
+The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `group_id`, `created_at`. There is one row per place; the rows of an entry that applies in several places share `group_id` (null: the row is its own entry, as rows from before groups are). `migrations.py` adds `group_id` to an existing table. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`), so a place never holds the same word said twice; the API names the place in its 409. Matching, prompting and dictation read rows and never see groups.
 
 `services/dictionary.py` keeps an in-memory snapshot, like `styles.snapshot()`. Writes rebuild it. `for_app(bundle_id)` returns a resolved `Dictionary`: prompt terms in priority order, compiled replacements, and the recase set. That result is cached per (bundle id, style) until the next write. Dictation itself never reads from disk or the database.
 
@@ -54,18 +54,20 @@ Every path that runs Whisper passes it: phrase recognition (`capture_stream.reco
 
 ## API
 
-- `GET /dictionary`: every entry, grouped by scope.
-- `POST /dictionary`: `{scope, scope_id?, app_name?, written, spoken?}`.
-- `PATCH /dictionary/{id}`, `DELETE /dictionary/{id}`.
-- `GET /dictionary/resolved?bundle_id=`: the merged view for one app, with each entry's source scope and whether its term made it into the Whisper prompt.
+- `GET /dictionary`: every entry, newest first, each with its `places` (`{scope, scope_id, app_name}`).
+- `POST /dictionary`: `{written, spoken?, places}`.
+- `PATCH /dictionary/{id}`: `{written?, spoken?, places?}`; changing `places` adds and removes rows, keeping the entry's date. `DELETE /dictionary/{id}` removes it everywhere.
+- `GET /dictionary/resolved?bundle_id=`: the rows one app uses, most specific first, each with its entry's id, and which terms fit the Whisper prompt.
 
 ## UI
 
-Settings gets a new **Dictionary** page, next to Writing style.
+Settings gets a **Dictionary** page, next to Writing style (the canvas "Dictionary Page Concepts", concept D).
 
-- A scope picker at the top: Everywhere, each style, each app (from the capture app list and `app_styles`).
-- A list of entries in that scope, each shown as `written` with an optional "when I say …" line. An inline add row has two fields: "Write" (required) and "When I say" (optional).
-- In app scope, an "Also applies here" list shows the style and global entries this app gets, read-only, marking any entry that an app entry overrides. There's also a note when some terms don't fit in the Whisper prompt.
+- A scope list on the left: Everywhere, then writing styles, then apps, each with how many entries apply there.
+- The selected scope on the right. At the top, an add form reads "When I say" → "Write", then Add; an empty "When I say" only teaches the spelling. New entries go in the selected scope.
+- Its entries, newest first: said → written, a date, edit and delete. A spelling-only entry shows "spelling only" where the said words go.
+- Editing opens a strip under the row with an "Applies in" dropdown: a checkbox list of Everywhere, the styles and the apps. Checking Everywhere clears the rest.
+- For an app or style, "Also applies in <scope>" rows show what it inherits from its style and from everywhere: the first word or two and a count, opening to the list. There's also a note when some terms don't fit in the Whisper prompt.
 
 This covers only the Settings page. The capture pill doesn't change. An "Add to dictionary" action from a correction in the Captures tab is a possible follow-up, not part of this work.
 

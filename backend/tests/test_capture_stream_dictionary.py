@@ -25,8 +25,8 @@ def database(monkeypatch):
     monkeypatch.setattr(phrase_seams, "_common_word", lambda word: False)
     with make() as db:
         styles.ensure_styles(db)
-        dictionary.add_entry(db, "global", None, "Kubernetes")
-        dictionary.add_entry(db, "app", ZED, "Voicebox", "voice box", app_name="Zed")
+        dictionary.add_group(db, "Kubernetes", None, [{"scope": "global"}])
+        dictionary.add_group(db, "Voicebox", "voice box", [{"scope": "app", "scope_id": ZED, "app_name": "Zed"}])
     return make
 
 

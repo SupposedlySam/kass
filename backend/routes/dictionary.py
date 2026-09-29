@@ -15,8 +15,12 @@ router = APIRouter(prefix="/dictionary", tags=["dictionary"])
 logger = logging.getLogger(__name__)
 
 
-def _model(entry: dictionary.Entry) -> models.DictionaryEntryModel:
-    return models.DictionaryEntryModel(**asdict(entry))
+def _model(group: dictionary.Group) -> models.DictionaryEntryModel:
+    return models.DictionaryEntryModel(**asdict(group))
+
+
+def _places(places) -> list[dict] | None:
+    return None if places is None else [place.model_dump() for place in places]
 
 
 def _token_counter():
@@ -35,20 +39,18 @@ def _token_counter():
 
 @router.get("", response_model=models.DictionaryResponse)
 async def list_entries(db: Session = Depends(get_db)):
-    return models.DictionaryResponse(entries=[_model(entry) for entry in dictionary.list_entries(db)])
+    return models.DictionaryResponse(entries=[_model(group) for group in dictionary.list_groups(db)])
 
 
 @router.post("", response_model=models.DictionaryEntryModel)
 async def add_entry(request: models.DictionaryEntryCreate, db: Session = Depends(get_db)):
     try:
-        entry = dictionary.add_entry(
-            db, request.scope, request.scope_id, request.written, request.spoken, request.app_name
-        )
+        group = dictionary.add_group(db, request.written, request.spoken, _places(request.places))
     except dictionary.DuplicateEntryError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return _model(entry)
+    return _model(group)
 
 
 @router.get("/resolved", response_model=models.ResolvedDictionaryResponse)
@@ -57,7 +59,9 @@ async def resolved(bundle_id: str | None = None):
     fit, dropped = dictionary.fit_terms(dictionary.build(resolved_entries).terms, _token_counter())
     return models.ResolvedDictionaryResponse(
         entries=[
-            models.ResolvedDictionaryEntry(**asdict(entry), overridden=overridden)
+            models.ResolvedDictionaryEntry(
+                **(asdict(entry) | {"id": entry.group_id or entry.id}), overridden=overridden
+            )
             for entry, overridden in resolved_entries
         ],
         prompt_terms=fit,
@@ -67,19 +71,22 @@ async def resolved(bundle_id: str | None = None):
 
 @router.patch("/{entry_id}", response_model=models.DictionaryEntryModel)
 async def update_entry(entry_id: str, request: models.DictionaryEntryUpdate, db: Session = Depends(get_db)):
+    patch = request.model_dump(exclude_unset=True)
+    if "places" in patch:
+        patch["places"] = _places(request.places)
     try:
-        entry = dictionary.update_entry(db, entry_id, request.model_dump(exclude_unset=True))
+        group = dictionary.update_group(db, entry_id, patch)
     except dictionary.DuplicateEntryError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    if entry is None:
+    if group is None:
         raise HTTPException(status_code=404, detail="Dictionary entry not found")
-    return _model(entry)
+    return _model(group)
 
 
 @router.delete("/{entry_id}")
 async def delete_entry(entry_id: str, db: Session = Depends(get_db)):
-    if not dictionary.delete_entry(db, entry_id):
+    if not dictionary.delete_group(db, entry_id):
         raise HTTPException(status_code=404, detail="Dictionary entry not found")
     return {"deleted": True}

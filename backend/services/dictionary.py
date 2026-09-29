@@ -42,6 +42,26 @@ class Entry:
     written: str
     spoken: str | None
     created_at: datetime | None
+    # The entry this row is one place of (its own id when it applies in one).
+    group_id: str | None = None
+
+
+@dataclass(frozen=True)
+class Place:
+    scope: str
+    scope_id: str | None = None
+    app_name: str | None = None
+
+
+@dataclass(frozen=True)
+class Group:
+    """An entry as the user edits it: one word, in every place it applies."""
+
+    id: str
+    written: str
+    spoken: str | None
+    places: tuple[Place, ...]
+    created_at: datetime | None
 
 
 def _key(written: str, spoken: str | None) -> str:
@@ -206,6 +226,7 @@ def _entry(row) -> Entry:
         written=row.written,
         spoken=row.spoken,
         created_at=row.created_at,
+        group_id=row.group_id or row.id,
     )
 
 
@@ -276,79 +297,177 @@ def _clean_spoken(spoken: object) -> str | None:
     return cleaned
 
 
-def _check_unique(db, scope: str, scope_id: str, key: str, exclude: str | None = None) -> None:
-    from ..database.models import DictionaryEntry
-
-    query = db.query(DictionaryEntry).filter(
-        DictionaryEntry.scope == scope, DictionaryEntry.scope_id == scope_id, DictionaryEntry.key == key
-    )
-    if exclude:
-        query = query.filter(DictionaryEntry.id != exclude)
-    if query.first() is not None:
-        raise DuplicateEntryError("This dictionary already has that word")
-
-
-def add_entry(
-    db, scope: str, scope_id: str | None, written: str, spoken: str | None = None, app_name: str | None = None
-):
-    from ..database.models import DictionaryEntry
+def _place(place) -> Place:
+    """A place from the API, checked: global, an existing style, or an app."""
     from .styles import snapshot as styles_snapshot
 
+    if isinstance(place, Place):
+        scope, scope_id, app_name = place.scope, place.scope_id, place.app_name
+    else:
+        scope, scope_id, app_name = place.get("scope"), place.get("scope_id"), place.get("app_name")
     if scope not in SCOPES:
         raise ValueError("Unknown dictionary scope")
     if scope == "global":
-        scope_id, app_name = "", None
-    elif not isinstance(scope_id, str) or not scope_id.strip():
+        return Place("global")
+    if not isinstance(scope_id, str) or not scope_id.strip():
         raise ValueError("Choose the style or app this entry is for")
-    else:
-        scope_id = scope_id.strip()
-    if scope == "style" and styles_snapshot().get(scope_id) is None:
-        raise ValueError("That writing style doesn't exist")
-    if scope != "app":
-        app_name = None
-    written, spoken = _clean(written, "What to write"), _clean_spoken(spoken)
-    if db.query(DictionaryEntry).count() >= MAX_ENTRIES:
+    scope_id = scope_id.strip()
+    if scope == "style":
+        if styles_snapshot().get(scope_id) is None:
+            raise ValueError("That writing style doesn't exist")
+        return Place("style", scope_id)
+    return Place("app", scope_id, app_name if isinstance(app_name, str) and app_name.strip() else None)
+
+
+def _places(places) -> list[Place]:
+    """Checked, without repeats; everywhere replaces every other place."""
+    cleaned: list[Place] = []
+    for place in places or ():
+        found = _place(place)
+        if found.scope == "global":
+            return [found]
+        if all((p.scope, p.scope_id) != (found.scope, found.scope_id) for p in cleaned):
+            cleaned.append(found)
+    if not cleaned:
+        raise ValueError("Choose where this word applies")
+    return cleaned
+
+
+def _place_name(place: Place) -> str:
+    from .styles import snapshot as styles_snapshot
+
+    if place.scope == "global":
+        return "everywhere"
+    if place.scope == "style":
+        style = styles_snapshot().get(place.scope_id)
+        return f"the {style.name} style" if style else "that style"
+    return place.app_name or place.scope_id
+
+
+def _check_unique(db, place: Place, key: str, group_id: str | None = None) -> None:
+    from sqlalchemy import func
+
+    from ..database.models import DictionaryEntry
+
+    query = db.query(DictionaryEntry).filter(
+        DictionaryEntry.scope == place.scope,
+        DictionaryEntry.scope_id == (place.scope_id or ""),
+        DictionaryEntry.key == key,
+    )
+    if group_id:
+        query = query.filter(func.coalesce(DictionaryEntry.group_id, DictionaryEntry.id) != group_id)
+    if query.first() is not None:
+        raise DuplicateEntryError(f"That word is already in the dictionary for {_place_name(place)}")
+
+
+def _rows(db, group_id: str):
+    from sqlalchemy import func
+
+    from ..database.models import DictionaryEntry
+
+    return (
+        db.query(DictionaryEntry)
+        .filter(func.coalesce(DictionaryEntry.group_id, DictionaryEntry.id) == group_id)
+        .order_by(DictionaryEntry.created_at)
+        .all()
+    )
+
+
+def _group(rows) -> Group:
+    first = rows[0]
+    return Group(
+        id=first.group_id or first.id,
+        written=first.written,
+        spoken=first.spoken,
+        places=tuple(Place(row.scope, row.scope_id or None, row.app_name) for row in rows),
+        created_at=min((row.created_at for row in rows if row.created_at), default=None),
+    )
+
+
+def _row(group_id: str, place: Place, written: str, spoken: str | None, key: str, created_at=None):
+    from ..database.models import DictionaryEntry
+
+    return DictionaryEntry(
+        scope=place.scope,
+        scope_id=place.scope_id or "",
+        app_name=place.app_name,
+        written=written,
+        spoken=spoken,
+        key=key,
+        group_id=group_id,
+        created_at=created_at or datetime.utcnow(),
+    )
+
+
+def list_groups(db) -> list[Group]:
+    """Every entry, newest first."""
+    from ..database.models import DictionaryEntry
+
+    grouped: dict[str, list] = {}
+    for row in db.query(DictionaryEntry).order_by(DictionaryEntry.created_at).all():
+        grouped.setdefault(row.group_id or row.id, []).append(row)
+    groups = [_group(rows) for rows in grouped.values()]
+    groups.sort(key=lambda g: g.created_at or datetime.min, reverse=True)
+    return groups
+
+
+def add_group(db, written: str, spoken: str | None, places) -> Group:
+    import uuid
+
+    written, spoken, places = _clean(written, "What to write"), _clean_spoken(spoken), _places(places)
+    if len(list_groups(db)) >= MAX_ENTRIES:
         raise ValueError(f"Dictionaries can hold at most {MAX_ENTRIES} entries")
     key = _key(written, spoken)
-    _check_unique(db, scope, scope_id, key)
-    row = DictionaryEntry(scope=scope, scope_id=scope_id, app_name=app_name, written=written, spoken=spoken, key=key)
-    db.add(row)
+    for place in places:
+        _check_unique(db, place, key)
+    group_id, now = str(uuid.uuid4()), datetime.utcnow()
+    for place in places:
+        db.add(_row(group_id, place, written, spoken, key, now))
     db.commit()
-    db.refresh(row)
     invalidate()
-    return _entry(row)
+    return _group(_rows(db, group_id))
 
 
-def update_entry(db, entry_id: str, patch: dict):
-    from ..database.models import DictionaryEntry
-
-    row = db.get(DictionaryEntry, entry_id)
-    if row is None:
+def update_group(db, group_id: str, patch: dict) -> Group | None:
+    """Change an entry's words everywhere it applies, and where it applies."""
+    rows = _rows(db, group_id)
+    if not rows:
         return None
-    written = _clean(patch["written"], "What to write") if patch.get("written") is not None else row.written
-    spoken = _clean_spoken(patch["spoken"]) if "spoken" in patch else row.spoken
+    current = _group(rows)
+    written = _clean(patch["written"], "What to write") if patch.get("written") is not None else current.written
+    spoken = _clean_spoken(patch["spoken"]) if "spoken" in patch else current.spoken
+    places = _places(patch["places"]) if patch.get("places") is not None else list(current.places)
     key = _key(written, spoken)
-    _check_unique(db, row.scope, row.scope_id, key, exclude=entry_id)
-    row.written, row.spoken, row.key = written, spoken, key
+    for place in places:
+        _check_unique(db, place, key, group_id)
+    wanted = {(p.scope, p.scope_id or ""): p for p in places}
+    for row in rows:
+        place = wanted.pop((row.scope, row.scope_id or ""), None)
+        if place is None:
+            db.delete(row)
+            continue
+        row.written, row.spoken, row.key, row.group_id = written, spoken, key, group_id
+        row.app_name = place.app_name or row.app_name
+    for place in wanted.values():
+        db.add(_row(group_id, place, written, spoken, key, current.created_at))
     db.commit()
-    db.refresh(row)
     invalidate()
-    return _entry(row)
+    return _group(_rows(db, group_id))
 
 
-def delete_entry(db, entry_id: str) -> bool:
-    from ..database.models import DictionaryEntry
-
-    row = db.get(DictionaryEntry, entry_id)
-    if row is None:
+def delete_group(db, group_id: str) -> bool:
+    rows = _rows(db, group_id)
+    if not rows:
         return False
-    db.delete(row)
+    for row in rows:
+        db.delete(row)
     db.commit()
     invalidate()
     return True
 
 
 def list_entries(db) -> list[Entry]:
+    """Every row, one per place, newest first."""
     from ..database.models import DictionaryEntry
 
     rows = db.query(DictionaryEntry).order_by(DictionaryEntry.created_at.desc()).all()

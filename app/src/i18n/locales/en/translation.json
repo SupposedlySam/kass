@@ -1142,42 +1142,58 @@
   },
   "dictionary": {
     "title": "Dictionary",
-    "description": "Words dictation should get right. The most specific entry wins: an app's, then its writing style's, then everywhere.",
+    "description": "Words dictation should get right. Pick where they apply on the left.",
     "scope": {
-      "title": "Applies to",
-      "description": "Everywhere, one writing style, or one app.",
+      "label": "Where words apply",
       "everywhere": "Everywhere",
       "styles": "Writing styles",
-      "apps": "Apps"
+      "apps": "Apps",
+      "count_one": "{{count}} word",
+      "count_other": "{{count}} words"
     },
-    "entries": {
-      "title": "Words in {{scope}}",
-      "whenISay": "when I say “{{spoken}}”",
-      "edit": "Edit {{written}}",
-      "delete": "Delete {{written}}",
-      "save": "Save",
-      "cancel": "Cancel",
-      "deleteFailed": "Couldn't delete that word"
-    },
-    "empty": {
-      "term": "A term is a word to always spell right, like a name or product: fill in only Write.",
-      "replacement": "A replacement writes one thing when you say another: fill in both."
+    "header": {
+      "everywhere": "Every dictation, in every app",
+      "appStyle": "Uses the {{style}} writing style",
+      "styleApps_zero": "No apps use it yet",
+      "styleApps_one": "{{count}} app uses it",
+      "styleApps_other": "{{count}} apps use it"
     },
     "add": {
+      "say": "When I say",
       "write": "Write",
-      "say": "When I say (optional)",
+      "sayPlaceholder": "voice box",
+      "writePlaceholder": "VoiceBox",
       "action": "Add",
-      "duplicate": "That's already in this list.",
+      "hint": "Leave “When I say” empty to only teach the spelling.",
       "limit": "The dictionary is full at {{count}} words. Delete some to add more."
     },
+    "list": {
+      "title": "In {{scope}} · {{count}}",
+      "order": "Newest first",
+      "spellingOnly": "spelling only",
+      "empty": "A replacement writes one thing when you say another. A spelling-only word, with “When I say” left empty, is always spelled as written.",
+      "edit": "Edit {{written}}",
+      "delete": "Delete {{written}}",
+      "deleteFailed": "Couldn't delete that word",
+      "confirmDelete": "Remove everywhere it applies?",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "appliesIn": "Applies in",
+      "places_one": "{{count}} place",
+      "places_other": "{{count}} places",
+      "noPlaces": "No places",
+      "appUsesStyle": "{{app}} uses it",
+      "everywhereClears": "Checking Everywhere clears the rest.",
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago"
+    },
     "inherited": {
-      "title": "Also applies here",
-      "description": "From this app's writing style and from everywhere. Change them there.",
-      "style": "Writing style",
-      "overridden": "Replaced by this app's entry",
-      "empty": "Nothing from its writing style or everywhere yet.",
-      "dropped_one": "{{count}} term doesn't fit in the speech model's prompt; its capitals are still fixed.",
-      "dropped_other": "{{count}} terms don't fit in the speech model's prompt; their capitals are still fixed."
+      "title": "Also applies in {{scope}}",
+      "from": "From {{source}}",
+      "dropped_one": "{{count}} word doesn't fit in the speech model's prompt; it's still fixed after cleanup.",
+      "dropped_other": "{{count}} words don't fit in the speech model's prompt; they're still fixed after cleanup."
     }
   },
   "appLocation": {

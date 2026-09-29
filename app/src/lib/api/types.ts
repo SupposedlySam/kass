@@ -109,45 +109,64 @@ export type WritingStyleUpdate = Partial<
 /** Where a dictionary entry applies. Most specific wins: app, then style, then everywhere. */
 export type DictionaryScope = 'global' | 'style' | 'app';
 
+/** One place an entry applies: everywhere, a writing style (`scope_id` its id) or an app (its bundle id). */
+export interface DictionaryPlace {
+  scope: DictionaryScope;
+  scope_id: string | null;
+  app_name: string | null;
+}
+
+export interface DictionaryPlaceInput {
+  scope: DictionaryScope;
+  scope_id?: string | null;
+  app_name?: string | null;
+}
+
 /**
- * A word dictation should get right. A term has only `written` (helps
- * speech-to-text hear it and fixes its capitals); a replacement also has
- * `spoken`, what the user says to get `written`.
+ * A word dictation should get right, in one or more places. A spelling has
+ * only `written` (helps speech-to-text hear it and fixes its capitals); a
+ * replacement also has `spoken`, what the user says to get `written`.
  */
 export interface DictionaryEntry {
   id: string;
-  scope: DictionaryScope;
-  /** The style id or app bundle id; null for global. */
-  scope_id: string | null;
-  app_name: string | null;
   written: string;
   spoken: string | null;
+  places: DictionaryPlace[];
   created_at: string;
 }
 
 export interface DictionaryListResponse {
+  /** Newest first. */
   entries: DictionaryEntry[];
 }
 
 export interface DictionaryEntryCreate {
-  scope: DictionaryScope;
-  scope_id?: string | null;
-  app_name?: string | null;
   written: string;
   spoken?: string | null;
+  /** At least one; with `global`, the server keeps only that. */
+  places: DictionaryPlaceInput[];
 }
 
 export interface DictionaryEntryUpdate {
   written?: string;
   spoken?: string | null;
+  places?: DictionaryPlaceInput[];
 }
 
-/** An entry in an app's merged view; `overridden` when a more specific entry wins. */
-export interface ResolvedDictionaryEntry extends DictionaryEntry {
+/** One place of an entry that applies in an app; `overridden` when a more specific entry wins. */
+export interface ResolvedDictionaryEntry {
+  id: string;
+  written: string;
+  spoken: string | null;
+  scope: DictionaryScope;
+  scope_id: string | null;
+  app_name: string | null;
+  created_at: string;
   overridden: boolean;
 }
 
 export interface ResolvedDictionaryResponse {
+  /** Most specific first: the app's own, its style's, then everywhere's. */
   entries: ResolvedDictionaryEntry[];
   /** Terms given to speech-to-text as a hint. */
   prompt_terms: string[];

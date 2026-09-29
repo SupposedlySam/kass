@@ -7,7 +7,7 @@ import type { DictionaryEntryCreate, DictionaryEntryUpdate } from '@/lib/api/typ
 /** Every entry is `DICTIONARY_KEY`; an app's merged view is `[...DICTIONARY_KEY, 'resolved', bundleId]`. */
 export const DICTIONARY_KEY = ['dictionary'] as const;
 
-/** Every dictionary entry, in every scope. */
+/** Every dictionary entry with all its places, newest first. */
 export function useDictionary() {
   return useQuery({
     queryKey: DICTIONARY_KEY,
@@ -50,7 +50,7 @@ export function useDeleteDictionaryEntry() {
     mutationFn: (id: string) => apiClient.deleteDictionaryEntry(id),
     onError: (error: Error) =>
       toast({
-        title: t('dictionary.entries.deleteFailed'),
+        title: t('dictionary.list.deleteFailed'),
         description: error.message,
         variant: 'destructive',
       }),

@@ -44,6 +44,7 @@ def run_migrations(engine) -> None:
     _migrate_capture_settings(engine, inspector, tables)
     _migrate_captures(engine, inspector, tables)
     _migrate_capture_feedback(engine, inspector, tables)
+    _migrate_dictionary_entries(engine, inspector, tables)
 
 
 # -- helpers ---------------------------------------------------------------
@@ -90,6 +91,14 @@ def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "teaches_style_id"):
         if column not in columns:
             _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
+
+
+def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
+    # One entry can apply in several places (docs/plans/DICTIONARIES.md).
+    if "dictionary_entries" not in tables:
+        return
+    if "group_id" not in _get_columns(inspector, "dictionary_entries"):
+        _add_column(engine, "dictionary_entries", "group_id VARCHAR", "group_id")
 
 
 def _sql_literal(value: str) -> str:

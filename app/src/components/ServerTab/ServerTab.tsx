@@ -28,6 +28,8 @@ export function SettingsLayout() {
   const platform = usePlatform();
   const matchRoute = useMatchRoute();
   const fullBleed = Boolean(matchRoute({ to: '/settings/logs' }));
+  // The dictionary is two panes side by side, so it gets a wider column.
+  const wide = Boolean(matchRoute({ to: '/settings/dictionary' }));
 
   return (
     <div className="flex h-full min-h-0">
@@ -63,7 +65,7 @@ export function SettingsLayout() {
         </div>
       ) : (
         <div className="flex-1 min-w-0 overflow-y-auto">
-          <div className="max-w-[760px] px-12 py-7">
+          <div className={cn('px-12 py-7', wide ? 'max-w-[1040px]' : 'max-w-[760px]')}>
             <Outlet />
           </div>
         </div>

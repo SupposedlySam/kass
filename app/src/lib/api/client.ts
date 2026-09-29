@@ -344,7 +344,7 @@ class ApiClient {
     }
   }
 
-  // Dictionary: words dictation should get right, everywhere, per style or per app
+  // Dictionary: words dictation should get right, each in one or more places
   async listDictionary(): Promise<DictionaryListResponse> {
     return this.request<DictionaryListResponse>('/dictionary');
   }

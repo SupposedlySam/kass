@@ -213,4 +213,7 @@ class DictionaryEntry(Base):
     written = Column(String, nullable=False)
     spoken = Column(String, nullable=True)
     key = Column(String, nullable=False)
+    # Rows added together as one entry that applies in several places share
+    # this; null means the row is an entry of its own (its id).
+    group_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)

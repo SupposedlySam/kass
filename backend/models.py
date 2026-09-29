@@ -610,15 +610,21 @@ class CaptureFeedbackResponse(BaseModel):
     created_at: datetime
 
 
+class DictionaryPlace(BaseModel):
+    """Where a dictionary entry applies: everywhere, a writing style, or an app."""
+
+    scope: Literal["global", "style", "app"]
+    scope_id: str | None = Field(default=None, max_length=255)
+    app_name: str | None = Field(default=None, max_length=255)
+
+
 class DictionaryEntryModel(BaseModel):
-    """A word dictation should get right (docs/plans/DICTIONARIES.md)."""
+    """A word dictation should get right, in every place it applies (docs/plans/DICTIONARIES.md)."""
 
     id: str
-    scope: Literal["global", "style", "app"]
-    scope_id: str | None = None
-    app_name: str | None = None
     written: str
     spoken: str | None = None
+    places: list[DictionaryPlace]
     created_at: datetime | None = None
 
 
@@ -627,20 +633,28 @@ class DictionaryResponse(BaseModel):
 
 
 class DictionaryEntryCreate(BaseModel):
-    scope: Literal["global", "style", "app"]
-    scope_id: str | None = Field(default=None, max_length=255)
-    app_name: str | None = Field(default=None, max_length=255)
     written: str = Field(max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
+    places: list[DictionaryPlace] = Field(min_length=1, max_length=100)
 
 
 class DictionaryEntryUpdate(BaseModel):
     written: str | None = Field(default=None, max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
+    places: list[DictionaryPlace] | None = Field(default=None, min_length=1, max_length=100)
 
 
-class ResolvedDictionaryEntry(DictionaryEntryModel):
-    # A more specific scope has an entry for the same word said.
+class ResolvedDictionaryEntry(BaseModel):
+    """One place an entry applies to an app from; ``id`` is the entry's."""
+
+    id: str
+    scope: Literal["global", "style", "app"]
+    scope_id: str | None = None
+    app_name: str | None = None
+    written: str
+    spoken: str | None = None
+    created_at: datetime | None = None
+    # A more specific place has an entry for the same word said.
     overridden: bool = False
 
 
