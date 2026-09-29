@@ -126,6 +126,7 @@ pub(crate) const CLIPBOARD_ONLY_BUNDLES: &[&str] = &[
     "org.alacritty",
     "io.alacritty",
     "com.mitchellh.ghostty",
+    "com.mcclowes.saggar",
 ];
 
 /// How many times to re-read an element that looks unchanged after a
