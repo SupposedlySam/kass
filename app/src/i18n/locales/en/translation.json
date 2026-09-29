@@ -130,6 +130,15 @@
     }
   },
   "captures": {
+    "dictionary": {
+      "add": "Add to dictionary",
+      "title": "Add to dictionary",
+      "description": "Voicebox writes it this way from now on.",
+      "spellingOnly": "Spelled as it is, so Voicebox only learns this spelling. Change “Write” to fix it.",
+      "replaces": "When you say “{{said}}”, Voicebox writes “{{written}}”.",
+      "submit": "Add",
+      "added": "Added “{{written}}” to the dictionary"
+    },
     "feedback": {
       "report": "Teach Voicebox",
       "description": "Edit this into what you meant: fix wrong words, drop false starts, put things in order, fix grammar. Keep your own words and every idea you said. Voicebox uses it as an example on your next dictations right away, and the personal model trains on it while the app is idle. Everything stays on this device. Deleting a capture removes its corrections from future training.",

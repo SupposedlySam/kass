@@ -177,20 +177,35 @@ export function EditableTranscript({
 
   const surface = 'm-0 -mx-1.5 -my-1 rounded-md px-1.5 py-1 whitespace-pre-wrap break-words';
   if (!editing) {
+    // Not a <button>: WebKit can't select text inside one, and selecting a
+    // word offers to add it to the dictionary. A click that ends a
+    // selection selected; it doesn't start editing.
+    const edit = () => {
+      if (!window.getSelection()?.isCollapsed) return;
+      teach.begin();
+    };
     return (
-      <button
-        type="button"
+      // biome-ignore lint/a11y/useSemanticElements: a <button> can't hold a text selection
+      <div
+        role="button"
+        tabIndex={0}
         title={t('captures.teach.editHint')}
         aria-label={t('captures.teach.editHint')}
-        onClick={teach.begin}
+        onClick={edit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            teach.begin();
+          }
+        }}
         className={cn(
           surface,
           className,
-          'block w-[calc(100%+0.75rem)] text-left cursor-text hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+          'block w-[calc(100%+0.75rem)] text-left cursor-text select-text hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         )}
       >
         {children}
-      </button>
+      </div>
     );
   }
   return (
