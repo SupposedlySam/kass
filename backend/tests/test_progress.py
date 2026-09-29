@@ -5,17 +5,9 @@ Test script to debug model download progress tracking.
 import asyncio
 import json
 import time
-from typing import List, Dict
-import logging
 
-# Set up logging to see what's happening
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-from utils.progress import ProgressManager, get_progress_manager
-from utils.hf_progress import HFProgressTracker, create_hf_progress_callback
+from backend.utils.hf_progress import HFProgressTracker, create_hf_progress_callback
+from backend.utils.progress import ProgressManager, get_progress_manager
 
 
 def test_progress_manager_basic():
@@ -61,7 +53,7 @@ async def test_progress_manager_sse():
     print("=" * 60)
 
     pm = ProgressManager()
-    collected_events: List[Dict] = []
+    collected_events: list[dict] = []
 
     # Simulate SSE client
     async def sse_client():
@@ -94,7 +86,7 @@ async def test_progress_manager_sse():
                 current=i,
                 total=100,
                 filename=f"file_{i}.bin",
-                status="downloading" if i < 100 else "downloading"
+                status="downloading"
             )
             await asyncio.sleep(0.1)
 
@@ -123,7 +115,7 @@ def test_hf_progress_tracker():
     print("Test 3: HFProgressTracker tqdm Patching")
     print("=" * 60)
 
-    captured_progress: List[tuple] = []
+    captured_progress: list[tuple] = []
 
     def progress_callback(downloaded: int, total: int, filename: str):
         """Capture progress updates."""
@@ -139,10 +131,12 @@ def test_hf_progress_tracker():
 
             # Simulate downloading a file
             print("  Simulating download with tqdm...")
-            total_size = 1000
+            # The tracker stays quiet until a download totals 1 MB, so small
+            # config files can't read as 100% before the weights start.
+            total_size = 2_000_000
             with tqdm(total=total_size, desc="model.bin", unit="B", unit_scale=True) as pbar:
-                for chunk in range(0, total_size, 100):
-                    pbar.update(100)
+                for _ in range(0, total_size, 200_000):
+                    pbar.update(200_000)
                     time.sleep(0.01)
 
             print(f"  Captured {len(captured_progress)} progress updates")
@@ -150,7 +144,7 @@ def test_hf_progress_tracker():
 
             # Verify progress increases
             last_downloaded = 0
-            for downloaded, total, filename in captured_progress:
+            for downloaded, total, _filename in captured_progress:
                 assert downloaded >= last_downloaded, "Downloaded bytes should increase"
                 assert total == total_size, "Total should be consistent"
                 last_downloaded = downloaded
@@ -170,7 +164,7 @@ async def test_full_integration():
     print("=" * 60)
 
     pm = get_progress_manager()
-    collected_events: List[Dict] = []
+    collected_events: list[dict] = []
 
     # SSE client
     async def sse_client():
@@ -244,9 +238,8 @@ async def test_full_integration():
         assert collected_events[-1]["status"] == "complete", "Should end with 'complete'"
         print("✓ Test 4 PASSED\n")
         return True
-    else:
-        print("✗ Test 4 FAILED - No events received\n")
-        return False
+    print("✗ Test 4 FAILED - No events received\n")
+    return False
 
 
 async def main():
