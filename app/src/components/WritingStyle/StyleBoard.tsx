@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, X } from 'lucide-react';
-import { type DragEvent, useState } from 'react';
+import { type DragEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppTile } from '@/components/CapturesTab/CaptureAppList';
 import { Button } from '@/components/ui/button';
@@ -61,8 +61,11 @@ export function StyleBoard({
   const mover = useMoveApp();
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const [naming, setNaming] = useState(false);
+  // Names being typed, one card each. Adding another saves the one in progress.
+  const [drafts, setDrafts] = useState<number[]>([]);
+  const nextDraft = useRef(0);
   const full = data.styles.length >= data.max_styles;
+  const canAdd = data.styles.length + drafts.length < data.max_styles;
 
   const move = (bundleId: string, styleId: string) => {
     const app = data.apps.find((a) => a.bundle_id === bundleId);
@@ -83,9 +86,9 @@ export function StyleBoard({
         )}
         <button
           type="button"
-          disabled={full}
+          disabled={!canAdd}
           aria-describedby={full ? 'style-limit' : undefined}
-          onClick={() => setNaming(true)}
+          onClick={() => setDrafts((current) => [...current, nextDraft.current++])}
           className="flex h-8 items-center gap-1.5 rounded-md border border-dashed border-input px-3 text-[12.5px] text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:hover:border-input disabled:hover:text-muted-foreground"
         >
           <Plus className="size-3.5" />
@@ -119,14 +122,15 @@ export function StyleBoard({
             }}
           />
         ))}
-        {naming && !full && (
+        {drafts.map((draft) => (
           <NewStyleCard
+            key={draft}
             onDone={(styleId) => {
-              setNaming(false);
+              setDrafts((current) => current.filter((d) => d !== draft));
               if (styleId) onSelect(styleId);
             }}
           />
-        )}
+        ))}
       </div>
       {mover.dialog}
     </div>
@@ -274,32 +278,44 @@ function StyleCard({
   );
 }
 
-/** A card that names a new style. Enter adds it; Escape or leaving it empty cancels. */
+/**
+ * A card that names a new style. Enter or leaving it with a name adds it, so
+ * clicking "New style" mid-name keeps what was typed; Escape or leaving it
+ * empty cancels.
+ */
 function NewStyleCard({ onDone }: { onDone: (styleId?: string) => void }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  const submitted = useRef(false);
   const create = useMutation({
     mutationFn: (value: string) => apiClient.createWritingStyle(value),
     onSuccess: async (style) => {
       await queryClient.invalidateQueries({ queryKey: WRITING_STYLES_KEY });
       onDone(style.id);
     },
-    onError: (error: Error) =>
+    onError: (error: Error) => {
+      submitted.current = false;
       toast({
         title: t('writingStyle.styles.createFailed'),
         description: error.message,
         variant: 'destructive',
-      }),
+      });
+    },
   });
+  const submit = () => {
+    if (submitted.current || !name.trim()) return;
+    submitted.current = true;
+    create.mutate(name.trim());
+  };
 
   return (
     <form
       className="flex flex-col gap-2 rounded-[10px] border border-dashed border-accent/60 p-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (name.trim()) create.mutate(name.trim());
+        submit();
       }}
     >
       <Input
@@ -310,10 +326,15 @@ function NewStyleCard({ onDone }: { onDone: (styleId?: string) => void }) {
         aria-label={t('writingStyle.styles.nameLabel')}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') onDone();
+          if (event.key === 'Escape') {
+            submitted.current = true;
+            onDone();
+          }
         }}
         onBlur={() => {
-          if (!name.trim() && !create.isPending) onDone();
+          if (submitted.current) return;
+          if (name.trim()) submit();
+          else onDone();
         }}
         className="h-8 text-[13px]"
       />
@@ -340,6 +361,7 @@ export function StyleAppList({
   const mover = useMoveApp();
   const confirmApps = useConfirmApps();
   const [query, setQuery] = useState('');
+  const [dragging, setDragging] = useState<string | null>(null);
   const fallback = defaultStyle(data);
   const names = new Map(data.styles.map((s) => [s.id, s.name]));
   const fresh = data.apps.filter((app) => !app.confirmed);
@@ -419,14 +441,30 @@ export function StyleAppList({
             return (
               <li
                 key={app.bundle_id}
-                className="grid h-11 grid-cols-[minmax(0,1fr)_88px_180px] items-center gap-4 border-t border-border/60 px-3.5 text-[13.5px] first:border-t-0 hover:bg-card"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(DRAG_TYPE, app.bundle_id);
+                  event.dataTransfer.setData('text/plain', appLabel(app));
+                  event.dataTransfer.effectAllowed = 'move';
+                  // Drag the app's icon, not a picture of the whole row.
+                  const icon = event.currentTarget.querySelector('[data-drag-icon]');
+                  if (icon) event.dataTransfer.setDragImage(icon, 10, 10);
+                  setDragging(app.bundle_id);
+                }}
+                onDragEnd={() => setDragging(null)}
+                className={cn(
+                  'grid h-11 cursor-grab grid-cols-[minmax(0,1fr)_88px_180px] items-center gap-4 border-t border-border/60 px-3.5 text-[13.5px] first:border-t-0 hover:bg-card',
+                  dragging === app.bundle_id && 'opacity-40',
+                )}
               >
                 <span className="flex min-w-0 items-center gap-2.5">
-                  <AppTile
-                    bundleId={app.bundle_id}
-                    name={appLabel(app)}
-                    className="size-5 rounded-[5px] text-[10px]"
-                  />
+                  <span data-drag-icon className="shrink-0">
+                    <AppTile
+                      bundleId={app.bundle_id}
+                      name={appLabel(app)}
+                      className="size-5 rounded-[5px] text-[10px]"
+                    />
+                  </span>
                   <span className="truncate">{appLabel(app)}</span>
                   {!app.confirmed && (
                     <span className="shrink-0 rounded border border-accent/40 px-1 text-[10px] font-bold uppercase tracking-wide text-accent">
