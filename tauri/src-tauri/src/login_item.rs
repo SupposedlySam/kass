@@ -10,20 +10,19 @@
 //! login is on by default. A marker file in the app config dir records that
 //! this happened, so turning it off afterwards sticks.
 //!
-//! Only the installed app registers (a `.app` in an `Applications` folder,
-//! where `just install` puts it). A dev build runs a bare binary from
+//! Only the installed app registers (a `.app` in `/Applications`, where
+//! `just install` puts it; see `app_location`). A dev build runs a bare binary from
 //! `target/`, and registering that would leave a stale login item behind.
 //!
 //! A login launch keeps the main window hidden (`launched_at_login`); the
 //! Dock icon brings it back through `RunEvent::Reopen`.
-
-use std::path::Path;
 
 use objc::runtime::{Class, Object, BOOL, YES};
 use objc::{class, msg_send, sel, sel_impl};
 use serde::Serialize;
 use tauri::{command, AppHandle, Manager};
 
+use crate::app_location::is_installed;
 use crate::focus_capture::{ns_string_to_rust, AutoreleasePool};
 
 type Id = *mut Object;
@@ -50,24 +49,6 @@ fn status_from_raw(raw: isize) -> Status {
         2 => Status::RequiresApproval,
         _ => Status::Disabled,
     }
-}
-
-/// Whether `exe` is the binary inside a `.app` bundle that sits directly in
-/// an `Applications` folder (`/Applications` or `~/Applications`).
-fn is_installed_executable(exe: &Path) -> bool {
-    // <Applications>/<Name>.app/Contents/MacOS/<binary>
-    let Some(bundle) = exe.ancestors().nth(3) else {
-        return false;
-    };
-    let in_contents_macos = exe.parent().and_then(Path::file_name) == Some("MacOS".as_ref())
-        && exe.ancestors().nth(2).and_then(Path::file_name) == Some("Contents".as_ref());
-    in_contents_macos
-        && bundle.extension() == Some("app".as_ref())
-        && bundle.parent().and_then(Path::file_name) == Some("Applications".as_ref())
-}
-
-fn is_installed() -> bool {
-    std::env::current_exe().is_ok_and(|exe| is_installed_executable(&exe))
 }
 
 /// `+[SMAppService mainAppService]`, or None before macOS 13 or from a dev
@@ -212,28 +193,6 @@ mod tests {
         assert_eq!(status_from_raw(1), Status::Enabled);
         assert_eq!(status_from_raw(2), Status::RequiresApproval);
         assert_eq!(status_from_raw(3), Status::Disabled);
-    }
-
-    #[test]
-    fn only_an_installed_bundle_counts() {
-        let installed = |p: &str| is_installed_executable(Path::new(p));
-        assert!(installed(
-            "/Applications/Voicebox.app/Contents/MacOS/voicebox"
-        ));
-        assert!(installed(
-            "/Users/me/Applications/Voicebox.app/Contents/MacOS/voicebox"
-        ));
-        assert!(!installed(
-            "/Users/me/voicebox/tauri/src-tauri/target/debug/voicebox"
-        ));
-        assert!(!installed(
-            "/Users/me/voicebox/tauri/src-tauri/target/release/bundle/macos/Voicebox.app/Contents/MacOS/voicebox"
-        ));
-        assert!(!installed(
-            "/Applications/Voicebox.app/Contents/Resources/voicebox"
-        ));
-        assert!(!installed("/Applications/Voicebox/Contents/MacOS/voicebox"));
-        assert!(!installed("/voicebox"));
     }
 
     #[test]

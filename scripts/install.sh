@@ -20,7 +20,9 @@
 set -euo pipefail
 
 repo_url="${VOICEBOX_REPO:-https://github.com/mrgnhnt96/voicebox.git}"
-app="${VOICEBOX_APP:-/Applications/Voicebox.app}"
+# Always /Applications: macOS privacy permissions (Input Monitoring,
+# Accessibility, Microphone) don't work reliably for an app anywhere else.
+app=/Applications/Voicebox.app
 bundle_id="sh.voicebox.app"
 
 pull=1
@@ -148,7 +150,7 @@ if [ ${#missing[@]} -gt 0 ]; then
 fi
 
 if [ ! -w "$(dirname "$app")" ]; then
-  die "$(dirname "$app") isn't writable by $(whoami). Use an administrator account, or set VOICEBOX_APP=\$HOME/Applications/Voicebox.app."
+  die "$(dirname "$app") isn't writable by $(whoami). Run this from an administrator account."
 fi
 
 # ─── Get the latest code ──────────────────────────────────────────────
@@ -207,7 +209,7 @@ fi
 
 step "Building the app"
 echo "  ${dim}The first build compiles the Rust app shell and takes a while.${reset}"
-VOICEBOX_APP="$app" ./scripts/build-local-app.sh
+./scripts/build-local-app.sh
 built=tauri/src-tauri/target/release/bundle/macos/Voicebox.app
 ok "Built and signed with \"$(codesign -dvv "$built" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)\""
 
@@ -234,6 +236,20 @@ rm -rf "$app"
 ditto "$built" "$app"
 codesign --verify --deep --strict "$app"
 ok "Installed"
+
+# Earlier versions could install to ~/Applications. Only the copy in
+# /Applications gets working permissions, so don't leave another one to
+# open by mistake.
+old_app="$HOME/Applications/Voicebox.app"
+if [ -d "$old_app" ]; then
+  pkill -f "$old_app/Contents/MacOS/" 2>/dev/null || true
+  if mv "$old_app" "$HOME/.Trash/Voicebox $(date '+%Y-%m-%d %H.%M.%S').app" 2>/dev/null; then
+    ok "Moved the old copy in ~/Applications to the Trash"
+  else
+    rm -rf "$old_app"
+    ok "Removed the old copy in ~/Applications"
+  fi
+fi
 
 # An unreadable old requirement counts as a change, so it resets instead of
 # silently keeping grants that may not apply.

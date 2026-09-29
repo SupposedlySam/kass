@@ -13,7 +13,7 @@
 # made once and kept in its own keychain.
 set -euo pipefail
 
-app="${VOICEBOX_APP:-/Applications/Voicebox.app}"
+app=/Applications/Voicebox.app
 state="$HOME/Library/Application Support/Voicebox Installer"
 keychain="$HOME/Library/Keychains/voicebox-signing.keychain-db"
 local_name="Voicebox Local Signing"

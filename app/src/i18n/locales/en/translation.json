@@ -753,7 +753,7 @@
             "description_one": "Voicebox now keeps {{window}} of history. {{count}} capture is older than that and would be deleted with its audio. Your corrections, the names it learned and your stats are kept.",
             "description_other": "Voicebox now keeps {{window}} of history. {{count}} captures are older than that and would be deleted with their audio. Your corrections, the names they taught and your stats are kept.",
             "choose": "Keep history for",
-            "counting": "Counting\u2026",
+            "counting": "Counting…",
             "later": "Not now",
             "forever": "Keep forever",
             "description_zero": "Voicebox now keeps {{window}} of history. No captures are older than that yet. Your corrections, the names they taught and your stats are always kept.",
@@ -1178,5 +1178,14 @@
       "dropped_one": "{{count}} term doesn't fit in the speech model's prompt; its capitals are still fixed.",
       "dropped_other": "{{count}} terms don't fit in the speech model's prompt; their capitals are still fixed."
     }
+  },
+  "appLocation": {
+    "title": "Move Voicebox to Applications",
+    "description": "Voicebox is running from {{path}}. macOS only keeps microphone, Accessibility and Input Monitoring permissions working for an app in your Applications folder, so dictation may not work from here.",
+    "replaces": "The Voicebox already in Applications will be moved to the Trash.",
+    "move": "Move and relaunch",
+    "moving": "Moving…",
+    "later": "Not now",
+    "manual": "Drag Voicebox into your Applications folder in Finder, then open it from there."
   }
 }

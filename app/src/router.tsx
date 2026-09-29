@@ -6,6 +6,7 @@ import {
   redirect,
 } from '@tanstack/react-router';
 import { AppFrame } from '@/components/AppFrame/AppFrame';
+import { AppLocationDialog } from '@/components/AppLocationDialog/AppLocationDialog';
 import { CapturesTab } from '@/components/CapturesTab/CapturesTab';
 import { CommandPalette } from '@/components/CommandPalette/CommandPalette';
 import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
@@ -45,6 +46,7 @@ function RootLayout() {
       <StatusBar />
       <CommandPalette />
       <RetentionAskDialog />
+      <AppLocationDialog />
 
       {/* Show download toasts for any active downloads (from anywhere) */}
       {activeDownloads.map((download) => {

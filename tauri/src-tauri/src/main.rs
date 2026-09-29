@@ -1,5 +1,6 @@
 mod accessibility;
 mod app_icon;
+mod app_location;
 mod clipboard;
 mod deep_link;
 #[cfg(desktop)]
@@ -722,6 +723,27 @@ async fn restart_app(app: tauri::AppHandle, state: State<'_, ServerState>) -> Re
     Ok(())
 }
 
+/// Where the app runs from, so the UI can ask to move it into Applications.
+#[command]
+fn app_location() -> app_location::AppLocation {
+    app_location::location()
+}
+
+/// Move the app into `/Applications` and relaunch it from there. Stops the
+/// server first so the new copy can start its own on the same port.
+#[command]
+async fn move_to_applications(
+    app: tauri::AppHandle,
+    state: State<'_, ServerState>,
+) -> Result<(), String> {
+    let installed = app_location::copy_into_applications()?;
+    stop_server(state.clone()).await?;
+    wait_for_server_exit().await?;
+    app_location::relaunch_after_exit(std::process::id(), &installed)?;
+    app.exit(0);
+    Ok(())
+}
+
 #[command]
 async fn restart_server(
     app: tauri::AppHandle,
@@ -1312,6 +1334,8 @@ pub fn run() {
             stop_server,
             restart_server,
             restart_app,
+            app_location,
+            move_to_applications,
             debug_clipboard_roundtrip,
             debug_paste_text,
             debug_capture_focus,
