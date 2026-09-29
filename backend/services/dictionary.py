@@ -239,11 +239,12 @@ def resolved_for(bundle_id: str | None) -> list[tuple[Entry, bool]]:
     return resolve(entries(), bundle_id, styles_snapshot().for_app(bundle_id).id)
 
 
-def for_app(bundle_id: str | None) -> Dictionary:
-    """The dictionary a dictation in ``bundle_id`` uses (None: an unknown app)."""
+def for_app(bundle_id: str | None, style_id: str | None = None) -> Dictionary:
+    """The dictionary a dictation in ``bundle_id`` uses (None: an unknown app),
+    written in ``style_id`` when one was asked for, else the app's style."""
     from .styles import snapshot as styles_snapshot
 
-    style_id = styles_snapshot().for_app(bundle_id).id
+    style_id = style_id or styles_snapshot().for_app(bundle_id).id
     cache_key = (bundle_id or "", style_id)
     with _lock:
         cached = _by_app.get(cache_key)

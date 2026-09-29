@@ -81,6 +81,16 @@ def app_categories(db: Session) -> dict[str, str | None]:
     return categories
 
 
+def spoken_style(transcript: str, bundle_id: str | None) -> tuple[str, str | None]:
+    """``transcript`` without an opening request for a style ("use formal mode"), and the style
+    it asked for when that isn't the app's own: the one its corrections teach."""
+    from .styles import snapshot, spoken_style as find_spoken_style
+
+    styles = snapshot()
+    style, transcript = find_spoken_style(transcript, styles)
+    return transcript, style.id if style and style.id != styles.for_app(bundle_id).id else None
+
+
 def _to_response(row: DBCapture) -> CaptureResponse:
     flags_model: Optional[RefinementFlagsModel] = None
     if row.refinement_flags:
@@ -197,7 +207,10 @@ async def create_capture(
         from . import dictionary
 
         terms = dictionary.for_app(app_bundle_id).terms
-        transcript = mark_commands(await whisper.transcribe(str(audio_path), language, resolved_stt, vocabulary=terms))
+        transcript, teaches = spoken_style(
+            await whisper.transcribe(str(audio_path), language, resolved_stt, vocabulary=terms), app_bundle_id
+        )
+        transcript = mark_commands(transcript)
         logger.info("Capture %s transcription (including model load/queue): %.3fs for %sms audio", capture_id, time.monotonic() - transcription_started, duration_ms)
 
         row = DBCapture(
@@ -210,6 +223,7 @@ async def create_capture(
             stt_model=resolved_stt,
             app_bundle_id=app_bundle_id,
             app_name=app_name,
+            teaches_style_id=teaches,
         )
         db.add(row)
         db.commit()
@@ -361,7 +375,7 @@ async def _refine_capture(
     from .correction_learning import apply_learned_corrections
 
     # The user's own dictionary entries win over learned corrections.
-    found = dictionary.for_app(row.app_bundle_id)
+    found = dictionary.for_app(row.app_bundle_id, flags.style)
     refined = found.apply(apply_learned_corrections(refined, row.language))
     refined = style_first_word(refined, flags, found.names)
 
@@ -405,9 +419,13 @@ async def _retranscribe_capture(
     from . import dictionary
 
     terms = dictionary.for_app(row.app_bundle_id).terms
-    transcript = mark_commands(await whisper.transcribe(str(resolved), language, resolved_stt, vocabulary=terms))
+    transcript, teaches = spoken_style(
+        await whisper.transcribe(str(resolved), language, resolved_stt, vocabulary=terms), row.app_bundle_id
+    )
+    transcript = mark_commands(transcript)
 
     row.transcript_raw = transcript
+    row.teaches_style_id = teaches or row.teaches_style_id
     row.stt_model = resolved_stt
     if language:
         row.language = language

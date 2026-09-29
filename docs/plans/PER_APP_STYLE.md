@@ -41,6 +41,26 @@ Each capture saves `style_id`, the style it was cleaned up with, and its flags c
 
 The target app used to reach the server only in `finish`. The focus snapshot is taken right after the microphone opens, so the Rust client now sends an `app` message as soon as it is known (with the next audio frame, like `context`). The server resolves the style there, before any phrase is cleaned. `finish` still carries the app, for older servers and in case the snapshot came late; a style never changes after the first cleanup started.
 
+## Asking for a style by voice
+
+A dictation can open by asking for one of the user's styles by name, and is then written in that style instead of its app's (`styles.spoken_style`). Only the very start of a dictation counts: the first words recognized, before anything else was kept.
+
+| Said | Needs a sentence break after it |
+| --- | --- |
+| "Use formal mode" / "Use the formal style" | no: it is never text |
+| "Formal mode." / "In formal mode:" | yes |
+| "Switch to formal." / "Change over to the formal style." | yes |
+| "Make this formal." / "Make it more formal." / "Let's make this sound a bit more formal." | yes |
+| "I want this to be more formal." / "I'd like this to sound more formal." / "I would like it to be a little more formal." | yes |
+
+"Formal" stands for any style's name; a name that ends in "mode" or "style" isn't said twice. A leading "okay", "um", "uh", "so" or "please" is skipped. Words for the same register pick a style named with another: "professional" picks Formal, "informal" or "relaxed" picks Casual. There is no fallback when no style has one of those names; the words stay in the text.
+
+A sentence break is punctuation (Whisper adds it at a pause) or the end of the dictation. It keeps real openings as text: "Formal mode is off by default", "Make this formal letter shorter", "I want this to be more personal than last year's card". Only "more" is understood, so "make it less formal" never switches, and "keep it casual" is left out on purpose because it is a common message on its own. The one case still taken as a switch is a whole dictation that is only a lead-in, such as a message that says just "Make this formal."; nothing is pasted then.
+
+The request itself is dropped: it is never cleaned up, pasted or saved in the transcript, and the next word is capitalized unless the dictation continues the field's sentence. Said alone and followed by a pause, the next phrase starts the dictation. In a streaming session it is taken from the first phrase with words (`StreamingCapture.take_spoken_style`) and from the full transcript when the session falls back to full-audio recognition. Uploads and "Retranscribe" drop it too.
+
+From then on the style is fixed: the `app` message no longer replaces it, but the dictionary still follows the app, with the asked-for style's entries (`dictionary.for_app(bundle_id, style_id)`). The capture saves the style as `style_id`, and, when it isn't the app's, as `teaches_style_id`, so its corrections teach the style that was asked for. "Refine again" cleans a capture up in the style its corrections teach (`correction_style`), which is the asked-for style here and the old style for a capture left behind when its app moved.
+
 ## Keeping app switches fast
 
 Measured on the user's machine (M2 Max, Qwen3-4B 4-bit, their own examples and notes, learned punctuation):

@@ -10,10 +10,16 @@ Store category use is suggested for it (``suggest_styles``).
 A correction teaches the style its app is in, unless the user left it behind
 when the app moved (``Capture.teaches_style_id``, ``correction_style``).
 
+A dictation that opens by asking for a style by name ("use formal mode",
+"make this more formal", "I want this to be personal") is written in that
+style instead of its app's (``spoken_style``), and its corrections teach that
+style.
+
 Dictation reads styles on every take, so the rows are kept in memory as a
 ``Snapshot`` and reloaded only after a change.
 """
 
+import re
 import threading
 from dataclasses import dataclass, field
 
@@ -157,6 +163,75 @@ def correction_style(styles: Snapshot, app_bundle_id: str | None, teaches_style_
     while it exists, else the style of the app."""
     left = styles.get(teaches_style_id)
     return left.id if left else styles.for_app(app_bundle_id).id
+
+
+# Words that ask for the same register: "make this professional" picks a
+# style called Formal, "more informal" one called Casual.
+_SYNONYMS = (
+    frozenset({"formal", "professional"}),
+    frozenset({"casual", "informal", "relaxed"}),
+)
+_FILLER = r"(?:(?:um|uh|okay|ok|so|please)\W+)*"
+_MORE = r"(?:a\W+)?(?:little\W+)?(?:bit\W+)?(?:more\W+)?"
+_MODE = r"(?:\W+(?:mode|style))"
+# Ways to ask for a style at the start of a dictation, and whether a sentence
+# break must follow. "Use formal mode" is never text, so it needs none; the
+# rest could open a real sentence ("formal mode is off") unless they stand
+# alone.
+_LEAD_INS = (
+    (r"use\W+(?:the\W+)?{name}" + _MODE + r"\b", False),
+    (r"(?:switch|change)\W+(?:over\W+)?to\W+(?:the\W+)?{name}" + _MODE + "?", True),
+    (r"(?:in\W+)?{name}" + _MODE, True),
+    (r"(?:let'?s\W+)?(?:make|write)\W+(?:this|it)\W+(?:sound\W+)?" + _MORE + "{name}" + _MODE + "?", True),
+    (r"i\W*(?:want|would\W+like|d\W+like)\W+(?:this|it)\W+to\W+(?:be|sound)\W+" + _MORE + "{name}" + _MODE + "?", True),
+)
+_BREAK = r"(?=\s*(?:[.,:;!?\u2026]|$))"
+_AFTER = r"[\s.,:;!?\-\u2013\u2014\u2026]*"
+
+
+def _spoken_names(name: str) -> str | None:
+    """A regex for ``name`` as Whisper may write it, with its synonyms. A name
+    that already ends in "mode" or "style" isn't said twice."""
+    words = [word.casefold() for word in re.findall(r"\w+", name)]
+    if len(words) > 1 and words[-1] in ("mode", "style"):
+        words = words[:-1]
+    if not words:
+        return None
+    variants = []
+    for word in words:
+        alike = next((group for group in _SYNONYMS if word in group), {word})
+        variants.append("(?:" + "|".join(re.escape(each) for each in sorted(alike)) + ")")
+    return r"\W+".join(variants)
+
+
+def _spoken_pattern(name: str) -> re.Pattern | None:
+    said = _spoken_names(name)
+    if said is None:
+        return None
+    lead_ins = "|".join(
+        f"(?:{lead_in.format(name=said)}{_BREAK if needs_break else ''})" for lead_in, needs_break in _LEAD_INS
+    )
+    return re.compile(rf"^\W*{_FILLER}(?:{lead_ins}){_AFTER}", re.IGNORECASE)
+
+
+def spoken_style(text: str, styles: Snapshot) -> tuple[Style | None, str]:
+    """The style ``text`` asks for in its opening words ("use formal mode",
+    "make this more formal", "I want this to be personal"...), and the rest
+    of ``text``; else None and ``text`` unchanged.
+
+    Longer names are tried first, so "use work email mode" isn't taken as
+    a style called Work.
+    """
+    for style in sorted(styles.styles, key=lambda s: -len(s.name)):
+        pattern = _spoken_pattern(style.name)
+        if pattern and (found := pattern.match(text)):
+            rest = text[found.end() :]
+            # "Use formal mode, dear team" starts the text at "dear".
+            first = rest.split(maxsplit=1)[0] if rest.strip() else ""
+            if first.islower():
+                rest = rest[0].upper() + rest[1:]
+            return style, rest
+    return None, text
 
 
 def suggest_styles(categories: dict[str, str | None], styles: Snapshot) -> dict[str, str]:

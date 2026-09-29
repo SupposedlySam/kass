@@ -23,7 +23,9 @@ prediction, not a promise; ``final`` is the only authoritative text
 
 The target app arrives in an ``app`` message right after key-down, before
 any phrase is cleaned, and picks the writing style the session cleans up in
-(docs/plans/PER_APP_STYLE.md).
+(docs/plans/PER_APP_STYLE.md). A dictation that opens by asking
+for a style by name ("use formal mode", "make this more personal") is written
+in that style instead; the words themselves are dropped.
 
 A ``command`` session (docs/plans/COMMAND_MODE.md) records a spoken
 instruction for text selected in another app. It is recognized like a
@@ -75,7 +77,7 @@ from .phrase_seams import (
 from .refinement import RefinementFlags, prepare_refinement, refine_transcript, style_first_word
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
-from .styles import flags_for, snapshot as styles_snapshot
+from .styles import flags_for, snapshot as styles_snapshot, spoken_style
 from .transcribe import get_whisper_model
 from .voice_commands import mark_commands
 from .writing_style import apply_learned, apply_style, habits, is_ready
@@ -160,6 +162,8 @@ class StreamingCapture:
         self.app_category = None
         # Whether a cleanup has begun; the style is fixed from then on.
         self.cleanup_started = False
+        # The style the user asked for by name at the start, over the app's.
+        self.spoken = None
         # The field's text before the caret, from the context command, and
         # whether the dictation continues its sentence
         # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
@@ -319,13 +323,27 @@ class StreamingCapture:
         self.app_category = category or self.app_category
         # Dictionary words are spelled right for the rest of the take, even
         # after the style is fixed.
-        self.dictionary = dictionaries.for_app(bundle_id)
+        self.dictionary = dictionaries.for_app(bundle_id, self.spoken.id if self.spoken else None)
         self.names = self.names | self.dictionary.names
-        if self.cleanup_started:
+        if self.cleanup_started or self.spoken:
             return False
         self.style = styles_snapshot().for_app(bundle_id)
         self.flags = flags_for(self.style, self.settings)
         return True
+
+    def take_spoken_style(self, text: str) -> str:
+        """``text`` without an opening request for a style by name ("use
+        formal mode"), which picks the style the dictation is written in."""
+        if self.is_command:
+            return text
+        style, rest = spoken_style(text, styles_snapshot())
+        if style is None:
+            return text
+        self.spoken = self.style = style
+        self.flags = flags_for(style, self.settings)
+        self.dictionary = dictionaries.for_app(self.app_bundle_id, style.id)
+        self.names = self.names | self.dictionary.names
+        return rest
 
     def set_context(self, before) -> None:
         """The field's text before the caret, known shortly after the take starts."""
@@ -558,6 +576,10 @@ class StreamingCapture:
 
     async def accept(self, text, paused=False):
         """Add a recognized phrase; ``paused`` when its audio was cut at a pause."""
+        if text and not self.raw:
+            # Dropped from the context too: the phrase after a lone "use
+            # formal mode." starts the dictation.
+            text = self.take_spoken_style(text)
         earlier = self.heard
         self.heard = self.join(self.heard, text, text)
         if text:
@@ -789,6 +811,7 @@ class StreamingCapture:
                     vocabulary=self.dictionary.terms,
                 )
             ).strip()
+            self.raw = self.take_spoken_style(self.raw)
             if self.continues:
                 self.raw = continue_phrase(self.raw, self.field_before, self.names)
             self.raw = mark_commands(self.raw)
@@ -867,6 +890,10 @@ class StreamingCapture:
             app_name=self.app_name,
             app_category=self.app_category,
             style_id=self.style.id if self.settings.auto_refine else None,
+            # Corrections teach the style asked for, not the app's.
+            teaches_style_id=self.spoken.id
+            if self.spoken and self.spoken.id != styles_snapshot().for_app(self.app_bundle_id).id
+            else None,
         )
         db.add(row)
         db.commit()

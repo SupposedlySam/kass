@@ -208,11 +208,14 @@ async def refine_capture_endpoint(
     if request.flags is not None:
         flags = RefinementFlags.from_dict(request.flags.model_dump())
     else:
-        # Cleaned up in the style of the app it was dictated into.
-        from ..services.styles import flags_for_app
+        # Cleaned up in the style its corrections teach: the one asked for
+        # by name ("use formal mode"), else the app's.
+        from ..services.styles import correction_style, flags_for, snapshot
 
-        existing = captures_service.get_capture(capture_id, db)
-        flags = flags_for_app(existing.app_bundle_id if existing else None, saved)
+        existing = db.get(DBCapture, capture_id)
+        styles = snapshot()
+        style_id = correction_style(styles, existing.app_bundle_id, existing.teaches_style_id) if existing else None
+        flags = flags_for(styles.resolve(style_id), saved)
 
     resolved_model = request.model_size or saved.llm_model
 
