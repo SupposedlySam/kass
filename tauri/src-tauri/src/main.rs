@@ -36,6 +36,10 @@ const MAIN_WINDOW_LABEL: &str = "main";
 const DICTATE_WINDOW_WIDTH: f64 = 420.0;
 const DICTATE_WINDOW_HEIGHT: f64 = 64.0;
 const DICTATE_BOTTOM_PADDING: f64 = 24.0;
+/// Room above the pill for the style chip (22 pt, its 8 pt gap, its glow and
+/// its drift). Only added while the chip shows: the window takes every click
+/// over it, so the rest of the time it stays the pill's size.
+const DICTATE_CHIP_SPACE: f64 = 40.0;
 
 /// Create the floating dictate webview hidden. The HotkeyMonitor shows it on
 /// chord-start; the frontend hides it when the capture pipeline finishes.
@@ -92,6 +96,50 @@ pub(crate) fn position_dictate_window(window: &tauri::WebviewWindow) -> tauri::R
     let y = area.position.y as f64 / scale
         + (area.size.height as f64 / scale - size.height - DICTATE_BOTTOM_PADDING).max(0.0);
     window.set_position(tauri::LogicalPosition::new(x, y))
+}
+
+/// Make room above the pill for the style chip, or give it back. The bottom
+/// edge stays put, so the pill (drawn at the window's bottom) doesn't move:
+/// AppKit frames grow up from their origin, and one `setFrame:` changes the
+/// height without a frame drawn in between.
+#[cfg(desktop)]
+fn set_dictate_chip_space(window: &tauri::WebviewWindow, show: bool) {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct NSRect {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    }
+    let height = DICTATE_WINDOW_HEIGHT + if show { DICTATE_CHIP_SPACE } else { 0.0 };
+    let w = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        use objc::runtime::{Object, YES};
+        use objc::{msg_send, sel, sel_impl};
+        let Ok(ptr) = w.ns_window() else { return };
+        let ns_window = ptr as *mut Object;
+        if ns_window.is_null() {
+            return;
+        }
+        // SAFETY: a valid NSWindow owned by Tauri, on the main thread.
+        unsafe {
+            let mut frame: NSRect = msg_send![ns_window, frame];
+            if frame.height != height {
+                frame.height = height;
+                let _: () = msg_send![ns_window, setFrame: frame display: YES];
+            }
+        }
+    });
+}
+
+/// Called by the HUD around the style chip's animation.
+#[cfg(desktop)]
+#[command]
+fn dictate_chip_space(app: tauri::AppHandle, show: bool) {
+    if let Some(window) = app.get_webview_window(DICTATE_WINDOW_LABEL) {
+        set_dictate_chip_space(&window, show);
+    }
 }
 
 /// The display with the focused window, else the one under the cursor, else
@@ -1318,6 +1366,8 @@ pub fn run() {
                 let handle_for_hide = app.handle().clone();
                 app.handle().listen("dictate:hide", move |_event| {
                     if let Some(window) = handle_for_hide.get_webview_window(DICTATE_WINDOW_LABEL) {
+                        // A chip cut off by the end of the take gives its room back.
+                        set_dictate_chip_space(&window, false);
                         let _ = window.set_ignore_cursor_events(true);
                         let _ = window.set_position(PhysicalPosition::new(-10_000, -10_000));
                         let _ = window.hide();
@@ -1330,6 +1380,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            dictate_chip_space,
             start_server,
             stop_server,
             restart_server,

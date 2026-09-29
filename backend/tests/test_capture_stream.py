@@ -38,6 +38,12 @@ class HeardWhenLoud:
     def quiet(self):
         return self.samples - (self.loud[-1][1] if self.loud else 0)
 
+    def first_voice(self):
+        return self.loud[0][0] if self.loud else None
+
+    def ignore(self, start, end):
+        self.loud = [(low, high) for low, high in self.loud if not (low < end and start < high)]
+
 
 def make_session(tmp_path, monkeypatch, **settings):
     monkeypatch.setattr(config, "_data_dir", tmp_path)

@@ -208,3 +208,26 @@ test('a take that ends before the device answers does not flip back to opening',
   await wait(SLOW_MICROPHONE_MS + 50);
   expect(hook.pillState).toBe('transcribing');
 });
+
+test('a style asked for by name makes room above the pill, then gives it back', async () => {
+  const style = async (payload: Record<string, unknown>) => {
+    await act(async () => {
+      handlers.get('dictation:style')?.({ payload });
+    });
+  };
+  await mount();
+  await send({ take: 4, state: 'preparing' });
+  await style({ take: 3, from: 'Chat', to: 'Formal' });
+  expect(hook.styleChange).toBeNull();
+  await style({ take: 4, from: 'Chat', to: 'Formal' });
+  expect(invoke).toHaveBeenCalledWith('dictate_chip_space', { show: true });
+  expect(hook.styleChange).toMatchObject({ from: 'Chat', to: 'Formal' });
+  invoke.mockClear();
+  await act(async () => hook.finishStyleChange?.());
+  expect(hook.styleChange).toBeNull();
+  expect(invoke).toHaveBeenCalledWith('dictate_chip_space', { show: false });
+  // A new take starts without the last one's chip.
+  await style({ take: 4, from: null, to: 'Chat' });
+  await send({ take: 5, state: 'preparing' });
+  expect(hook.styleChange).toBeNull();
+});

@@ -74,6 +74,7 @@ class SpeechDetector:
         self.position = 0.0  # next 16 kHz sample, in source samples from carry[0]
         self.analyzed = 0  # 16 kHz samples run through the model
         self.voiced: list[int] = []  # 16 kHz offsets of voiced windows
+        self.ignored: list[tuple[float, float]] = []  # 16 kHz spans of Voicebox's own sounds
 
     def feed(self, pcm: np.ndarray) -> None:
         if self.session is None:
@@ -83,9 +84,20 @@ class SpeechDetector:
         while len(self.buffer) >= WINDOW:
             window, self.buffer = self.buffer[:WINDOW], self.buffer[WINDOW:]
             voiced = self._probability(window) >= VOICE_PROBABILITY
-            if voiced and self.analyzed >= self.ignore_before:
+            if voiced and self.analyzed >= self.ignore_before and not self._ignored(self.analyzed):
                 self.voiced.append(self.analyzed)
             self.analyzed += WINDOW
+
+    def ignore(self, start: int, end: int) -> None:
+        """Don't take anything between two source sample offsets for a voice:
+        a sound Voicebox played there (the style cue) that the microphone may
+        have picked up. The span may reach past the audio fed so far."""
+        low, high = start * RATE / self.rate, end * RATE / self.rate
+        self.ignored.append((low, high))
+        self.voiced = [offset for offset in self.voiced if not self._ignored(offset)]
+
+    def _ignored(self, offset: float) -> bool:
+        return any(low < offset + WINDOW and offset < high for low, high in self.ignored)
 
     def heard(self, start: int, end: int) -> bool:
         """Whether a voice was detected between source sample offsets."""
@@ -93,6 +105,14 @@ class SpeechDetector:
             return True
         low, high = start * RATE / self.rate, end * RATE / self.rate
         return any(low < offset + WINDOW and offset < high for offset in self.voiced)
+
+    def first_voice(self) -> int | None:
+        """The source sample offset where a voice was first detected, or None
+        before one. 0 when the model can't be loaded: every take counts as
+        speech from its start."""
+        if self.session is None:
+            return 0
+        return round(self.voiced[0] * self.rate / RATE) if self.voiced else None
 
     def quiet(self) -> int:
         """Source samples since the last voice, over the audio run so far.

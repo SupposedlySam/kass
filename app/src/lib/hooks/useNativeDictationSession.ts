@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { StyleChange } from '@/components/CapturePill/StyleChip';
 import type { CapturePillState } from '@/lib/hooks/useCaptureRecordingSession';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
 import { SERVER_URL } from '@/stores/serverStore';
@@ -18,12 +19,18 @@ export type NativeDictationEvent =
 /** Microphone loudness for the HUD's level bars, about 20 times a second. */
 export type NativeDictationLevel = { take: number; db: number };
 
+/** The writing style the user asked for by name ("use formal mode"). */
+export type NativeDictationStyle = { take: number; from: string | null; to: string };
+
 export interface NativeDictationSession {
   pillState: CapturePillState;
   pillElapsedMs: number;
   /** Input loudness in dBFS while recording; `null` before the first reading. */
   inputDb?: number | null;
   errorMessage: string | null;
+  /** A style asked for by name, for the chip above the pill until it plays out. */
+  styleChange?: StyleChange | null;
+  finishStyleChange?: () => void;
   isRecording: boolean;
   stopRecording: () => void;
   dismissError: () => void;
@@ -52,6 +59,8 @@ export function useNativeDictationSession(): NativeDictationSession {
   const [pillState, setPillState] = useState<CapturePillState>('hidden');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inputDb, setInputDb] = useState<number | null>(null);
+  const [styleChange, setStyleChange] = useState<StyleChange | null>(null);
+  const styleChangesRef = useRef(0);
   const [frozenElapsedMs, setFrozenElapsedMs] = useState(0);
   const [liveElapsedMs, setLiveElapsedMs] = useState(0);
   const startedAtRef = useRef<number | null>(null);
@@ -96,6 +105,7 @@ export function useNativeDictationSession(): NativeDictationSession {
           setFrozenElapsedMs(0);
           setErrorMessage(null);
           setInputDb(null);
+          setStyleChange(null);
           // Most microphones deliver sound within ~0.1 s, so show recording
           // right away; only a device still silent after SLOW_MICROPHONE_MS
           // (e.g. a Bluetooth headset switching to call mode) says it's opening.
@@ -155,6 +165,18 @@ export function useNativeDictationSession(): NativeDictationSession {
     subscribe<NativeDictationLevel>('dictation:level', (level) => {
       if (level.take === currentTakeRef.current) setInputDb(level.db);
     });
+    subscribe<NativeDictationStyle>('dictation:style', ({ take, from, to }) => {
+      if (take !== currentTakeRef.current) return;
+      // The window grows up from the pill first, so the chip has room to rise into.
+      invoke('dictate_chip_space', { show: true })
+        .catch((err) => console.warn('[dictate] dictate_chip_space failed:', err))
+        .finally(() => {
+          if (take === currentTakeRef.current) {
+            styleChangesRef.current += 1;
+            setStyleChange({ key: styleChangesRef.current, from, to });
+          }
+        });
+    });
     return () => {
       disposed = true;
       for (const release of releases) release();
@@ -176,6 +198,14 @@ export function useNativeDictationSession(): NativeDictationSession {
     invoke('dictation_stop').catch((err) => console.warn('[dictate] dictation_stop failed:', err));
   }, []);
 
+  const finishStyleChange = useCallback(() => {
+    setStyleChange(null);
+    // The room above the pill would otherwise take clicks meant for what's under it.
+    invoke('dictate_chip_space', { show: false }).catch((err) =>
+      console.warn('[dictate] dictate_chip_space failed:', err),
+    );
+  }, []);
+
   const dismissError = useCallback(() => {
     clearTimer();
     setPillState('hidden');
@@ -186,6 +216,8 @@ export function useNativeDictationSession(): NativeDictationSession {
     pillState,
     pillElapsedMs: pillState === 'recording' ? liveElapsedMs : frozenElapsedMs,
     errorMessage,
+    styleChange,
+    finishStyleChange,
     inputDb: isRecording ? inputDb : null,
     isRecording,
     stopRecording,

@@ -256,6 +256,10 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             } else {
                 0
             });
+        let style_env = env.clone();
+        let client = client.with_style(crate::sound_cues::STYLE_CUE_SPAN_MS, move |from, to| {
+            style_env.emit_style(from, to)
+        });
         let client = match env.mode {
             TakeMode::Dictation => client,
             TakeMode::Command => client.with_command(),
@@ -560,6 +564,17 @@ impl AppEnv {
         let _ = self
             .app
             .emit_to(DICTATE_WINDOW_LABEL, "dictation:level", payload);
+    }
+
+    /// The writing style the user asked for by name, for the HUD's style
+    /// chip, with its cue. `from` is the style it replaced, `None` when it
+    /// was already that. Returns whether the cue played.
+    fn emit_style(&self, from: Option<String>, to: String) -> bool {
+        let payload = serde_json::json!({ "take": self.take_id, "from": from, "to": to });
+        let _ = self
+            .app
+            .emit_to(DICTATE_WINDOW_LABEL, "dictation:style", payload);
+        crate::sound_cues::play(crate::sound_cues::Cue::Style)
     }
 }
 

@@ -1,9 +1,9 @@
 //! Short sounds for dictation: recording started, recording stopped,
-//! cancelled with Escape, and failed.
+//! cancelled with Escape, failed, and the writing style changed by voice.
 //!
 //! Played with AppKit's `NSSound`, which follows the current output device
 //! and takes a per-sound volume, so no audio stream of our own stays open
-//! between takes. The three WAVs (`sounds/`, from
+//! between takes. The four WAVs (`sounds/`, from
 //! `scripts/generate-sound-cues.py`) are embedded in the binary and decoded
 //! once at launch on a player thread that owns every `NSSound`. Callers only
 //! push a message onto that thread's channel, so a cue never delays the
@@ -28,12 +28,16 @@ use tauri::{AppHandle, Manager};
 const START_WAV: &[u8] = include_bytes!("../sounds/start.wav");
 const STOP_WAV: &[u8] = include_bytes!("../sounds/stop.wav");
 const ERROR_WAV: &[u8] = include_bytes!("../sounds/error.wav");
+const STYLE_WAV: &[u8] = include_bytes!("../sounds/style.wav");
 
 pub const DEFAULT_VOLUME: f32 = 0.5;
 /// How much of a take's first audio the start cue can reach: the 220 ms
 /// sound plus the time to start playing it and the output's own latency.
 /// The microphone opens after the cue starts, so this is an upper bound.
 pub const START_CUE_SPAN_MS: u32 = 300;
+/// The same for the style cue, a 200 ms sound played while the user speaks:
+/// its latency, plus the audio captured but not yet sent when it starts.
+pub const STYLE_CUE_SPAN_MS: u32 = 350;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cue {
@@ -45,6 +49,8 @@ pub enum Cue {
     Error,
     /// The user pressed Escape: the stop sound, softer.
     Cancel,
+    /// The user asked for a writing style by name ("make this formal").
+    Style,
 }
 
 impl Cue {
@@ -53,6 +59,7 @@ impl Cue {
             Cue::Start => 0,
             Cue::Stop | Cue::Cancel => 1,
             Cue::Error => 2,
+            Cue::Style => 3,
         }
     }
 
@@ -60,6 +67,7 @@ impl Cue {
     fn gain(self) -> f32 {
         match self {
             Cue::Cancel => CANCEL_GAIN,
+            Cue::Style => STYLE_GAIN,
             Cue::Start | Cue::Stop | Cue::Error => 1.0,
         }
     }
@@ -67,6 +75,8 @@ impl Cue {
 
 /// The cancel cue is the stop sound at half the volume: a quiet "never mind".
 const CANCEL_GAIN: f32 = 0.5;
+/// The style cue plays over the user's own voice: a little under the others.
+const STYLE_GAIN: f32 = 0.8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -190,6 +200,7 @@ fn run_player(rx: Receiver<(Cue, f32)>) {
             load_sound(START_WAV),
             load_sound(STOP_WAV),
             load_sound(ERROR_WAV),
+            load_sound(STYLE_WAV),
         ]
     };
     // Play each once, silently: AppKit sets up its audio output on the first
@@ -321,6 +332,13 @@ mod tests {
     fn the_cancel_cue_is_a_softer_stop() {
         assert_eq!(Cue::Cancel.index(), Cue::Stop.index());
         assert!(Cue::Cancel.gain() < Cue::Stop.gain());
+    }
+
+    #[test]
+    fn the_style_cue_has_its_own_softer_sound() {
+        let others = [Cue::Start, Cue::Stop, Cue::Error];
+        assert!(others.iter().all(|cue| cue.index() != Cue::Style.index()));
+        assert!(Cue::Style.gain() < Cue::Start.gain());
     }
 
     #[test]

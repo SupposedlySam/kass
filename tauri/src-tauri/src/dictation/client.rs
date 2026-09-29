@@ -54,6 +54,8 @@ pub struct StreamClient {
     finish_sent: bool,
     outcome: Option<Outcome>,
     on_provisional: Option<Box<dyn Fn(String) + Send>>,
+    on_style: Option<Box<dyn Fn(Option<String>, String) -> bool + Send>>,
+    style_cue_ms: u32,
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
     app_sent: bool,
     field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
@@ -91,6 +93,8 @@ impl StreamClient {
             finish_sent: false,
             outcome: None,
             on_provisional: None,
+            on_style: None,
+            style_cue_ms: 0,
             target_app: None,
             app_sent: false,
             field_before: None,
@@ -174,6 +178,34 @@ impl StreamClient {
     pub fn with_provisional(mut self, on_provisional: impl Fn(String) + Send + 'static) -> Self {
         self.on_provisional = Some(Box::new(on_provisional));
         self
+    }
+
+    /// Hear when the user asks for a writing style by name, with the style
+    /// it replaced (`None` when the take was already in it) and the new one.
+    /// `on_style` returns whether it played a cue; the microphone may pick up
+    /// its next `cue_ms`, which the server then doesn't take for a voice.
+    pub fn with_style(
+        mut self,
+        cue_ms: u32,
+        on_style: impl Fn(Option<String>, String) -> bool + Send + 'static,
+    ) -> Self {
+        self.style_cue_ms = cue_ms;
+        self.on_style = Some(Box::new(on_style));
+        self
+    }
+
+    /// A `cue` message: the audio from what was sent so far, for `ms`, holds
+    /// a sound Voicebox played, not the user's voice.
+    fn cue_action(&self, ms: u32) -> Option<Action> {
+        let rate = self.sample_rate?;
+        let span = (u64::from(rate) * u64::from(ms) / 1000) as u32;
+        let start = self.sample_offset;
+        let message = serde_json::json!({
+            "type": "cue",
+            "start_samples": start,
+            "end_samples": start.saturating_add(span),
+        });
+        Some(Action::Text(message.to_string()))
     }
 
     /// Name the take's target app: in an `app` message as soon as it is known
@@ -332,6 +364,23 @@ impl StreamClient {
                     sink(text);
                 }
                 Vec::new()
+            }
+            ServerEvent::Style {
+                session_id,
+                from,
+                to,
+            } => {
+                let ours = session_id.is_none() || session_id == self.session_id;
+                let played = match (ours, &self.on_style) {
+                    (true, Some(sink)) => sink(from, to),
+                    _ => false,
+                };
+                // After finish the server has all the audio; nothing to mark.
+                if played && !self.finish_sent {
+                    self.cue_action(self.style_cue_ms).into_iter().collect()
+                } else {
+                    Vec::new()
+                }
             }
             ServerEvent::Error(message) => {
                 self.settle_failure(&message, true);
@@ -702,6 +751,50 @@ mod tests {
         client.on_text(r#"{"type":"provisional","session_id":"other","text":"Nope"}"#);
         assert_eq!(*seen.lock().unwrap(), vec!["Hello".to_string()]);
         assert_eq!(client.outcome(), None);
+    }
+
+    #[test]
+    fn a_spoken_style_reaches_the_sink_while_speaking() {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let mut client = StreamClient::new(1 << 20).with_style(350, move |from, to| {
+            sink.lock().unwrap().push((from, to));
+            false
+        });
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        client.on_text(r#"{"type":"style","session_id":"s1","name":"Formal","from_name":"Chat"}"#);
+        client.on_text(r#"{"type":"style","session_id":"s1","name":"Chat","from_name":null}"#);
+        client.on_text(r#"{"type":"style","session_id":"other","name":"Nope"}"#);
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                (Some("Chat".to_string()), "Formal".to_string()),
+                (None, "Chat".to_string())
+            ]
+        );
+        assert_eq!(client.outcome(), None);
+    }
+
+    #[test]
+    fn a_style_cue_marks_the_audio_it_may_reach() {
+        let mut client = StreamClient::new(1 << 20).with_style(350, |_, _| true);
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        client.push_audio(&vec![0i16; 4800]);
+        let event = r#"{"type":"style","session_id":"s1","name":"Formal","from_name":"Chat"}"#;
+        assert_eq!(
+            texts(&client.on_text(event)),
+            vec![serde_json::json!({"type": "cue", "start_samples": 4800, "end_samples": 4800 + 16_800})]
+        );
+        // Cues off: nothing played, nothing to mark.
+        let mut quiet = StreamClient::new(1 << 20).with_style(350, |_, _| false);
+        quiet.set_format(48_000);
+        quiet.on_open();
+        ready(&mut quiet);
+        assert!(quiet.on_text(event).is_empty());
     }
 
     #[test]

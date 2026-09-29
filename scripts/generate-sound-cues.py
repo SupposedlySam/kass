@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the dictation sound cues bundled with the desktop app.
 
-Writes start.wav, stop.wav and error.wav (16-bit mono, 44.1 kHz) into
+Writes start.wav, stop.wav, error.wav and style.wav (16-bit mono, 44.1 kHz) into
 tauri/src-tauri/sounds/, where `sound_cues.rs` embeds them. Standard library
 only; rerun after changing a cue and commit the WAVs:
 
@@ -56,6 +56,22 @@ def reversed_flutter(seconds, shift, peak=0.21, attack=0.022):
     return [s / top * peak * min(1, (n - i) / fade) for i, s in enumerate(samples)][::-1]
 
 
+def ping(notes, spacing, seconds, peak=0.12, decay=38):
+    """Bell-like taps `spacing` seconds apart, each a sine with a faint octave
+    and a fast decay: small and bright, well above the cues' flutters."""
+    n = int(RATE * seconds)
+    samples = [0.0] * n
+    for index, f in enumerate(notes):
+        at = index * spacing
+        for i in range(int(RATE * at), n):
+            t = i / RATE - at
+            envelope = min(1, t / 0.003) * math.exp(-t * decay)
+            samples[i] += (math.sin(2 * math.pi * f * t) + 0.2 * math.sin(4 * math.pi * f * t)) * envelope
+    top = max(abs(s) for s in samples)
+    fade = 0.02 * RATE
+    return [s / top * peak * min(1, (n - i) / fade) for i, s in enumerate(samples)]
+
+
 def sequence(*parts, gap=0.0):
     samples = []
     for part in parts:
@@ -79,7 +95,10 @@ def main():
     save(out / "start.wav", reversed_flutter(0.22, -2))  # G4-D5
     save(out / "stop.wav", reversed_flutter(0.22, -7))  # D4-A4
     save(out / "error.wav", sequence(tone([330], 0.1), tone([262], 0.18), gap=0.02))
-    print(f"wrote start.wav, stop.wav, error.wav to {out}")
+    # The writing style changed by voice: a soft double tap up an octave, A5
+    # then A6, to go with the chip's name rolling up above the pill.
+    save(out / "style.wav", ping([880.0, 1760.0], 0.06, 0.2, peak=0.13, decay=28))
+    print(f"wrote start.wav, stop.wav, error.wav, style.wav to {out}")
 
 
 if __name__ == "__main__":

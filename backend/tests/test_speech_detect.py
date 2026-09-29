@@ -155,3 +155,60 @@ def test_without_the_model_everything_counts_as_speech(monkeypatch):
     detector = SpeechDetector(RATE)
     detector.feed(np.zeros(RATE, dtype=np.int16))
     assert detector.quiet() == 0
+
+
+def style_cue(gain=1.0):
+    """The bundled style cue, at 48 kHz."""
+    with wave.open(str(SOUNDS / "style.wav")) as w:
+        rate = w.getframerate()
+        cue = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
+    return np.interp(np.arange(0, len(cue), rate / RATE), np.arange(len(cue)), cue) * gain
+
+
+STYLE_CUE_SPAN = RATE * 350 // 1000  # sound_cues::STYLE_CUE_SPAN_MS
+
+
+def during(take, at_s, sound):
+    mixed = take.astype(np.float32)
+    start = round(at_s * RATE)
+    mixed[start : start + len(sound)] += sound[: len(mixed) - start]
+    return np.clip(mixed, -32768, 32767).astype(np.int16)
+
+
+def test_the_style_cue_alone_is_not_a_voice():
+    # Unlike the first start cue: short, high and soft, even picked up loud.
+    for gain in (1.0, 4.0, 8.0):
+        detector = SpeechDetector(RATE)
+        detector.feed(during(room_noise(1.0, level=30), 0.3, style_cue(gain)))
+        assert not detector.heard(0, RATE)
+
+
+@pytest.mark.parametrize("gain", [1.0, 4.0])
+def test_the_style_cue_in_a_pause_is_not_a_voice_once_marked(gain):
+    # "Make this formal", a pause with the cue in it, then nothing.
+    take = during(np.concatenate([voice(1.2), room_noise(1.0, level=30)]), 1.3, style_cue(gain))
+    cue_at = round(1.3 * RATE)
+    detector = SpeechDetector(RATE)
+    detector.feed(take[:cue_at])
+    # The app says where the cue is while the audio is still arriving.
+    detector.ignore(cue_at - RATE // 20, cue_at + STYLE_CUE_SPAN)
+    detector.feed(take[cue_at:])
+    assert detector.heard(0, RATE)
+    assert not detector.heard(round(1.25 * RATE), len(take))
+
+
+def test_marking_the_cue_drops_a_voice_already_found_there():
+    take = during(room_noise(1.0, level=30), 0.3, voice(0.3).astype(np.float32))
+    detector = SpeechDetector(RATE)
+    detector.feed(take)
+    assert detector.heard(0, len(take))
+    detector.ignore(round(0.3 * RATE), round(0.3 * RATE) + STYLE_CUE_SPAN)
+    assert not detector.heard(0, len(take))
+
+
+def test_a_voice_after_the_cue_still_counts():
+    take = np.concatenate([voice(1.0), room_noise(0.4, level=30), voice(1.0)])
+    detector = SpeechDetector(RATE)
+    detector.ignore(RATE, RATE + STYLE_CUE_SPAN)
+    detector.feed(during(take, 1.0, style_cue()))
+    assert detector.heard(round(1.4 * RATE), len(take))

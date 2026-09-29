@@ -93,6 +93,12 @@ PHRASE_CONTEXT_CHARS = 600
 # The field's text kept from before the caret: enough for a sentence and the
 # names in it.
 FIELD_CONTEXT_CHARS = 600
+# The opening words are checked for a style request ("make this formal") before
+# the first phrase ends, which may be many seconds away: at the first short
+# pause after this much speech, or once this much was said without one.
+STYLE_PEEK_AFTER_S = 1.0
+STYLE_PEEK_PAUSE_S = 0.2
+STYLE_PEEK_BY_S = 2.5
 _CORRECTION_CUE = re.compile(r"\b(actually|no wait|no actually|make that|I mean|scratch that)\b", re.I)
 
 
@@ -162,8 +168,14 @@ class StreamingCapture:
         self.app_category = None
         # Whether a cleanup has begun; the style is fixed from then on.
         self.cleanup_started = False
-        # The style the user asked for by name at the start, over the app's.
+        # The style the user asked for by name at the start, over the app's,
+        # and whether a recognized phrase said so (not only an early peek).
         self.spoken = None
+        self.spoken_confirmed = False
+        self.style_announced = None
+        # Early looks at the opening words, and the speech (samples) at the last one.
+        self.style_peeks = 0
+        self.style_peeked_at = 0
         # The field's text before the caret, from the context command, and
         # whether the dictation continues its sentence
         # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
@@ -331,19 +343,89 @@ class StreamingCapture:
         self.flags = flags_for(self.style, self.settings)
         return True
 
-    def take_spoken_style(self, text: str) -> str:
+    async def take_spoken_style(self, text: str) -> str:
         """``text`` without an opening request for a style by name ("use
-        formal mode"), which picks the style the dictation is written in."""
+        formal mode"), which picks the style the dictation is written in.
+
+        Tells the client in a ``style`` event, with the style it replaced
+        (``from_name``, None when it was already that style), so the pill can
+        show the change.
+        """
         if self.is_command:
             return text
         style, rest = spoken_style(text, styles_snapshot())
         if style is None:
+            if self.spoken is not None and not self.spoken_confirmed:
+                # An early peek heard a request the phrase doesn't have.
+                await self.use_style(None)
             return text
-        self.spoken = self.style = style
-        self.flags = flags_for(style, self.settings)
-        self.dictionary = dictionaries.for_app(self.app_bundle_id, style.id)
-        self.names = self.names | self.dictionary.names
+        await self.use_style(style)
+        self.spoken_confirmed = True
         return rest
+
+    async def use_style(self, style) -> None:
+        """Write the take in ``style``, asked for by name; None goes back to
+        the app's. The client hears of a change in a ``style`` event."""
+        styles = styles_snapshot()
+        previous = self.style
+        target = style or styles.for_app(self.app_bundle_id)
+        self.spoken = style
+        self.style = target
+        self.flags = flags_for(target, self.settings)
+        self.dictionary = dictionaries.for_app(self.app_bundle_id, style.id if style else None)
+        self.names = self.names | self.dictionary.names
+        if previous.id == target.id and (style is None or self.style_announced == target.id):
+            # Heard again (a peek, then the phrase, then full audio), or undone
+            # back to the style it already was: nothing changed to show.
+            return
+        self.style_announced = target.id
+        await self.emit(
+            "style", style_id=target.id, name=target.name, from_name=previous.name if previous.id != target.id else None
+        )
+
+    def style_peek_due(self) -> bool:
+        """Whether to look at the opening words for a style request now: the
+        first phrase hasn't been recognized, and there is enough speech."""
+        if self.raw or self.spoken or self.is_command or self.finished or self.cuts or self.style_peeks >= 2:
+            return False
+        start = self.speech.first_voice()
+        if start is None:
+            return False
+        said = self.samples - start
+        if said >= self.rate * STYLE_PEEK_BY_S:
+            # A second look only when a pause brought the first one early.
+            return self.style_peeks == 0 or said - self.style_peeked_at >= self.rate * 0.5
+        return (
+            self.style_peeks == 0
+            and said >= self.rate * STYLE_PEEK_AFTER_S
+            and self.speech.quiet() >= self.rate * STYLE_PEEK_PAUSE_S
+        )
+
+    async def peek_style(self) -> None:
+        """Recognize the audio so far only to find a style request, so the
+        style (and the pill's chip) changes as soon as it is said. The text
+        still comes from the phrase, which confirms or undoes the change."""
+        start = self.speech.first_voice() or 0
+        self.style_peeks += 1
+        self.style_peeked_at = self.samples - start
+        if len(styles_snapshot().styles) < 2:
+            self.style_peeks = 2
+            return
+        text = await self.recognize(bytes(self.pending))
+        style, _ = spoken_style(text, styles_snapshot())
+        if style is not None and not self.raw and not self.finished:
+            await self.use_style(style)
+
+    def ignore_cue(self, start, end) -> None:
+        """A sound Voicebox played during the take (the style cue), between
+        two sample offsets: the microphone may have picked it up, and a chime
+        reads as a voice. Only voice detection skips it; Whisper hears the
+        audio as it was."""
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in (start, end)):
+            raise ValueError("Cue offsets must be sample counts")
+        if not 0 <= start <= end or end - start > self.rate:
+            raise ValueError("A cue lasts at most a second")
+        self.speech.ignore(start, end)
 
     def set_context(self, before) -> None:
         """The field's text before the caret, known shortly after the take starts."""
@@ -579,7 +661,7 @@ class StreamingCapture:
         if text and not self.raw:
             # Dropped from the context too: the phrase after a lone "use
             # formal mode." starts the dictation.
-            text = self.take_spoken_style(text)
+            text = await self.take_spoken_style(text)
         earlier = self.heard
         self.heard = self.join(self.heard, text, text)
         if text:
@@ -746,6 +828,9 @@ class StreamingCapture:
                 continue
             while self.cuts and self.cuts[0] <= self.offset:
                 self.cuts.pop(0)
+            if self.style_peek_due():
+                await self.peek_style()
+                continue
             available = len(self.pending) // 2
             cut = self.cuts[0] - self.offset if self.cuts else None
             forced = available >= self.rate * 20 and (cut is None or cut > self.rate * 20)
@@ -811,7 +896,7 @@ class StreamingCapture:
                     vocabulary=self.dictionary.terms,
                 )
             ).strip()
-            self.raw = self.take_spoken_style(self.raw)
+            self.raw = await self.take_spoken_style(self.raw)
             if self.continues:
                 self.raw = continue_phrase(self.raw, self.field_before, self.names)
             self.raw = mark_commands(self.raw)

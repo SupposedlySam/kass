@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useEffect, useRef } from 'react';
 import { CapturePill } from '@/components/CapturePill/CapturePill';
+import { StyleChip } from '@/components/CapturePill/StyleChip';
 import type { FocusSnapshot } from '@/lib/api/types';
 import { useCaptureRecordingSession } from '@/lib/hooks/useCaptureRecordingSession';
 import {
@@ -122,20 +123,26 @@ function DictateSurface({ session }: { session: NativeDictationSession }) {
     }
   }, [effectiveState]);
 
+  // The pill keeps the bottom 64 px (the window's usual height); while a
+  // style chip shows, Rust grows the window up from it to make room.
   return (
-    <div
-      className="h-screen w-screen flex items-center justify-center px-3"
-      style={{ background: 'transparent' }}
-    >
-      {effectiveState !== 'hidden' ? (
-        <CapturePill
-          state={effectiveState}
-          inputDb={session.inputDb}
-          errorMessage={session.errorMessage}
-          onDismiss={session.dismissError}
-          onStop={session.isRecording ? session.stopRecording : undefined}
-        />
+    <div className="relative h-screen w-screen" style={{ background: 'transparent' }}>
+      {effectiveState !== 'hidden' && session.styleChange ? (
+        <div className="absolute inset-x-0 bottom-[54px] flex justify-center">
+          <StyleChip change={session.styleChange} onDone={() => session.finishStyleChange?.()} />
+        </div>
       ) : null}
+      <div className="absolute inset-x-0 bottom-0 flex h-16 items-center justify-center px-3">
+        {effectiveState !== 'hidden' ? (
+          <CapturePill
+            state={effectiveState}
+            inputDb={session.inputDb}
+            errorMessage={session.errorMessage}
+            onDismiss={session.dismissError}
+            onStop={session.isRecording ? session.stopRecording : undefined}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -155,6 +155,28 @@ async def test_a_command_alone_leaves_nothing_to_paste(tmp_path, monkeypatch, fo
 
 
 @pytest.mark.asyncio
+async def test_the_client_hears_which_style_replaced_which(tmp_path, monkeypatch, formal):
+    session, events = make_session(tmp_path, monkeypatch)
+    monkeypatch.setattr(capture_stream, "known_names", lambda: frozenset())
+    session.set_app(SLACK, "Slack")
+    await session.accept("Make this formal. Dear team.")
+    # Full-audio recognition hears it again; the pill already showed it.
+    await session.take_spoken_style("Make this formal. Dear team.")
+    changes = [event for event in events if event["type"] == "style"]
+    assert [(e["style_id"], e["name"], e["from_name"]) for e in changes] == [("formal", "Formal", "Chat")]
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_asking_for_the_apps_own_style_names_no_previous_one(tmp_path, monkeypatch, formal):
+    session, events = make_session(tmp_path, monkeypatch)
+    session.set_app(SLACK, "Slack")
+    await session.take_spoken_style("Use chat mode. Hey.")
+    assert [e["from_name"] for e in events if e["type"] == "style"] == [None]
+    session.close()
+
+
+@pytest.mark.asyncio
 async def test_the_phrase_after_a_lone_command_starts_the_dictation(tmp_path, monkeypatch, formal):
     session, _ = make_session(tmp_path, monkeypatch)
     monkeypatch.setattr(capture_stream, "known_names", lambda: frozenset())
@@ -166,4 +188,103 @@ async def test_the_phrase_after_a_lone_command_starts_the_dictation(tmp_path, mo
     # Only the start of a dictation picks a style.
     await session.accept("Use chat mode.")
     assert session.style.id == "formal"
+    session.close()
+
+
+def speak(session, seconds, loud=True):
+    append(session, seconds, amplitude=1000 if loud else 0)
+
+
+@pytest.mark.asyncio
+async def test_a_short_pause_after_a_second_of_speech_checks_the_opening_words(tmp_path, monkeypatch, formal):
+    session, events = make_session(tmp_path, monkeypatch)
+    session.set_app(SLACK, "Slack")
+    session.recognize = AsyncMock(return_value="Make this formal.")
+    speak(session, 0.8)
+    assert not session.style_peek_due()
+    speak(session, 0.4)
+    assert not session.style_peek_due()  # no pause yet
+    speak(session, 0.25, loud=False)
+    assert session.style_peek_due()
+    await session.peek_style()
+    assert session.style.id == "formal"
+    assert [(e["name"], e["from_name"]) for e in events if e["type"] == "style"] == [("Formal", "Chat")]
+    # The phrase confirms it without showing the change twice.
+    await session.accept("Make this formal. Dear team.")
+    assert session.raw == "Dear team."
+    assert len([e for e in events if e["type"] == "style"]) == 1
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_without_a_pause_the_opening_words_are_checked_by_two_and_a_half_seconds(tmp_path, monkeypatch, formal):
+    session, _ = make_session(tmp_path, monkeypatch)
+    session.recognize = AsyncMock(return_value="I want this to be more")
+    speak(session, 2.4)
+    assert not session.style_peek_due()
+    speak(session, 0.2)
+    assert session.style_peek_due()
+    await session.peek_style()
+    assert session.spoken is None
+    # Looked once, found nothing: not again until more was said.
+    assert not session.style_peek_due()
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_an_early_look_the_phrase_disagrees_with_is_undone(tmp_path, monkeypatch, formal):
+    session, events = make_session(tmp_path, monkeypatch)
+    session.set_app(SLACK, "Slack")
+    session.recognize = AsyncMock(return_value="Make this formal.")
+    speak(session, 1.2)
+    speak(session, 0.25, loud=False)
+    await session.peek_style()
+    assert session.style.id == "formal"
+    await session.accept("Make this formula shorter, please.")
+    assert session.style.id == "chat"
+    assert session.raw == "Make this formula shorter, please."
+    changes = [(e["name"], e["from_name"]) for e in events if e["type"] == "style"]
+    assert changes == [("Formal", "Chat"), ("Chat", "Formal")]
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_the_opening_words_are_not_checked_once_the_first_phrase_is_in(tmp_path, monkeypatch, formal):
+    session, _ = make_session(tmp_path, monkeypatch)
+    await session.accept("Dear team.")
+    speak(session, 3)
+    assert not session.style_peek_due()
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_with_one_style_there_is_nothing_to_look_for(tmp_path, monkeypatch, database):  # noqa: F811
+    with Session(database) as db:
+        styles.delete_style(db, "chat")
+    session, _ = make_session(tmp_path, monkeypatch)
+    session.recognize = AsyncMock(return_value="Make this formal.")
+    speak(session, 3)
+    await session.peek_style()
+    session.recognize.assert_not_awaited()
+    assert not session.style_peek_due()
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_the_running_session_shows_the_style_while_the_user_is_still_talking(tmp_path, monkeypatch, formal):
+    session, events = make_session(tmp_path, monkeypatch)
+    monkeypatch.setattr(capture_stream, "known_names", lambda: frozenset())
+    session.set_app(SLACK, "Slack")
+    session.recognize = AsyncMock(return_value="Make this formal.")
+    worker = asyncio.create_task(session.run())
+    speak(session, 1.2)
+    speak(session, 0.25, loud=False)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    # No phrase has ended (that takes a 0.7 s pause), but the style changed.
+    assert session.raw == ""
+    assert [e["name"] for e in events if e["type"] == "style"] == ["Formal"]
+    session.abort = True
+    session.wake.set()
+    await worker
     session.close()

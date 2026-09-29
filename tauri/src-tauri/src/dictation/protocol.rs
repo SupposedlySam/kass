@@ -121,6 +121,14 @@ pub enum ServerEvent {
         text: String,
     },
     Error(String),
+    /// The user asked for a writing style at the start of the take ("use
+    /// formal mode"): `to` replaces `from`, which is `None` when the take was
+    /// already in that style.
+    Style {
+        session_id: Option<String>,
+        from: Option<String>,
+        to: String,
+    },
     /// `transcript` / `refined` updates and anything else informational.
     Update,
     /// Not JSON, or not an object.
@@ -153,6 +161,20 @@ pub fn parse_server_event(text: &str) -> ServerEvent {
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 text: text.to_string(),
+            },
+            None => ServerEvent::Update,
+        },
+        "style" => match value.get("name").and_then(Value::as_str) {
+            Some(name) => ServerEvent::Style {
+                session_id: value
+                    .get("session_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                from: value
+                    .get("from_name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                to: name.to_string(),
             },
             None => ServerEvent::Update,
         },
