@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn';
 import { serverStats } from '@/lib/utils/serverStats';
 import { usePlatform } from '@/platform/PlatformContext';
 import { SERVER_URL } from '@/stores/serverStore';
+import { LaunchAtLoginRow } from './LaunchAtLoginRow';
 import { SettingRow, SettingSection } from './SettingRow';
 import { ThemeSelect } from './ThemeSelect';
 
@@ -63,6 +64,8 @@ export function GeneralPage() {
             }
           />
         )}
+
+        {platform.metadata.isTauri && <LaunchAtLoginRow />}
 
         <SettingRow
           title={t('settings.theme.label')}

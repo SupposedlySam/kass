@@ -9,6 +9,9 @@ fn main() {
         // allow the app to launch and gate usage at runtime instead.
         println!("cargo:rustc-link-arg=-Wl,-weak_framework,ScreenCaptureKit");
 
+        // SMAppService, for launching at login (login_item.rs).
+        println!("cargo:rustc-link-lib=framework=ServiceManagement");
+
         // Add Swift runtime library paths to RPATH
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
         println!("cargo:rustc-link-arg=-L/usr/lib/swift");
