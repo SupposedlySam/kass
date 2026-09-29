@@ -28,6 +28,9 @@ export interface FocusSnapshot {
 
 export type PunctuationStyle = 'standard' | 'casual' | 'learned';
 
+/** Days of capture history to keep; 0 keeps it forever. */
+export type HistoryRetentionDays = 0 | 7 | 30 | 90 | 365;
+
 /** Stable codes for learned punctuation habits; the app words them. */
 export type WritingStyleHabit =
   | 'boundary_period'
@@ -334,6 +337,14 @@ export interface CaptureSettings {
   /** keytap key names for Command Mode; empty turns it off. */
   chord_command_keys: string[];
   command_transforms: Transform[];
+  /** Days of capture history to keep; older captures are deleted, what they taught is kept. */
+  history_retention_days: HistoryRetentionDays;
+}
+
+export interface RetentionPreview {
+  days: HistoryRetentionDays;
+  /** Captures that keeping `days` would delete now. */
+  expiring: number;
 }
 
 export type CaptureSettingsUpdate = Partial<CaptureSettings>;

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn';
 import { serverStats } from '@/lib/utils/serverStats';
 import { usePlatform } from '@/platform/PlatformContext';
 import { SERVER_URL } from '@/stores/serverStore';
+import { HistoryRetentionRow } from './HistoryRetentionRow';
 import { LaunchAtLoginRow } from './LaunchAtLoginRow';
 import { SettingRow, SettingSection } from './SettingRow';
 import { ThemeSelect } from './ThemeSelect';
@@ -75,6 +76,7 @@ export function GeneralPage() {
       </SettingSection>
 
       <SettingSection title={t('settings.captures.storage.title')}>
+        <HistoryRetentionRow />
         <CapturesFolderRow />
       </SettingSection>
     </>

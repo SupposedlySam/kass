@@ -385,11 +385,14 @@ def refresh_feedback(db) -> None:
     Called after a correction is saved and after an app moves to another
     style: a correction counts for the style it teaches (``correction_style``).
     """
+    from sqlalchemy import func
+
     from ..database.models import Capture, CaptureFeedback
     from .styles import correction_style, snapshot
 
     rows = (
-        db.query(CaptureFeedback, Capture.teaches_style_id)
+        # A correction whose capture history retention deleted keeps its own copy.
+        db.query(CaptureFeedback, func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id))
         .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
         .filter(CaptureFeedback.target == "refined")
         .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())

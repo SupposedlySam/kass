@@ -29,6 +29,7 @@ from ..models import (
     RefinementReviewModel,
 )
 from ..utils.audio import load_audio
+from . import history_retention
 from .content_check import check_refinement, summarize_reviews
 from .refinement import RefinementFlags, refine_transcript, style_first_word
 from .transcribe import get_whisper_model
@@ -332,6 +333,16 @@ async def refine_capture(
     model_size: Optional[str],
     db: Session,
 ) -> Optional[CaptureResponse]:
+    with history_retention.in_use(capture_id):
+        return await _refine_capture(capture_id, flags, model_size, db)
+
+
+async def _refine_capture(
+    capture_id: str,
+    flags: RefinementFlags,
+    model_size: Optional[str],
+    db: Session,
+) -> Optional[CaptureResponse]:
     row = db.query(DBCapture).filter(DBCapture.id == capture_id).first()
     if not row:
         return None
@@ -359,6 +370,16 @@ async def refine_capture(
 
 
 async def retranscribe_capture(
+    capture_id: str,
+    stt_model: Optional[str],
+    language: Optional[str],
+    db: Session,
+) -> Optional[CaptureResponse]:
+    with history_retention.in_use(capture_id):
+        return await _retranscribe_capture(capture_id, stt_model, language, db)
+
+
+async def _retranscribe_capture(
     capture_id: str,
     stt_model: Optional[str],
     language: Optional[str],

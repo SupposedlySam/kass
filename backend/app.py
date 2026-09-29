@@ -53,10 +53,15 @@ def create_app() -> FastAPI:
         await _run_startup(app)
         from .services.correction_learning import initialize
         from .services.correction_notes import periodic_job as notes_job
+        from .services.history_retention import periodic_job as retention_job
         from .services.model_improvement.manager import periodic_job
 
         initialize()
-        tasks = [asyncio.create_task(periodic_job()), asyncio.create_task(notes_job())]
+        tasks = [
+            asyncio.create_task(periodic_job()),
+            asyncio.create_task(notes_job()),
+            asyncio.create_task(retention_job()),
+        ]
         try:
             yield
         finally:

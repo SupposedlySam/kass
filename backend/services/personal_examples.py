@@ -40,6 +40,8 @@ def invalidate() -> None:
 
 
 def _from_corrections() -> list[dict]:
+    from sqlalchemy import func
+
     from ..database import session as database_session
     from ..database.models import Capture, CaptureFeedback
 
@@ -47,7 +49,8 @@ def _from_corrections() -> list[dict]:
         return []
     with database_session.SessionLocal() as db:
         rows = (
-            db.query(CaptureFeedback, Capture.teaches_style_id)
+            # A correction whose capture history retention deleted keeps its own copy.
+            db.query(CaptureFeedback, func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id))
             .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
             .filter(CaptureFeedback.target == "refined")
             .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())

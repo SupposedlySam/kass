@@ -233,6 +233,17 @@ class Transform(BaseModel):
     instruction: str
 
 
+# The history retention choices in days; 0 keeps captures forever.
+HistoryRetentionDays = Literal[0, 7, 30, 90, 365]
+
+
+class RetentionPreviewResponse(BaseModel):
+    """How many captures a retention of ``days`` would delete now."""
+
+    days: HistoryRetentionDays
+    expiring: int
+
+
 class CaptureSettingsResponse(BaseModel):
     """Server-persisted defaults for the capture / refine flow."""
 
@@ -260,6 +271,8 @@ class CaptureSettingsResponse(BaseModel):
     )
     chord_command_keys: List[str] = Field(default_factory=default_command_chord)
     command_transforms: List[Transform] = Field(default_factory=default_transforms)
+    # Days of capture history to keep; 0 keeps it forever.
+    history_retention_days: HistoryRetentionDays = 30
 
     class Config:
         from_attributes = True
@@ -289,6 +302,7 @@ class CaptureSettingsUpdate(BaseModel):
     # Empty turns Command Mode's chord off.
     chord_command_keys: Optional[List[str]] = Field(default=None, max_length=6)
     command_transforms: Optional[List[Transform]] = None
+    history_retention_days: Optional[HistoryRetentionDays] = None
 
 
 class CommandRunRequest(BaseModel):

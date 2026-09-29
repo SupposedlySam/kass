@@ -297,18 +297,27 @@ def delete_style(db: Session, style_id: str) -> bool:
 
 def app_corrections(db: Session) -> dict[str, int]:
     """Per app, the captures whose corrections teach the style the app is in now."""
+    from sqlalchemy import func
+
     from ..database.models import Capture, CaptureFeedback
 
     styles = snapshot()
+    # A correction whose capture history retention deleted keeps its own copy.
     rows = (
-        db.query(Capture.id, Capture.app_bundle_id, Capture.teaches_style_id)
-        .join(CaptureFeedback, CaptureFeedback.capture_id == Capture.id)
-        .filter(CaptureFeedback.target == "refined", Capture.app_bundle_id.isnot(None))
+        db.query(
+            CaptureFeedback.capture_id,
+            func.coalesce(Capture.app_bundle_id, CaptureFeedback.app_bundle_id),
+            func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id),
+        )
+        .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
+        .filter(CaptureFeedback.target == "refined")
         .distinct()
         .all()
     )
     counts: dict[str, int] = {}
     for _, bundle_id, teaches in rows:
+        if bundle_id is None:
+            continue
         if correction_style(styles, bundle_id, teaches) == styles.for_app(bundle_id).id:
             counts[bundle_id] = counts.get(bundle_id, 0) + 1
     return counts
@@ -322,7 +331,7 @@ def assign_app(db: Session, bundle_id: str, app_name: str | None, style_id: str,
     app, "leave" keeps them teaching the current one. Examples, habits and
     rules follow the choice; the habits are recounted.
     """
-    from ..database.models import Capture
+    from ..database.models import Capture, CaptureFeedback
 
     if db.get(WritingStyle, style_id) is None:
         raise KeyError(style_id)
@@ -330,15 +339,17 @@ def assign_app(db: Session, bundle_id: str, app_name: str | None, style_id: str,
         raise ValueError("corrections must be bring or leave")
     current = snapshot().for_app(bundle_id).id
     if current != style_id:
-        captures = db.query(Capture).filter(Capture.app_bundle_id == bundle_id)
-        if corrections == "leave":
-            captures.filter(Capture.teaches_style_id.is_(None)).update(
-                {"teaches_style_id": current}, synchronize_session=False
-            )
-        else:
-            captures.filter(Capture.teaches_style_id == current).update(
-                {"teaches_style_id": None}, synchronize_session=False
-            )
+        # Corrections whose capture history retention deleted carry their own app and style.
+        for model in (Capture, CaptureFeedback):
+            rows = db.query(model).filter(model.app_bundle_id == bundle_id)
+            if corrections == "leave":
+                rows.filter(model.teaches_style_id.is_(None)).update(
+                    {"teaches_style_id": current}, synchronize_session=False
+                )
+            else:
+                rows.filter(model.teaches_style_id == current).update(
+                    {"teaches_style_id": None}, synchronize_session=False
+                )
     row = db.get(AppStyle, bundle_id)
     if row is None:
         db.add(AppStyle(bundle_id=bundle_id, app_name=app_name, style_id=style_id))

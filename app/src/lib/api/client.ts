@@ -17,10 +17,12 @@ import type {
   CorrectionLearningStatus,
   CorrectionNotesStatus,
   HealthResponse,
+  HistoryRetentionDays,
   ModelDownloadRequest,
   ModelStatusListResponse,
   MovedCorrections,
   PersonalExample,
+  RetentionPreview,
   StyledApp,
   UsagePeriod,
   UsageStatsResponse,
@@ -336,6 +338,10 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(patch),
     });
+  }
+
+  async getRetentionPreview(days: HistoryRetentionDays): Promise<RetentionPreview> {
+    return this.request<RetentionPreview>(`/settings/captures/retention-preview?days=${days}`);
   }
 
   // Model Management
