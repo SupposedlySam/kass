@@ -105,6 +105,19 @@ pub async fn refine(
     json_or_error(response).await
 }
 
+/// `DELETE /captures/{id}`, for a take cancelled after the server saved it.
+pub async fn delete_capture(http: &reqwest::Client, server_url: &str, capture_id: &str) {
+    let url = format!("{}/captures/{capture_id}", base(server_url));
+    match http.delete(url).send().await {
+        Ok(response) if response.status().is_success() => {}
+        Ok(response) => eprintln!(
+            "[dictation] could not delete cancelled capture {capture_id}: HTTP {}",
+            response.status().as_u16()
+        ),
+        Err(e) => eprintln!("[dictation] could not delete cancelled capture {capture_id}: {e}"),
+    }
+}
+
 /// What a command runs on its selection.
 pub enum CommandInput<'a> {
     /// Typed or chosen in Voicebox: an instruction or a transform's name.

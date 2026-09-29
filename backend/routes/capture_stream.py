@@ -66,6 +66,33 @@ async def _prefill_style(session: StreamingCapture) -> None:
         logger.warning("Could not prefill the cleanup prompt", exc_info=True)
 
 
+async def _cancelled_while_finishing(websocket: WebSocket, worker: asyncio.Task) -> bool:
+    """Wait for the last recognition and cleanup, listening for a cancel.
+
+    Only an explicit cancel (the user pressed Escape) abandons a finished
+    session. A dropped connection still commits it, for result recovery.
+    """
+    while not worker.done():
+        receiver = asyncio.create_task(websocket.receive())
+        try:
+            await asyncio.wait({receiver, worker}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            if not receiver.done():
+                receiver.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await receiver
+        if receiver.cancelled() or receiver.exception() is not None:
+            break
+        message = receiver.result()
+        if message["type"] == "websocket.disconnect":
+            break
+        with contextlib.suppress(ValueError, TypeError, AttributeError):
+            if json.loads(message.get("text") or "{}").get("type") == "cancel":
+                return True
+    await asyncio.shield(worker)
+    return False
+
+
 def _start(coroutine) -> None:
     task = asyncio.create_task(coroutine)
     _loading.add(task)
@@ -167,7 +194,9 @@ async def stream_capture(websocket: WebSocket):
 
             session.send = send_finalizing
             session.finish()
-            await asyncio.shield(worker)
+            if await _cancelled_while_finishing(websocket, worker):
+                # Escape after release: discard the take, save nothing.
+                return
             with database_session.SessionLocal() as db:
                 capture = session.persist(db)
             result = dict(

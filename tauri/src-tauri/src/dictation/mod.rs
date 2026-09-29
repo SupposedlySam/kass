@@ -11,8 +11,11 @@
 //! A command take ([`TakeMode::Command`], docs/plans/COMMAND_MODE.md) is the
 //! same take with an instruction for selected text: the selection is read
 //! while the user speaks ([`command`]) and the rewrite replaces it.
+//!
+//! Escape cancels a take until its text starts going in ([`cancel()`]).
 
 pub mod audio;
+pub mod cancel;
 pub mod capture;
 pub mod client;
 pub mod command;
@@ -35,6 +38,7 @@ use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use crate::focus_capture::FocusSnapshot;
 use crate::DICTATE_WINDOW_LABEL;
+use cancel::{CancelSwitch, Takes};
 use capture::{CaptureHooks, NativeInputDevice};
 use client::StreamClient;
 use live::{Finish, Live, LiveTarget};
@@ -99,7 +103,7 @@ pub struct DictationState {
     config: Mutex<Config>,
     /// Where the chosen microphone is remembered between launches.
     device_file: OnceLock<std::path::PathBuf>,
-    active: Mutex<Option<ActiveTake>>,
+    active: Mutex<Takes<ActiveTake>>,
     next_take: AtomicU64,
     http: OnceLock<reqwest::Client>,
 }
@@ -149,7 +153,7 @@ pub enum TakeMode {
 pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMode) -> Option<u64> {
     let state = app.state::<DictationState>();
     let mut active = state.active.lock().ok()?;
-    if active.is_some() {
+    if active.is_recording() {
         return None;
     }
     let config = state.config.lock().map(|c| c.clone()).unwrap_or_default();
@@ -161,10 +165,12 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
     let focus: Arc<Mutex<Option<FocusSnapshot>>> = Arc::new(Mutex::new(None));
     let field_before: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let released: Arc<OnceLock<Instant>> = Arc::new(OnceLock::new());
+    let cancel = CancelSwitch::new();
     let live = Live::new(AxLive {
         take_id,
         focus: focus.clone(),
         released: released.clone(),
+        cancel: cancel.clone(),
     });
     let env = AppEnv {
         app: app.clone(),
@@ -177,6 +183,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         live: live.clone(),
         mode,
         selection: selection.clone(),
+        cancel: cancel.clone(),
     };
     env.emit(PillEvent::Preparing);
 
@@ -264,7 +271,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         } else {
             client
         };
-        let outcome = stream::drive(client, out_tx, in_rx, audio_rx, Timeouts::default()).await;
+        let escape = env.cancel.cancelled();
+        let outcome =
+            stream::drive(client, out_tx, in_rx, audio_rx, Timeouts::default(), escape).await;
         let since_release = |at: &OnceLock<Instant>| {
             at.get()
                 .map(|t| format!("{:.0}ms", t.elapsed().as_secs_f64() * 1000.0))
@@ -290,19 +299,27 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             since_release(&released_for_task)
         );
         recording.store(false, Ordering::Relaxed);
+        // Settled: Escape has nothing left to cancel here.
+        if let Ok(mut takes) = env.app.state::<DictationState>().active.lock() {
+            takes.end(take_id);
+        }
     });
 
-    *active = Some(ActiveTake {
-        id: take_id,
-        origin,
-        mode,
-        audio,
-        selection,
-        stop,
-        focus,
-        field_before,
-        released,
-    });
+    active.begin(
+        take_id,
+        cancel,
+        ActiveTake {
+            id: take_id,
+            origin,
+            mode,
+            audio,
+            selection,
+            stop,
+            focus,
+            field_before,
+            released,
+        },
+    );
     Some(take_id)
 }
 
@@ -384,7 +401,7 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
     let Ok(active) = state.active.lock() else {
         return;
     };
-    let Some(take) = active.as_ref().filter(|t| t.id == take_id) else {
+    let Some(take) = active.recording().filter(|t| t.id == take_id) else {
         return;
     };
     if take.mode == TakeMode::Command {
@@ -451,17 +468,57 @@ pub fn stop_shortcut_take(app: &AppHandle) {
 
 fn stop_matching(app: &AppHandle, matches: impl Fn(&ActiveTake) -> bool) {
     let state = app.state::<DictationState>();
-    let taken = state.active.lock().ok().and_then(|mut a| {
-        if a.as_ref().is_some_and(&matches) {
-            a.take()
-        } else {
-            None
-        }
-    });
+    let taken = state
+        .active
+        .lock()
+        .ok()
+        .and_then(|mut takes| takes.release(&matches));
     if let Some(take) = taken {
-        let _ = take.released.set(Instant::now());
-        let _ = take.stop.send(());
+        take.stop_recording();
     }
+}
+
+/// Escape: cancel every take whose text hasn't started going in. The
+/// microphone stops, the stream tells the server to discard the take, and
+/// the pill hides. Returns whether there was anything to cancel.
+pub fn cancel(app: &AppHandle) -> bool {
+    let state = app.state::<DictationState>();
+    let Ok((cancelled, recording)) = state.active.lock().map(|mut takes| takes.cancel()) else {
+        return false;
+    };
+    // After the switch flipped, so the microphone's own "transcribing" on
+    // the way out is never shown.
+    if let Some(take) = recording {
+        take.stop_recording();
+    }
+    if cancelled.is_empty() {
+        return false;
+    }
+    if let Some(cue) = PillEvent::Cancelled.cue() {
+        crate::sound_cues::play(cue);
+    }
+    for take_id in &cancelled {
+        send_state(app, *take_id, &PillEvent::Cancelled);
+    }
+    eprintln!("[dictation] cancelled with Escape: takes {cancelled:?}");
+    true
+}
+
+impl ActiveTake {
+    fn stop_recording(&self) {
+        let _ = self.released.set(Instant::now());
+        let _ = self.stop.send(());
+    }
+}
+
+/// Send a take's pill state to every window: the HUD draws it, and the main
+/// window's Dictate button follows it.
+fn send_state(app: &AppHandle, take_id: u64, event: &PillEvent) {
+    let mut payload = serde_json::to_value(event).unwrap_or(Value::Null);
+    if let Value::Object(ref mut map) = payload {
+        map.insert("take".into(), Value::from(take_id));
+    }
+    let _ = app.emit("dictation:state", payload);
 }
 
 fn outcome_label(outcome: &client::Outcome) -> String {
@@ -491,6 +548,8 @@ struct AppEnv {
     mode: TakeMode,
     /// A command take's selection, once read.
     selection: Arc<Mutex<Option<String>>>,
+    /// Flipped by Escape until the text starts going in.
+    cancel: Arc<CancelSwitch>,
 }
 
 impl AppEnv {
@@ -509,6 +568,7 @@ struct AxLive {
     take_id: u64,
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
     released: Arc<OnceLock<Instant>>,
+    cancel: Arc<CancelSwitch>,
 }
 
 impl AxLive {
@@ -540,6 +600,8 @@ impl LiveTarget for AxLive {
         bundle.as_deref() != Some(crate::VOICEBOX_BUNDLE_ID)
             && crate::accessibility::is_trusted()
             && crate::focus_capture::frontmost_pid() == Some(pid)
+            // Last: live text is insertion, so from here Escape does nothing.
+            && self.cancel.begin_delivery()
     }
 
     fn begin(&self, text: String) -> impl Future<Output = crate::text_insert::LiveStart> + Send {
@@ -607,16 +669,34 @@ impl LiveTarget for AxLive {
 
 impl TakeEnv for AppEnv {
     fn emit(&self, event: PillEvent) {
+        // Escape hid the pill: nothing the take does afterwards shows or
+        // sounds (the microphone closing, a take too short to keep).
+        if self.cancel.is_cancelled() {
+            return;
+        }
         if let Some(cue) = event.cue() {
             crate::sound_cues::play(cue);
         }
-        let mut payload = serde_json::to_value(&event).unwrap_or(Value::Null);
-        if let Value::Object(ref mut map) = payload {
-            map.insert("take".into(), Value::from(self.take_id));
+        send_state(&self.app, self.take_id, &event);
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
+    }
+
+    fn begin_delivery(&self) -> bool {
+        self.cancel.begin_delivery()
+    }
+
+    fn discard(&self, capture_id: String) -> impl Future<Output = ()> + Send {
+        let http = self.http.clone();
+        let server_url = self.server_url.clone();
+        let app = self.app.clone();
+        async move {
+            http::delete_capture(&http, &server_url, &capture_id).await;
+            // Drops it from a Captures list that already showed it.
+            let _ = app.emit("capture:updated", serde_json::json!({ "id": capture_id }));
         }
-        // Every window: the HUD draws it, and the main window's Dictate
-        // button follows it.
-        let _ = self.app.emit("dictation:state", payload);
     }
 
     fn capture_created(&self, capture: &Value) {

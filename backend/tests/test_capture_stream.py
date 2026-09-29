@@ -423,6 +423,43 @@ def test_cancel_discards_audio_without_capture(tmp_path, monkeypatch):
     assert not list(config.get_captures_dir().glob("*.wav"))
 
 
+def test_cancel_after_finish_discards_the_take(tmp_path, monkeypatch):
+    """Escape while the last phrase is still being recognized or cleaned up."""
+    import threading
+    import time
+
+    from fastapi.testclient import TestClient
+
+    app, engine = socket_app(tmp_path, monkeypatch)
+    finishing = threading.Event()
+    sessions = []
+
+    async def slow_run(self):
+        sessions.append(self)
+        await asyncio.to_thread(finishing.wait, 5)
+
+    monkeypatch.setattr(capture_stream.StreamingCapture, "run", slow_run)
+    with TestClient(app) as client:
+        with client.websocket_connect("/captures/stream") as socket:
+            socket.send_json(
+                dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le")
+            )
+            session_id = socket.receive_json()["session_id"]
+            socket.send_bytes(struct.pack("<II", 0, 0) + np.ones(1600, dtype="<i2").tobytes())
+            socket.send_json(dict(type="finish"))
+            socket.send_json(dict(type="cancel"))
+            deadline = time.monotonic() + 5
+            while not sessions[0].abort and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert sessions[0].abort
+            finishing.set()
+            assert socket.receive()["type"] == "websocket.close"
+        assert client.get(f"/captures/stream/{session_id}/result").status_code == 404
+    with Session(engine) as db:
+        assert db.query(Capture).count() == 0
+    assert not list(config.get_captures_dir().glob("*.wav"))
+
+
 def test_origin_rejection_and_session_cap(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     from starlette.websockets import WebSocketDisconnect

@@ -37,6 +37,8 @@ pub enum PillEvent {
         message: String,
         visible_ms: u64,
     },
+    /// Escape cancelled the take: hide the pill at once.
+    Cancelled,
 }
 
 impl PillEvent {
@@ -66,11 +68,13 @@ impl PillEvent {
     /// cue can't bleed into the recording; every error, including a take too
     /// short to keep, plays the error cue. A take with nothing to paste
     /// finishes as `Done`: silence isn't a failure. The start cue is played
-    /// by `dictation::start` itself, before the microphone opens.
+    /// by `dictation::start` itself, before the microphone opens. Escape
+    /// plays a softer stop: the user asked for it, so it isn't an error.
     pub fn cue(&self) -> Option<Cue> {
         match self {
             PillEvent::Transcribing { .. } => Some(Cue::Stop),
             PillEvent::Error { .. } => Some(Cue::Error),
+            PillEvent::Cancelled => Some(Cue::Cancel),
             _ => None,
         }
     }
@@ -104,6 +108,14 @@ pub trait TakeEnv {
     fn upload(&self, wav: Vec<u8>) -> impl Future<Output = Result<Value, String>> + Send;
     /// `POST /captures/{id}/refine`; returns the refined capture.
     fn refine(&self, capture_id: String) -> impl Future<Output = Result<Value, String>> + Send;
+    /// Whether the user pressed Escape on this take.
+    fn cancelled(&self) -> bool;
+    /// Claim the take for insertion; `false` once Escape cancelled it.
+    /// Escape leaves a claimed take alone.
+    fn begin_delivery(&self) -> bool;
+    /// Delete a capture the server saved for a take cancelled too late to
+    /// stop the save.
+    fn discard(&self, capture_id: String) -> impl Future<Output = ()> + Send;
     fn recovery_delay(&self) -> Duration {
         stream::RECOVERY_DELAY
     }
@@ -139,6 +151,9 @@ where
             let Some(recorded) = recorded.await else {
                 return;
             };
+            if env.cancelled() {
+                return;
+            }
             if recorded.duration() < MIN_RECORDING {
                 env.emit(PillEvent::error(delivery::SHORT_RECORDING_MESSAGE));
                 return;
@@ -148,6 +163,8 @@ where
             );
             batch(env, recorded).await;
         }
+        // Escape: the pill is already hidden, and a short take says nothing.
+        Outcome::Cancelled if env.cancelled() => {}
         Outcome::Cancelled => {
             if let Some(recorded) = recorded.await {
                 if recorded.duration() < MIN_RECORDING {
@@ -165,13 +182,33 @@ where
 }
 
 async fn deliver_final<E: TakeEnv>(env: &E, event: &Value) {
-    if let Some(capture) = event.get("capture") {
+    let capture = event.get("capture");
+    let id = capture
+        .and_then(|c| c.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    // Before the capture is announced, so a cancelled one never shows up.
+    if !env.begin_delivery() {
+        if let Some(id) = id {
+            env.discard(id).await;
+        }
+        return;
+    }
+    if let Some(capture) = capture {
         env.capture_created(capture);
     }
-    deliver(env, delivery::plan_final(event)).await;
+    deliver(env, delivery::plan_final(event), id).await;
 }
 
-async fn deliver<E: TakeEnv>(env: &E, plan: Delivery) {
+/// Insert the take's text. `capture_id` is discarded instead if Escape got
+/// there first.
+async fn deliver<E: TakeEnv>(env: &E, plan: Delivery, capture_id: Option<String>) {
+    if !env.begin_delivery() {
+        if let Some(id) = capture_id {
+            env.discard(id).await;
+        }
+        return;
+    }
     match plan {
         Delivery::Paste(text) => match delivery::paste_failure(env.paste(text).await) {
             None => env.emit(PillEvent::Done),
@@ -196,6 +233,16 @@ async fn batch<E: TakeEnv>(env: &E, recorded: Recorded) {
         Ok(capture) => capture,
         Err(message) => return env.emit(PillEvent::error(delivery::upload_failure(&message))),
     };
+    let id = capture
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if env.cancelled() {
+        if let Some(id) = id {
+            env.discard(id).await;
+        }
+        return;
+    }
     env.capture_created(&capture);
     let allow_auto_paste = capture
         .get("allow_auto_paste")
@@ -205,21 +252,23 @@ async fn batch<E: TakeEnv>(env: &E, recorded: Recorded) {
         .get("auto_refine")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let Some(id) = capture
-        .get("id")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-    else {
+    let Some(id) = id else {
         return env.emit(PillEvent::error("Upload returned no capture"));
     };
     if !auto_refine {
-        return deliver(env, delivery::plan(&capture, allow_auto_paste, None)).await;
+        let plan = delivery::plan(&capture, allow_auto_paste, None);
+        return deliver(env, plan, Some(id)).await;
     }
     env.emit(PillEvent::Refining);
-    match env.refine(id.clone()).await {
+    let refined = env.refine(id.clone()).await;
+    if env.cancelled() {
+        return env.discard(id).await;
+    }
+    match refined {
         Ok(refined) => {
             env.capture_updated(&id);
-            deliver(env, delivery::plan(&refined, allow_auto_paste, None)).await;
+            let plan = delivery::plan(&refined, allow_auto_paste, None);
+            deliver(env, plan, Some(id)).await;
         }
         Err(message) if message.is_empty() => env.emit(PillEvent::error("Refinement failed")),
         Err(message) => env.emit(PillEvent::error(message)),
@@ -229,9 +278,10 @@ async fn batch<E: TakeEnv>(env: &E, recorded: Recorded) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dictation::cancel::CancelSwitch;
     use serde_json::json;
     use std::collections::VecDeque;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
     struct FakeEnv {
@@ -246,6 +296,10 @@ mod tests {
         uploads: Mutex<Vec<Vec<u8>>>,
         upload_result: Mutex<Option<Result<Value, String>>>,
         refine_result: Mutex<Option<Result<Value, String>>>,
+        switch: Arc<CancelSwitch>,
+        /// Escape is pressed while the capture is being refined.
+        escape_while_refining: bool,
+        discarded: Mutex<Vec<String>>,
     }
 
     impl TakeEnv for FakeEnv {
@@ -295,6 +349,9 @@ mod tests {
             &self,
             _capture_id: String,
         ) -> impl Future<Output = Result<Value, String>> + Send {
+            if self.escape_while_refining {
+                self.switch.cancel();
+            }
             let result = self
                 .refine_result
                 .lock()
@@ -302,6 +359,16 @@ mod tests {
                 .clone()
                 .unwrap_or_else(|| Err("no refine configured".into()));
             async move { result }
+        }
+        fn cancelled(&self) -> bool {
+            self.switch.is_cancelled()
+        }
+        fn begin_delivery(&self) -> bool {
+            self.switch.begin_delivery()
+        }
+        fn discard(&self, capture_id: String) -> impl Future<Output = ()> + Send {
+            self.discarded.lock().unwrap().push(capture_id);
+            async {}
         }
         fn recovery_delay(&self) -> Duration {
             Duration::ZERO
@@ -519,6 +586,89 @@ mod tests {
         assert!(env.events().is_empty());
     }
 
+    #[tokio::test]
+    async fn a_cancelled_take_says_nothing_even_when_short() {
+        let env = FakeEnv::default();
+        env.switch.cancel();
+        settle(&env, Outcome::Cancelled, async { Some(recorded(0.2)) }).await;
+        assert!(env.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn escape_while_refining_inserts_nothing_and_discards_the_capture() {
+        let env = FakeEnv {
+            escape_while_refining: true,
+            ..FakeEnv::default()
+        };
+        *env.upload_result.lock().unwrap() = Some(Ok(json!({
+            "id": "c1", "transcript_raw": "hello", "transcript_refined": null,
+            "auto_refine": true, "allow_auto_paste": true
+        })));
+        *env.refine_result.lock().unwrap() = Some(Ok(json!({
+            "id": "c1", "transcript_raw": "hello", "transcript_refined": "Hello."
+        })));
+        settle(&env, Outcome::FailedBeforeFinish("closed".into()), async {
+            Some(recorded(1.0))
+        })
+        .await;
+        assert!(env.pasted().is_empty());
+        assert_eq!(*env.discarded.lock().unwrap(), vec!["c1".to_string()]);
+        assert!(!env.events().contains(&PillEvent::Done));
+    }
+
+    #[tokio::test]
+    async fn a_final_arriving_after_escape_is_discarded_not_pasted() {
+        let env = FakeEnv::default();
+        env.switch.cancel();
+        settle(&env, Outcome::Final(final_event("Hello.")), async { None }).await;
+        assert!(env.pasted().is_empty());
+        assert!(env.created.lock().unwrap().is_empty());
+        assert_eq!(*env.discarded.lock().unwrap(), vec!["s1".to_string()]);
+        assert!(env.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_recovered_capture_is_discarded_after_escape() {
+        let env = FakeEnv::default();
+        env.switch.cancel();
+        env.recoveries
+            .lock()
+            .unwrap()
+            .push_back(Recovery::Final(final_event("Recovered.")));
+        settle(
+            &env,
+            Outcome::FailedAfterFinish {
+                session_id: "s1".into(),
+                terminal_error: None,
+            },
+            async { None },
+        )
+        .await;
+        assert!(env.pasted().is_empty());
+        assert_eq!(*env.discarded.lock().unwrap(), vec!["s1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn escape_before_the_batch_fallback_uploads_nothing() {
+        let env = FakeEnv::default();
+        env.switch.cancel();
+        settle(&env, Outcome::FailedBeforeFinish("closed".into()), async {
+            Some(recorded(1.0))
+        })
+        .await;
+        assert!(env.uploads.lock().unwrap().is_empty());
+        assert!(env.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn escape_after_the_paste_began_changes_nothing() {
+        let env = FakeEnv::default();
+        settle(&env, Outcome::Final(final_event("Hello.")), async { None }).await;
+        assert!(!env.switch.cancel());
+        assert_eq!(env.pasted(), vec!["Hello."]);
+        assert!(env.discarded.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn stopping_and_errors_play_cues_but_done_is_silent() {
         assert_eq!(
@@ -526,6 +676,7 @@ mod tests {
             Some(Cue::Stop)
         );
         assert_eq!(PillEvent::error("boom").cue(), Some(Cue::Error));
+        assert_eq!(PillEvent::Cancelled.cue(), Some(Cue::Cancel));
         assert_eq!(
             PillEvent::error(delivery::SHORT_RECORDING_MESSAGE).cue(),
             Some(Cue::Error)

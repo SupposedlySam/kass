@@ -31,7 +31,8 @@ pub enum Outcome {
         session_id: String,
         terminal_error: Option<String>,
     },
-    /// The take was abandoned (too short, microphone failure, shutdown).
+    /// The take was abandoned (too short, microphone failure, shutdown,
+    /// Escape).
     Cancelled,
     /// A command take refused before it began: nothing to rewrite. The
     /// message says why.
@@ -378,6 +379,20 @@ impl StreamClient {
     /// the reason to show.
     pub fn decline(&mut self, message: &str) -> Vec<Action> {
         self.abandon(Outcome::Declined(message.to_string()))
+    }
+
+    /// The user pressed Escape. Unlike [`Self::cancel`], also after `finish`:
+    /// the server then discards the session instead of saving its capture.
+    pub fn abort(&mut self) -> Vec<Action> {
+        if self.outcome.is_some() {
+            return Vec::new();
+        }
+        self.abandon(Outcome::Cancelled);
+        if self.start_sent {
+            vec![Action::Text(protocol::cancel_message())]
+        } else {
+            Vec::new()
+        }
     }
 
     fn abandon(&mut self, outcome: Outcome) -> Vec<Action> {
@@ -831,6 +846,32 @@ mod tests {
             Some(&Outcome::Declined("Select text".into()))
         );
         assert!(client.set_selection("late".into()).is_empty());
+    }
+
+    #[test]
+    fn escape_after_finish_still_tells_the_server_to_discard() {
+        let mut client = StreamClient::new(1 << 20);
+        open_and_ready(&mut client);
+        client.push_audio(&[1]);
+        client.request_finish();
+        // A plain cancel after finish says nothing: the capture is committed.
+        let aborted = texts(&client.abort());
+        assert_eq!(aborted, vec![serde_json::json!({"type": "cancel"})]);
+        assert_eq!(client.outcome(), Some(&Outcome::Cancelled));
+        // A final arriving afterwards is ignored.
+        assert!(client.on_text(&final_event("s1")).is_empty());
+        assert_eq!(client.outcome(), Some(&Outcome::Cancelled));
+        assert!(client.abort().is_empty());
+    }
+
+    #[test]
+    fn escape_before_the_server_hears_the_start_sends_nothing() {
+        let mut client = StreamClient::new(1 << 20);
+        client.set_format(48_000);
+        assert!(client.abort().is_empty());
+        assert_eq!(client.outcome(), Some(&Outcome::Cancelled));
+        // The socket opening afterwards doesn't start a session.
+        assert!(client.on_open().is_empty());
     }
 
     #[test]

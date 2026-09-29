@@ -11,7 +11,7 @@ import { SERVER_URL } from '@/stores/serverStore';
  * overwrite the pill of a newer one.
  */
 export type NativeDictationEvent =
-  | { take: number; state: 'preparing' | 'recording' | 'refining' | 'done' }
+  | { take: number; state: 'preparing' | 'recording' | 'refining' | 'done' | 'cancelled' }
   | { take: number; state: 'transcribing'; elapsed_ms: number }
   | { take: number; state: 'error'; message: string; visible_ms: number };
 
@@ -123,6 +123,11 @@ export function useNativeDictationSession(): NativeDictationSession {
             timerRef.current = null;
             setPillState('hidden');
           }, REST_FADE_MS);
+          break;
+        case 'cancelled':
+          // Escape: gone at once, without the resting fade.
+          startedAtRef.current = null;
+          setPillState('hidden');
           break;
         case 'error':
           startedAtRef.current = null;

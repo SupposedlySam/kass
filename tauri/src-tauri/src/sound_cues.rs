@@ -1,5 +1,5 @@
-//! Short sounds for dictation: recording started, recording stopped, and
-//! canceled or failed.
+//! Short sounds for dictation: recording started, recording stopped,
+//! cancelled with Escape, and failed.
 //!
 //! Played with AppKit's `NSSound`, which follows the current output device
 //! and takes a per-sound volume, so no audio stream of our own stays open
@@ -41,19 +41,32 @@ pub enum Cue {
     Start,
     /// The microphone closed with a take to transcribe.
     Stop,
-    /// The take was canceled or failed.
+    /// The take failed, or was too short to keep.
     Error,
+    /// The user pressed Escape: the stop sound, softer.
+    Cancel,
 }
 
 impl Cue {
     fn index(self) -> usize {
         match self {
             Cue::Start => 0,
-            Cue::Stop => 1,
+            Cue::Stop | Cue::Cancel => 1,
             Cue::Error => 2,
         }
     }
+
+    /// Scales the user's cue volume.
+    fn gain(self) -> f32 {
+        match self {
+            Cue::Cancel => CANCEL_GAIN,
+            Cue::Start | Cue::Stop | Cue::Error => 1.0,
+        }
+    }
 }
+
+/// The cancel cue is the stop sound at half the volume: a quiet "never mind".
+const CANCEL_GAIN: f32 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -138,7 +151,7 @@ pub fn init(app: &AppHandle) {
 pub fn play(cue: Cue) -> bool {
     current()
         .playback_volume()
-        .is_some_and(|volume| send(cue, volume))
+        .is_some_and(|volume| send(cue, volume * cue.gain()))
 }
 
 fn send(cue: Cue, volume: f32) -> bool {
@@ -302,6 +315,12 @@ mod tests {
         assert_eq!(on.playback_volume(), Some(DEFAULT_VOLUME));
         assert_eq!(on.with(Some(false), None).playback_volume(), None);
         assert_eq!(on.with(None, Some(0.0)).playback_volume(), None);
+    }
+
+    #[test]
+    fn the_cancel_cue_is_a_softer_stop() {
+        assert_eq!(Cue::Cancel.index(), Cue::Stop.index());
+        assert!(Cue::Cancel.gain() < Cue::Stop.gain());
     }
 
     #[test]
