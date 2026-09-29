@@ -167,6 +167,10 @@ def check(said: str, cleaned: str, allow_retractions: bool = False) -> Verdict:
         )
     if count_commands(cleaned) != count_commands(said):
         return Verdict("reject", reason="command")
+    # Spoken quotes, brackets and symbols are in ``said`` as characters;
+    # losing one loses what the speaker asked for.
+    if any(_count_marks(cleaned, marks) < _count_marks(said, marks) for marks in _MARKS):
+        return Verdict("reject", reason="command")
     lost_terms = sorted({t for t in before if _is_technical(t) and t not in kept and not retracted(t)})
     if lost_terms:
         return Verdict("reject", reason="technical", missing=lost_terms)
@@ -237,6 +241,13 @@ def _shown_examples() -> list[tuple[str, str]]:
         return [*REFINEMENT_EXAMPLES, *for_prompt()]
     except Exception:
         return []
+
+
+_MARKS = ('"\u201c\u201d', *"()[]{}<>/\\|^")
+
+
+def _count_marks(text: str, marks: str) -> int:
+    return sum(text.count(mark) for mark in marks)
 
 
 def check_refinement(said: str, refined: str, flags, examples=None) -> tuple[str, Verdict]:

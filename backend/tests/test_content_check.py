@@ -166,3 +166,9 @@ def test_short_formatting_additions_are_not_mistaken_for_copying():
     examples = [("list go to the store go home", "1. Go to the store\n2. Go home")]
     _, verdict = check_refinement(said, refined, RefinementFlags(), examples=examples)
     assert verdict.outcome != "reject"
+
+
+def test_a_cleanup_that_drops_a_spoken_mark_is_rejected():
+    assert check('he said "hi (sort of)"', "He said hi, sort of.").outcome == "reject"
+    assert check("and/or ls | wc", "And or ls wc.").outcome == "reject"
+    assert check('he said "hi"', "He said “hi.”").outcome == "ok"

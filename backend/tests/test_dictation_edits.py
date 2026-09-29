@@ -117,6 +117,24 @@ def test_line_break_talked_about_stays_words(raw):
         # An explicit mark applies alone; a quoted "new line" stays words.
         ("call me start quote soon", 'call me "soon'),
         ("Quote new line end quote", '"new line"'),
+        ("the list open bracket one two close bracket here", "the list [one two] here"),
+        ("brackets one brackets", "[one]"),
+        ("a map open curly brace key close curly brace", "a map {key}"),
+        # "curly bracket" is the same mark, mixed up or not.
+        ("a map open curly bracket key close curly bracket", "a map {key}"),
+        ("open curly brace x end curly bracket", "{x}"),
+        ("curly brackets key curly brackets", "{key}"),
+        ("type open angle bracket div close angle bracket", "type <div>"),
+        ("open carrot div close carrot", "<div>"),
+        # Symbols: slash and caret join words, a pipe stands between them.
+        ("and slash or", "and/or"),
+        ("Hello, slash, world", "Hello/world"),
+        ("src slash components slash index", "src/components/index"),
+        ("backslash n", "\\n"),
+        ("x caret 2", "x^2"),
+        ("x carrot symbol 2", "x^2"),
+        ("ls pipe grep foo", "ls | grep foo"),
+        ("ls vertical bar wc", "ls | wc"),
     ],
 )
 def test_spoken_marks(raw, expected):
@@ -132,6 +150,14 @@ def test_spoken_marks(raw, expected):
         "he's quote unquote busy",
         "at the end quote the price",
         "Get quotes from both vendors",
+        "The brackets are loose",
+        "I ate a carrot",
+        "carrot cake is good",
+        "they will slash the budget",
+        "use a slash",
+        "pipe it into grep",
+        "The pipe burst",
+        "draw a vertical bar here",
     ],
 )
 def test_marks_talked_about_stay_words(raw):

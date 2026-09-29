@@ -50,15 +50,29 @@ _TALKED_ABOUT = frozenset(
 # Before "open quote" or "end quote", only these do: "the end quote".
 _NAMED = frozenset("a an the this that these those each every another any some no our my your his her its their".split())
 _PREVIOUS_WORD = re.compile(r"([\w'\u2019]+)\W*$")
-# A spoken mark: "open quote", "end quote", "unquote", "open parenthesis",
-# "close paren", or a bare "quote" or "parentheses" that opens and, said
-# again, closes.
+# A spoken mark: "open quote", "end quote", "unquote", "open paren", "close
+# bracket", "open curly brace", "open angle bracket" or "open caret", or a bare
+# "quote", "parentheses" or "brackets" that opens and, said again, closes.
+# Or one symbol: "slash", "backslash", "pipe", "vertical bar", "caret".
 _MARK_COMMAND = re.compile(
-    r"(?<![\w'\u2019-])(?:(?P<open>open|start|begin)\s+|(?P<close>close|end)\s+)?"
-    r"(?:(?P<quote>quot(?:es?|ation marks?))|(?P<paren>paren(?:s|thesis|theses)?)|(?P<unquote>unquote))"
-    r"(?![\w'\u2019-])",
+    r"(?<![\w'\u2019-])(?:"
+    r"(?:(?P<open>open|start|begin)\s+|(?P<close>close|end)\s+)?(?:"
+    r"(?P<quote>quot(?:es?|ation marks?))"
+    r"|(?P<paren>paren(?:s|thesis|theses)?|round brackets?)"
+    r"|(?P<curly>(?:curly )?braces?|curly brackets?)"
+    # Whisper spells "caret" as it sounds: "carrot".
+    r"|(?P<angle>angle brackets?|(?P<caret>car(?:et|rot)s?)(?P<caret_noun>\s+(?:symbol|sign|character))?)"
+    r"|(?P<square>(?:square )?brackets?)"
+    r"|(?P<unquote>unquote))"
+    r"|(?P<slash>(?:forward )?slash)|(?P<backslash>back ?slash)"
+    r"|(?P<pipe>vertical bar|pipe(?P<pipe_noun>\s+(?:symbol|character))?)"
+    r")(?![\w'\u2019-])",
     re.IGNORECASE,
 )
+_PAIRS = {"quote": '""', "paren": "()", "curly": "{}", "angle": "<>", "square": "[]"}
+# After a bare symbol, these make it a verb: "slash the budget", "pipe it".
+_OBJECTS = _TALKED_ABOUT | frozenset("it them me us him her you".split())
+_NEXT_WORD = re.compile(r"\W*([\w'\u2019]+)")
 
 
 def _capitalized(text: str) -> str:
@@ -164,6 +178,15 @@ def apply_line_breaks(text: str) -> str:
     return re.sub(r"(?<=\n)([^\S\n]*)(\w)", lambda m: m.group(1) + m.group(2).upper(), joined)
 
 
+def _kind(match: re.Match) -> str | None:
+    """The pair a mark belongs to, or None for a single symbol."""
+    if match.group("unquote"):
+        return "quote"
+    if match.group("caret") and not (match.group("open") or match.group("close")):
+        return None
+    return next((kind for kind in _PAIRS if match.group(kind)), None)
+
+
 def _talked_about(text: str, match: re.Match, closes: bool) -> bool:
     previous = _PREVIOUS_WORD.search(text[: match.start()])
     if not previous:
@@ -174,50 +197,90 @@ def _talked_about(text: str, match: re.Match, closes: bool) -> bool:
     return previous.group(1).lower() in (_NAMED if named else _TALKED_ABOUT)
 
 
-def _mark_roles(text: str, matches: list[re.Match]) -> dict[int, bool]:
-    """Which matches are commands, by index: True opens a mark, False closes one.
+def _symbol(text: str, match: re.Match) -> str | None:
+    """The symbol a bare "slash", "pipe" or "caret" is, or None for a word.
+
+    "pipe symbol", "vertical bar" and "caret sign" are, unless talked about
+    ("a vertical bar"). A bare one
+    needs a word after it that is not its object ("ls pipe grep", not "pipe
+    it"), and "carrot" alone is a vegetable.
+    """
+    if match.group("caret"):
+        symbol = "^"
+        spelled = match.group("caret").lower() == "caret"
+        certain = match.group("caret_noun")
+    elif match.group("pipe"):
+        symbol = "|"
+        spelled = True
+        certain = match.group("pipe_noun") or not match.group("pipe").lower().startswith("pipe")
+    else:
+        symbol = "/" if match.group("slash") else "\\"
+        spelled, certain = True, False
+    if _talked_about(text, match, closes=False):
+        return None
+    if certain:
+        return symbol
+    if not spelled:
+        return None
+    following = _NEXT_WORD.match(text, match.end())
+    if not following or following.group(1).lower() in _OBJECTS:
+        return None
+    return symbol
+
+
+def _mark_roles(text: str, matches: list[re.Match]) -> dict[int, str]:
+    """What each command match becomes, by index: "open", "close" or a symbol.
 
     A bare "quote" or "parentheses" is a command only when it has a partner:
     one alone ("get a quote", "quote me on that") is a word. "open quote" or
     "end quote" is a command on its own. "quote unquote" is an idiom, not a
     pair of marks around nothing.
     """
-    roles: dict[int, bool] = {}
+    roles: dict[int, str] = {}
     bare: set[int] = set()
-    opened: dict[str, list[int]] = {'"': [], "(": []}
+    opened: dict[str, list[int]] = {kind: [] for kind in _PAIRS}
     for index, match in enumerate(matches):
-        kind = "(" if match.group("paren") else '"'
+        kind = _kind(match)
+        if kind is None:
+            symbol = _symbol(text, match)
+            if symbol is not None:
+                roles[index] = symbol
+            continue
         if _talked_about(text, match, closes=bool(opened[kind])):
             continue
         explicit_close = match.group("close") or match.group("unquote")
         if match.group("open") or not (explicit_close or opened[kind]):
-            roles[index] = True
+            roles[index] = "open"
             opened[kind].append(index)
             if not match.group("open"):
                 bare.add(index)
             continue
-        roles[index] = False
+        roles[index] = "close"
         if opened[kind]:
             partner = opened[kind].pop()
             if not re.search(r"\w", text[matches[partner].end() : match.start()]):
                 del roles[partner], roles[index]
-    for index in opened['"'] + opened["("]:
-        if index in bare:
-            roles.pop(index, None)
+    for indexes in opened.values():
+        for index in indexes:
+            if index in bare:
+                roles.pop(index, None)
     return roles
 
 
 def apply_spoken_marks(text: str) -> str:
-    """Turn spoken quotation marks and parentheses into ``"`` and ``()``.
+    """Turn spoken quotes, brackets and symbols into the characters.
 
-    "open quote", "start quote", "end quote", "close quote", "unquote",
-    "open parenthesis", "close paren" and the like, or a bare "quote" or
-    "parentheses" said once to open and again to close. An opening mark sits
-    against the word after it and a closing mark against the word before it.
-    A mark that is talked about ("a quote", "in parentheses") or a bare one
-    with no partner stays as words.
+    Pairs: "open quote" / "end quote" / "unquote", "open paren" / "close
+    paren", "open bracket", "open curly brace", "open angle bracket" or "open
+    caret", and the like; or a bare "quote", "parentheses", "brackets" said
+    once to open and again to close. An opening mark sits against the word
+    after it and a closing mark against the word before it. Symbols: "slash"
+    and "backslash" join the words around them ("and/or"), "caret" too
+    ("x^2"); "pipe" or "vertical bar" stands between them ("ls | grep").
+    A mark that is talked about ("a quote", "in parentheses", "slash the
+    budget") or a bare pair word with no partner stays as words.
     """
-    if not re.search(r"quot|paren", text, re.IGNORECASE):
+    if not re.search(r"quot|paren|brac|slash|pipe|bar|car", text, re.IGNORECASE):
         return text
     matches = list(_MARK_COMMAND.finditer(text))
     roles = _mark_roles(text, matches)
@@ -226,25 +289,34 @@ def apply_spoken_marks(text: str) -> str:
     out = ""
     last = 0
     for index, match in enumerate(matches):
-        if index not in roles:
+        role = roles.get(index)
+        if role is None:
             continue
         out += text[last : match.start()]
         last = match.end()
         rest = text[last:]
-        if roles[index]:
-            mark = "(" if match.group("paren") else '"'
+        if role not in ("open", "close"):
+            # Whisper's commas around a symbol are pauses, not text.
+            out = out.rstrip(" \t,")
+            if role == "|":
+                out += " | " if out and out[-1] != "\n" else "| "
+            else:
+                out += role
+            last += len(rest) - len(rest.lstrip(" \t,"))
+            continue
+        pair = _PAIRS[_kind(match)]
+        if role == "open":
             out = out.rstrip(" \t")
-            if mark == "(":
+            if pair != '""':
                 # "the plan, open paren": the comma was Whisper's pause.
                 out = out.rstrip(",").rstrip(" \t")
-            if out and out[-1] not in '\n("':
+            if out and out[-1] not in '\n"([{<':
                 out += " "
-            out += mark
+            out += pair[0]
             # Whisper's pause after the command ("quote, I'm") goes with it.
             last += len(rest) - len(rest.lstrip(" \t,.;:"))
             continue
-        mark = ")" if match.group("paren") else '"'
-        out = out.rstrip(" \t").rstrip(",").rstrip(" \t") + mark
+        out = out.rstrip(" \t").rstrip(",").rstrip(" \t") + pair[1]
         spaces = len(rest) - len(rest.lstrip(" \t"))
         rest = rest[spaces:]
         if out[-2:-1] in (".", "!", "?") and rest[:1] == ".":
