@@ -224,6 +224,7 @@ mod tests {
             incoming,
             audio_rx,
             Timeouts::default(),
+            std::future::pending(),
         )
         .await;
         assert!(matches!(outcome, Outcome::Final(_)));
@@ -263,6 +264,7 @@ mod tests {
             incoming,
             audio_rx,
             Timeouts::default(),
+            std::future::pending(),
         ));
         audio_tx.send(AudioMsg::Format(rate)).unwrap();
         let frame = (rate / 10) as usize;

@@ -24,6 +24,11 @@
 //! down to the OS event tap (keytap's core promise). Defaults bind to
 //! right-hand Cmd + right-hand Option so the usual left-hand shortcuts
 //! stay with the OS / app.
+//!
+//! Escape cancels a take ([`dictation::cancel`]). It is watched on a second
+//! tap of its own: in the matcher, a held chord (longest match) or a latched
+//! toggle would hide it. The tap only observes, so Escape still reaches the
+//! focused app too.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,7 +37,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use keytap::chord::{Chord, ChordEvent, ChordMatcher};
-use keytap::{Key, RecvTimeoutError};
+use keytap::{EventKind, Key, RecvTimeoutError, Tap};
 use tauri::AppHandle;
 
 use crate::dictation;
@@ -91,7 +96,18 @@ pub struct HotkeyMonitor {
 
 struct Active {
     dispatcher: JoinHandle<()>,
+    escape: Option<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
+}
+
+impl Active {
+    fn stop(self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        let _ = self.dispatcher.join();
+        if let Some(escape) = self.escape {
+            let _ = escape.join();
+        }
+    }
 }
 
 impl HotkeyMonitor {
@@ -119,8 +135,7 @@ impl HotkeyMonitor {
         // ChordMatcher stops keytap's chord-worker thread and the
         // underlying Tap.
         if let Some(active) = self.active.take() {
-            active.shutdown.store(true, Ordering::Relaxed);
-            let _ = active.dispatcher.join();
+            active.stop();
         }
 
         if bindings.values().all(|set| set.is_empty()) {
@@ -138,15 +153,19 @@ impl HotkeyMonitor {
         };
 
         let shutdown = Arc::new(AtomicBool::new(false));
+        // Set by the Escape watcher after a cancel, for the dispatcher.
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let escape = spawn_escape_watcher(&self.app, &bindings, &shutdown, &cancelled);
         let shutdown_for_thread = shutdown.clone();
         let app = self.app.clone();
         let dispatcher = thread::Builder::new()
             .name("voicebox-hotkey-dispatcher".into())
-            .spawn(move || dispatcher_loop(app, matcher, shutdown_for_thread))
+            .spawn(move || dispatcher_loop(app, bindings, matcher, shutdown_for_thread, cancelled))
             .expect("spawn hotkey dispatcher thread");
 
         self.active = Some(Active {
             dispatcher,
+            escape,
             shutdown,
         });
     }
@@ -155,9 +174,90 @@ impl HotkeyMonitor {
 impl Drop for HotkeyMonitor {
     fn drop(&mut self) {
         if let Some(active) = self.active.take() {
-            active.shutdown.store(true, Ordering::Relaxed);
-            let _ = active.dispatcher.join();
+            active.stop();
         }
+    }
+}
+
+// ========================================================================
+// Escape
+// ========================================================================
+
+/// Watch for Escape on a tap of its own. Skipped when a chord uses Escape
+/// itself, so pressing that chord doesn't cancel what it starts.
+fn spawn_escape_watcher(
+    app: &AppHandle,
+    bindings: &Bindings,
+    shutdown: &Arc<AtomicBool>,
+    cancelled: &Arc<AtomicBool>,
+) -> Option<JoinHandle<()>> {
+    if bindings.values().any(|keys| keys.contains(&Key::Escape)) {
+        return None;
+    }
+    let tap = match Tap::new() {
+        Ok(tap) => tap,
+        Err(err) => {
+            eprintln!("HotkeyMonitor: Escape tap failed ({err}); Escape won't cancel dictation.");
+            return None;
+        }
+    };
+    let app = app.clone();
+    let shutdown = shutdown.clone();
+    let cancelled = cancelled.clone();
+    let spawned = thread::Builder::new()
+        .name("voicebox-escape-watcher".into())
+        .spawn(move || {
+            while !shutdown.load(Ordering::Relaxed) {
+                match tap.recv_timeout(Duration::from_millis(100)) {
+                    // Ignored when no take is open: Escape is only the app's.
+                    Ok(event) if is_escape_press(event.kind) => {
+                        if dictation::cancel(&app) {
+                            cancelled.store(true, Ordering::Relaxed);
+                        }
+                    }
+                    Ok(_) | Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            }
+        });
+    match spawned {
+        Ok(handle) => Some(handle),
+        Err(err) => {
+            eprintln!("HotkeyMonitor: failed to spawn the Escape watcher ({err})");
+            None
+        }
+    }
+}
+
+/// Escape going down. Auto-repeat doesn't count: holding Escape cancels once.
+fn is_escape_press(kind: EventKind) -> bool {
+    kind == EventKind::KeyDown(Key::Escape)
+}
+
+/// Whether keytap holds the toggle chord latched. It stays latched until the
+/// chord's next press, even once Escape cancelled the take it started: that
+/// press would only unlatch it, and until then keytap ignores the other
+/// chords. So after a cancel the dispatcher swaps in a fresh matcher.
+#[derive(Debug, Default)]
+struct ToggleLatch {
+    latched: bool,
+}
+
+impl ToggleLatch {
+    fn observe(&mut self, effect: Effect) {
+        match effect {
+            Effect::StartRecording(ChordAction::ToggleToTalk)
+            | Effect::RestartRecording(ChordAction::ToggleToTalk) => self.latched = true,
+            Effect::StopRecording(ChordAction::ToggleToTalk) => self.latched = false,
+            _ => {}
+        }
+    }
+
+    /// After a cancel: whether the matcher needs replacing. A fresh one
+    /// starts unlatched with nothing held, so keys still down from the
+    /// cancelled take start and end nothing when released.
+    fn needs_fresh_matcher(&mut self) -> bool {
+        std::mem::take(&mut self.latched)
     }
 }
 
@@ -186,10 +286,25 @@ fn build_matcher(bindings: &Bindings) -> Result<ChordMatcher<ChordAction>, keyta
     builder.build()
 }
 
-fn dispatcher_loop(app: AppHandle, matcher: ChordMatcher<ChordAction>, shutdown: Arc<AtomicBool>) {
+fn dispatcher_loop(
+    app: AppHandle,
+    bindings: Bindings,
+    matcher: ChordMatcher<ChordAction>,
+    shutdown: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+) {
+    let mut matcher = matcher;
+    let mut latch = ToggleLatch::default();
     while !shutdown.load(Ordering::Relaxed) {
+        if cancelled.swap(false, Ordering::Relaxed) && latch.needs_fresh_matcher() {
+            // Built before the old one drops, so no key event is missed.
+            match build_matcher(&bindings) {
+                Ok(fresh) => matcher = fresh,
+                Err(err) => eprintln!("HotkeyMonitor: could not reset the toggle chord ({err})"),
+            }
+        }
         match matcher.recv_timeout(Duration::from_millis(100)) {
-            Ok(event) => process_event(&app, &matcher, event),
+            Ok(event) => process_event(&app, &matcher, &mut latch, event),
             Err(RecvTimeoutError::Timeout) => continue,
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -203,11 +318,16 @@ fn dispatcher_loop(app: AppHandle, matcher: ChordMatcher<ChordAction>, shutdown:
 fn process_event(
     app: &AppHandle,
     matcher: &ChordMatcher<ChordAction>,
+    latch: &mut ToggleLatch,
     event: ChordEvent<ChordAction>,
 ) {
+    let mut apply_effect = |effect: Effect, time: Instant| {
+        latch.observe(effect);
+        apply_effect(app, effect, time);
+    };
     match event {
         ChordEvent::Start { id, time } => {
-            apply_effect(app, Effect::StartRecording(id), time);
+            apply_effect(Effect::StartRecording(id), time);
         }
         ChordEvent::End {
             id: end_id,
@@ -224,18 +344,18 @@ fn process_event(
                     id: start_id,
                     time: start_time,
                 }) if start_time == end_time => {
-                    apply_effect(app, Effect::RestartRecording(start_id), start_time);
+                    apply_effect(Effect::RestartRecording(start_id), start_time);
                 }
                 Ok(other) => {
-                    apply_effect(app, Effect::StopRecording(end_id), end_time);
+                    apply_effect(Effect::StopRecording(end_id), end_time);
                     // The peeked event wasn't a transition partner;
                     // process it in its own right. Recursion depth is
                     // bounded by the number of back-to-back chord
                     // events, in practice 1–2.
-                    process_event(app, matcher, other);
+                    process_event(app, matcher, latch, other);
                 }
                 Err(_) => {
-                    apply_effect(app, Effect::StopRecording(end_id), end_time);
+                    apply_effect(Effect::StopRecording(end_id), end_time);
                 }
             }
         }
@@ -275,5 +395,52 @@ fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
             // PTT upgraded to hands-free mid-hold: keep the same take
             // recording (it was never interrupted) until the toggle ends it.
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_escape_going_down_cancels() {
+        assert!(is_escape_press(EventKind::KeyDown(Key::Escape)));
+        assert!(!is_escape_press(EventKind::KeyRepeat(Key::Escape)));
+        assert!(!is_escape_press(EventKind::KeyUp(Key::Escape)));
+        assert!(!is_escape_press(EventKind::KeyDown(Key::Space)));
+    }
+
+    #[test]
+    fn a_push_to_talk_cancel_keeps_the_matcher() {
+        // Releasing the held chord later stops nothing: the take is gone.
+        let mut latch = ToggleLatch::default();
+        latch.observe(Effect::StartRecording(ChordAction::PushToTalk));
+        assert!(!latch.needs_fresh_matcher());
+    }
+
+    #[test]
+    fn a_latched_toggle_cancel_gets_a_fresh_matcher() {
+        let mut latch = ToggleLatch::default();
+        latch.observe(Effect::StartRecording(ChordAction::ToggleToTalk));
+        assert!(latch.needs_fresh_matcher());
+        // The fresh matcher starts unlatched.
+        assert!(!latch.needs_fresh_matcher());
+    }
+
+    #[test]
+    fn a_push_to_talk_upgraded_to_hands_free_is_latched() {
+        let mut latch = ToggleLatch::default();
+        latch.observe(Effect::StartRecording(ChordAction::PushToTalk));
+        latch.observe(Effect::RestartRecording(ChordAction::ToggleToTalk));
+        assert!(latch.needs_fresh_matcher());
+    }
+
+    #[test]
+    fn a_toggle_already_pressed_off_needs_no_reset() {
+        // Escape while its take is still being transcribed.
+        let mut latch = ToggleLatch::default();
+        latch.observe(Effect::StartRecording(ChordAction::ToggleToTalk));
+        latch.observe(Effect::StopRecording(ChordAction::ToggleToTalk));
+        assert!(!latch.needs_fresh_matcher());
     }
 }

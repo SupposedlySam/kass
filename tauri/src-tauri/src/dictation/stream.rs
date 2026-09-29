@@ -58,15 +58,18 @@ impl Default for Timeouts {
     }
 }
 
-/// Run one take's stream to its [`Outcome`].
+/// Run one take's stream to its [`Outcome`]. `cancel` resolves when the user
+/// presses Escape: the take is abandoned, even after `finish`.
 pub async fn drive(
     client: StreamClient,
     out: UnboundedSender<Action>,
     incoming: UnboundedReceiver<Incoming>,
     audio: UnboundedReceiver<AudioMsg>,
     timeouts: Timeouts,
+    cancel: impl Future<Output = ()>,
 ) -> Outcome {
     let mut client = client;
+    let mut cancel = std::pin::pin!(cancel);
     let mut incoming = incoming;
     let mut audio = audio;
     let handshake_deadline = Instant::now() + timeouts.handshake;
@@ -90,6 +93,8 @@ pub async fn drive(
         };
         let actions = tokio::select! {
             biased;
+            // First: Escape wins over a `final` or `End` arriving with it.
+            () = &mut cancel => client.abort(),
             message = incoming.recv(), if incoming_open => match message {
                 Some(Incoming::Open) => client.on_open(),
                 Some(Incoming::Text(text)) => client.on_text(&text),
@@ -222,6 +227,7 @@ mod tests {
         out_rx: UnboundedReceiver<Action>,
         incoming: UnboundedSender<Incoming>,
         audio: UnboundedSender<AudioMsg>,
+        escape: Option<tokio::sync::oneshot::Sender<()>>,
         task: tokio::task::JoinHandle<Outcome>,
     }
 
@@ -233,12 +239,25 @@ mod tests {
         let (out_tx, out_rx) = unbounded_channel();
         let (in_tx, in_rx) = unbounded_channel();
         let (audio_tx, audio_rx) = unbounded_channel();
-        let task = tokio::spawn(drive(client, out_tx, in_rx, audio_rx, timeouts));
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let cancel = async move {
+            if cancel_rx.await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        };
+        let task = tokio::spawn(drive(client, out_tx, in_rx, audio_rx, timeouts, cancel));
         Harness {
             out_rx,
             incoming: in_tx,
             audio: audio_tx,
+            escape: Some(cancel_tx),
             task,
+        }
+    }
+
+    impl Harness {
+        fn press_escape(&mut self) {
+            let _ = self.escape.take().unwrap().send(());
         }
     }
 
@@ -401,6 +420,46 @@ mod tests {
             .unwrap();
         h.audio.send(AudioMsg::Cancel).unwrap();
         assert_eq!(next_text(&mut h).await["type"], "start");
+        assert_eq!(next_text(&mut h).await["type"], "cancel");
+        assert_eq!(h.task.await.unwrap(), Outcome::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn escape_while_recording_tells_the_server_to_discard() {
+        let mut h = spawn(Timeouts::default());
+        h.audio.send(AudioMsg::Format(16_000)).unwrap();
+        h.incoming.send(Incoming::Open).unwrap();
+        h.incoming
+            .send(Incoming::Text(
+                r#"{"type":"ready","session_id":"s1"}"#.into(),
+            ))
+            .unwrap();
+        h.audio.send(AudioMsg::Frame(vec![1; 1600])).unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "start");
+        h.press_escape();
+        // The microphone's end, right behind Escape, finishes nothing.
+        h.audio.send(AudioMsg::End).unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "cancel");
+        assert_eq!(h.task.await.unwrap(), Outcome::Cancelled);
+        assert!(h.out_rx.recv().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn escape_while_the_server_finishes_discards_the_take() {
+        let mut h = spawn(Timeouts::default());
+        h.audio.send(AudioMsg::Format(16_000)).unwrap();
+        h.incoming.send(Incoming::Open).unwrap();
+        h.incoming
+            .send(Incoming::Text(
+                r#"{"type":"ready","session_id":"s1"}"#.into(),
+            ))
+            .unwrap();
+        h.audio.send(AudioMsg::Frame(vec![1; 1600])).unwrap();
+        h.audio.send(AudioMsg::End).unwrap();
+        assert_eq!(next_text(&mut h).await["type"], "start");
+        assert_eq!(next_text(&mut h).await["type"], "finish");
+        // Transcribing or refining: Escape still cancels.
+        h.press_escape();
         assert_eq!(next_text(&mut h).await["type"], "cancel");
         assert_eq!(h.task.await.unwrap(), Outcome::Cancelled);
     }
