@@ -1062,6 +1062,7 @@
       "move": "Move {{app}} to another style",
       "moveTo": "Style for {{app}}",
       "new": "New style",
+      "add": "Add",
       "newHint": "Starts with the default style's settings and nothing learned. Press Enter to add it.",
       "default": "Default",
       "showing": "Showing in list",
