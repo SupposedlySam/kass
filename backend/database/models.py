@@ -128,9 +128,12 @@ class WritingStyle(Base):
     # The style of every app the user hasn't assigned. Exactly one row.
     is_default = Column(Boolean, nullable=False, default=False)
     punctuation_style = Column(String, nullable=False, default="standard")
+    # No longer settings (both always on); kept so existing rows still load.
     capitalize_first = Column(Boolean, nullable=False, default=True)
     smart_cleanup = Column(Boolean, nullable=False, default=True)
     preserve_technical = Column(Boolean, nullable=False, default=True)
+    # How the user says they write in this style's apps (docs/plans/TEACH_BY_REPLYING.md).
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

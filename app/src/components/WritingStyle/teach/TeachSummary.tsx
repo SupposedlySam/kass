@@ -2,47 +2,39 @@ import { Check, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import type { WritingStyleCalibrationResult } from '@/lib/api/types';
+import type { TeachFinishResult } from '@/lib/api/types';
 
-/** A later paragraph that still needed this much change means another run will help. */
-const SETTLED_CHANGE = 0.1;
+const T = 'writingStyle.teach.summary';
 
-/** The end of calibration: what was learned, and whether to follow it. */
-export function CalibrationSummary({
-  changes,
+/** After finishing: what was saved and learned, and whether to follow the learned punctuation. */
+export function TeachSummary({
   result,
   learnedStyleOn,
   restarting,
-  onRunAgain,
+  onKeepTeaching,
   onUseLearned,
   onClose,
 }: {
-  /** Share of each paragraph the user changed, 0 to 1. */
-  changes: number[];
-  result: WritingStyleCalibrationResult;
+  result: TeachFinishResult;
   learnedStyleOn: boolean;
   restarting: boolean;
-  onRunAgain: () => void;
+  onKeepTeaching: () => void;
   onUseLearned: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const habits = result.status.habits;
-  const edited = changes.filter((change) => change > 0).length;
 
   return (
-    <>
+    <div className="flex max-h-[90vh] w-full flex-col overflow-y-auto">
       <div className="flex flex-col gap-2 border-b border-border px-7 pt-6 pb-[18px]">
         <p className="flex items-center gap-2 font-mono text-xs text-success">
           <Check className="h-3.5 w-3.5" strokeWidth={3} />
-          {t('writingStyle.summary.progress', { total: changes.length, edited })}
+          {t(`${T}.saved`, { count: result.replies, dictated: result.dictated })}
         </p>
         <DialogTitle className="text-xl">{t('writingStyle.summary.title')}</DialogTitle>
         <DialogDescription className="text-[13px] leading-normal">
-          {changes.slice(-2).some((change) => change > SETTLED_CHANGE)
-            ? t('writingStyle.summary.runAgain')
-            : t('writingStyle.summary.settled')}{' '}
-          {t('writingStyle.summary.examplesSaved')}
+          {result.dictated ? t(`${T}.examples`) : t(`${T}.typedOnly`)}
         </DialogDescription>
       </div>
 
@@ -68,7 +60,7 @@ export function CalibrationSummary({
         )}
       </div>
 
-      {result.before !== result.after && (
+      {result.before && result.after && result.before !== result.after && (
         <div className="grid grid-cols-2 gap-4 px-7 pt-2 pb-5 text-[13px]">
           <div className="space-y-2">
             <p className="font-mono text-[11px] uppercase text-muted-foreground">
@@ -94,13 +86,13 @@ export function CalibrationSummary({
           variant="ghost"
           className="text-muted-foreground"
           disabled={restarting}
-          onClick={onRunAgain}
+          onClick={onKeepTeaching}
         >
           {restarting && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t('writingStyle.summary.runItAgain')}
+          {t(`${T}.keepTeaching`)}
         </Button>
         <span className="flex-1" />
-        {learnedStyleOn ? (
+        {learnedStyleOn || !result.status.ready ? (
           <Button className="px-[18px] font-semibold" onClick={onClose}>
             {t('writingStyle.summary.done')}
           </Button>
@@ -115,6 +107,6 @@ export function CalibrationSummary({
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }

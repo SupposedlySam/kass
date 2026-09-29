@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { useWritingStyle } from '@/lib/hooks/useWritingStyle';
-import { StyleCalibrationDialog } from './StyleCalibrationDialog';
+import { TeachDialog } from './teach/TeachDialog';
 
 const DISMISSED_KEY = 'voicebox.writingStyle.promptDismissed';
 
@@ -15,8 +15,8 @@ function readDismissed(): boolean {
 }
 
 /**
- * First-run invitation to calibrate, shown once the user has dictated and
- * until they calibrate or dismiss it. Never blocks dictating.
+ * First-run invitation to teach Voicebox how the user writes, shown once they
+ * have dictated and until they teach it or dismiss it. Never blocks dictating.
  */
 export function StyleCalibrationPrompt({ hasCaptures }: { hasCaptures: boolean }) {
   const { t } = useTranslation();
@@ -50,7 +50,7 @@ export function StyleCalibrationPrompt({ hasCaptures }: { hasCaptures: boolean }
           </div>
         </div>
       )}
-      <StyleCalibrationDialog open={open} onOpenChange={setOpen} />
+      <TeachDialog open={open} onOpenChange={setOpen} />
     </>
   );
 }

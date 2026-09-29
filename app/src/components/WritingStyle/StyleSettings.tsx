@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { Mic, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChordKeys } from '@/components/CapturesTab/EmptyDetail';
 import { SettingRow, SettingSection } from '@/components/ServerTab/SettingRow';
 import {
   AlertDialog,
@@ -26,7 +28,9 @@ import { Toggle } from '@/components/ui/toggle';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { PunctuationStyle, WritingStyle, WritingStyleUpdate } from '@/lib/api/types';
+import { useCaptureSettings } from '@/lib/hooks/useSettings';
 import { useWritingStyle, WRITING_STYLES_KEY } from '@/lib/hooks/useWritingStyle';
+import { useTeachDictation } from './teach/useTeachDictation';
 
 const R = 'settings.captures.refinement';
 const S = 'writingStyle.styles.settings';
@@ -48,8 +52,9 @@ function useUpdateStyle(styleId: string) {
 }
 
 /**
- * The selected style's settings: its name, how it punctuates and capitalizes,
- * filler and technical terms, whether new apps use it, and deleting it.
+ * The selected style's settings: its name, how the user says they write in
+ * its apps, punctuation, technical terms, whether new apps use it, and
+ * deleting it.
  */
 export function StyleSettings({
   style,
@@ -90,6 +95,7 @@ export function StyleSettings({
           />
         }
       />
+      <StyleDescription style={style} onSave={(description) => update.mutate({ description })} />
       <SettingRow
         title={t(`${R}.punctuationStyle.title`)}
         description={t(`${S}.punctuationDescription`)}
@@ -111,30 +117,6 @@ export function StyleSettings({
               </SelectItem>
             </SelectContent>
           </Select>
-        }
-      />
-      <SettingRow
-        title={t(`${S}.capitalize`)}
-        description={t(`${S}.capitalizeDescription`)}
-        htmlFor="capitalizeFirst"
-        action={
-          <Toggle
-            id="capitalizeFirst"
-            checked={style.capitalize_first}
-            onCheckedChange={(v) => update.mutate({ capitalize_first: v })}
-          />
-        }
-      />
-      <SettingRow
-        title={t(`${S}.filler`)}
-        description={t(`${R}.smartCleanup.description`)}
-        htmlFor="smartCleanup"
-        action={
-          <Toggle
-            id="smartCleanup"
-            checked={style.smart_cleanup}
-            onCheckedChange={(v) => update.mutate({ smart_cleanup: v })}
-          />
         }
       />
       <SettingRow
@@ -171,6 +153,96 @@ export function StyleSettings({
       />
       {!style.is_default && <DeleteStyle style={style} onDeleted={onDeleted} />}
     </SettingSection>
+  );
+}
+
+/** Matches the server's limit. */
+const MAX_DESCRIPTION = 600;
+
+/**
+ * "How you write here": the user's own words about the style, which cleanup
+ * follows. Typed or dictated (Say it); saved when the box loses focus.
+ */
+function StyleDescription({
+  style,
+  onSave,
+}: {
+  style: WritingStyle;
+  onSave: (description: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { settings } = useCaptureSettings();
+  const [text, setText] = useState(style.description);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => setText(style.description), [style.description]);
+
+  const save = (next: string) => {
+    if (next.trim() !== style.description) onSave(next.trim());
+  };
+  // A take from the Say it button lands in Captures; its cleanup joins the box.
+  const dictation = useTeachDictation(() => {
+    void apiClient
+      .listCaptures(1)
+      .then(({ items }) => {
+        const said = (items[0]?.transcript_refined || items[0]?.transcript_raw || '').trim();
+        if (!said) return;
+        const current = box.current?.value ?? text;
+        const next = `${current.trim() ? `${current.trimEnd()} ` : ''}${said}`.slice(
+          0,
+          MAX_DESCRIPTION,
+        );
+        setText(next);
+        save(next);
+      })
+      .catch(() => undefined);
+  });
+  const listening = dictation.state.phase === 'listening' && dictation.state.how === 'button';
+  const hold = settings?.chord_push_to_talk_keys ?? [];
+
+  return (
+    <SettingRow
+      title={t(`${S}.description`)}
+      description={t(`${S}.descriptionHelp`)}
+      htmlFor="styleDescription"
+      action={
+        dictation.available && (
+          <Button
+            size="sm"
+            variant={listening ? 'default' : 'outline'}
+            className="gap-2"
+            disabled={dictation.state.phase === 'cleaning'}
+            onClick={() => {
+              if (listening) return dictation.stop();
+              box.current?.focus();
+              dictation.start();
+            }}
+          >
+            {listening ? (
+              <Square className="h-3 w-3 fill-current" />
+            ) : (
+              <Mic className="h-3.5 w-3.5 text-accent" />
+            )}
+            {listening ? t(`${S}.descriptionStop`) : t(`${S}.descriptionSay`)}
+            {!listening && hold.length > 0 && <ChordKeys keys={hold} />}
+          </Button>
+        )
+      }
+    >
+      <textarea
+        id="styleDescription"
+        ref={box}
+        value={text}
+        maxLength={MAX_DESCRIPTION}
+        rows={4}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => save(text)}
+        placeholder={t(`${S}.descriptionPlaceholder`)}
+        className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-accent"
+      />
+      <p className="mt-1 text-right font-mono text-[11px] text-muted-foreground">
+        {text.length} / {MAX_DESCRIPTION}
+      </p>
+    </SettingRow>
   );
 }
 

@@ -17,12 +17,12 @@ SLACK = "com.tinyspeck.slackmacgap"
 
 
 def seeded(engine):
-    """Personal, and a Chat style for Slack that writes casually in lowercase."""
+    """Personal, and a Chat style for Slack that writes casually."""
     with Session(engine) as db:
         styles.ensure_styles(db)
         chat = styles.create_style(db, "Chat")
         db.query(WritingStyle).filter(WritingStyle.id == chat.id).update(
-            {"id": "chat", "punctuation_style": "casual", "capitalize_first": False}
+            {"id": "chat", "punctuation_style": "casual"}
         )
         db.commit()
         styles.invalidate()
@@ -68,9 +68,8 @@ async def dictate(tmp_path, monkeypatch, app, cleaned, set_app_late=False):
 async def test_the_app_at_key_down_picks_the_style_for_the_first_cleanup(tmp_path, monkeypatch, database):
     session, refine = await dictate(tmp_path, monkeypatch, SLACK, "So I looked at the build.")
     flags = refine.await_args.args[1]
-    assert (flags.style, flags.punctuation_style, flags.capitalize_first) == ("chat", "casual", False)
-    # Chat doesn't capitalize the first word.
-    assert session.refined == "so I looked at the build."
+    assert (flags.style, flags.punctuation_style) == ("chat", "casual")
+    assert session.refined == "So I looked at the build."
     with Session(database) as db:
         row = session.persist(db)
     assert row.style_id == "chat"

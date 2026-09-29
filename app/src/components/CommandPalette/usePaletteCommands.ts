@@ -71,7 +71,7 @@ export function usePaletteCommands(): PaletteCommand[] {
   }
   commands.push(
     go('setup', t('palette.cmd.setup'), '/setup'),
-    // Calibration starts from the writing style page.
+    // Teaching starts from the writing style page.
     go('calibrate', t('palette.cmd.calibrate'), '/settings/writing-style', t('palette.keys.style')),
   );
   // Transforms rewrite the text selected in the app the user came from; Rust

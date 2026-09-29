@@ -30,12 +30,14 @@ import type {
   RetentionPreview,
   RetentionStatus,
   StyledApp,
+  TeachDictated,
+  TeachFinishResult,
+  TeachKind,
+  TeachSession,
   UsagePeriod,
   UsageStatsResponse,
   WhisperModelSize,
   WritingStyle,
-  WritingStyleCalibrationResult,
-  WritingStyleCalibrationStep,
   WritingStyleStatus,
   WritingStylesResponse,
   WritingStyleUpdate,
@@ -308,35 +310,70 @@ class ApiClient {
     }
   }
 
-  async startStyleCalibration(style?: string | null): Promise<WritingStyleCalibrationStep> {
-    return this.request<WritingStyleCalibrationStep>(
-      `/writing-style/calibration${styleQuery(style)}`,
+  // Teaching a style by replying to conversations (docs/plans/TEACH_BY_REPLYING.md)
+  async startTeach(style?: string | null): Promise<TeachSession> {
+    return this.request<TeachSession>(`/writing-style/teach${styleQuery(style)}`, {
+      method: 'POST',
+    });
+  }
+
+  async addTeachConversation(sessionId: string, kind: TeachKind): Promise<TeachSession> {
+    return this.request<TeachSession>(`/writing-style/teach/${sessionId}/conversations`, {
+      method: 'POST',
+      body: JSON.stringify({ kind }),
+    });
+  }
+
+  async newTeachTheme(sessionId: string, conversationId: string): Promise<TeachSession> {
+    return this.request<TeachSession>(
+      `/writing-style/teach/${sessionId}/conversations/${conversationId}/new-theme`,
       { method: 'POST' },
     );
   }
 
-  async submitStyleCalibrationStep(
+  async wrapTeachConversation(sessionId: string, conversationId: string): Promise<TeachSession> {
+    return this.request<TeachSession>(
+      `/writing-style/teach/${sessionId}/conversations/${conversationId}/wrap-up`,
+      { method: 'POST' },
+    );
+  }
+
+  /** Send a reply; the other side's next message comes back with the session. */
+  async sendTeachReply(
     sessionId: string,
+    conversationId: string,
     written: string,
-  ): Promise<WritingStyleCalibrationStep> {
-    return this.request<WritingStyleCalibrationStep>(
-      `/writing-style/calibration/${sessionId}/steps`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ written }),
-      },
+  ): Promise<TeachSession> {
+    return this.request<TeachSession>(
+      `/writing-style/teach/${sessionId}/conversations/${conversationId}/replies`,
+      { method: 'POST', body: JSON.stringify({ written }) },
     );
   }
 
-  async finishStyleCalibration(sessionId: string): Promise<WritingStyleCalibrationResult> {
-    return this.request<WritingStyleCalibrationResult>(
-      `/writing-style/calibration/${sessionId}/finish`,
+  /** The cleanup of what was dictated in Voicebox's window this turn. */
+  async teachDictated(sessionId: string, conversationId: string): Promise<TeachDictated> {
+    return this.request<TeachDictated>(
+      `/writing-style/teach/${sessionId}/conversations/${conversationId}/dictated`,
+    );
+  }
+
+  /** Earlier dictation is no longer part of this conversation's reply. */
+  async restartTeachTurn(sessionId: string, conversationId: string): Promise<void> {
+    const response = await fetch(
+      `${this.getBaseUrl()}/writing-style/teach/${sessionId}/conversations/${conversationId}/restart-turn`,
       { method: 'POST' },
     );
+    if (!response.ok) throw new ApiError(`HTTP error! status: ${response.status}`, response.status);
   }
 
-  async discardStyleCalibration(sessionId: string): Promise<void> {
-    const response = await fetch(`${this.getBaseUrl()}/writing-style/calibration/${sessionId}`, {
+  async finishTeach(sessionId: string): Promise<TeachFinishResult> {
+    return this.request<TeachFinishResult>(`/writing-style/teach/${sessionId}/finish`, {
+      method: 'POST',
+    });
+  }
+
+  async discardTeach(sessionId: string): Promise<void> {
+    const response = await fetch(`${this.getBaseUrl()}/writing-style/teach/${sessionId}`, {
       method: 'DELETE',
     });
     if (!response.ok && response.status !== 404) {

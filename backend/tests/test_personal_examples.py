@@ -100,17 +100,18 @@ def test_hidden_examples_are_left_out(storage):
     assert not personal_examples.hide("correction:missing")
 
 
-def test_edited_calibration_rewrites_are_examples_and_unedited_are_not():
-    started = writing_style.start_calibration()
-    session_id = started["session_id"]
-    writing_style.present(session_id, "Kept as shown.")
-    second = writing_style.submit_step(session_id, "Kept as shown.")
-    writing_style.present(session_id, "Voicebox cleanup.")
-    writing_style.submit_step(session_id, "What I would send.")
-    writing_style.finish_calibration(session_id)
+def test_taught_replies_that_differ_from_the_cleanup_are_examples():
+    writing_style.save_run(
+        None,
+        [
+            {"said": "kept as shown", "shown": "Kept as shown.", "written": "Kept as shown."},
+            {"said": "voicebox cleanup", "shown": "Voicebox cleanup.", "written": "What I would send."},
+            {"said": None, "shown": "typed", "written": "typed"},
+        ],
+    )
     examples = personal_examples.all_examples()
     assert [(e["source"], e["said"], e["meant"]) for e in examples] == [
-        ("calibration", second["said"], "What I would send.")
+        ("calibration", "voicebox cleanup", "What I would send.")
     ]
 
 

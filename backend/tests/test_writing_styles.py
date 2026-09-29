@@ -75,13 +75,13 @@ def said(style_id):
 
 
 def test_one_personal_style_takes_the_global_settings(storage):
-    seed(storage, smart_cleanup=False, preserve_technical=False, punctuation_style="learned")
+    seed(storage, preserve_technical=False, punctuation_style="learned")
     snapshot = styles.snapshot()
     assert [s.name for s in snapshot.styles] == ["Personal"]
     personal = snapshot.default
     assert personal.id == "personal"
     # Dictation keeps working exactly as before until an app is assigned.
-    assert (personal.punctuation_style, personal.capitalize_first, personal.smart_cleanup) == ("learned", True, False)
+    assert personal.punctuation_style == "learned"
     assert not personal.preserve_technical
     assert snapshot.for_app(SLACK) == personal
     # Seeding again changes nothing.
@@ -105,20 +105,14 @@ def test_at_most_six_styles(storage):
 
 def test_assigning_an_app_confirms_it_and_picks_its_flags(storage):
     seed(storage)
-    chat = create(storage, "Chat", punctuation_style="casual", capitalize_first=False, smart_cleanup=False)
+    chat = create(storage, "Chat", punctuation_style="casual")
     assign(storage, SLACK, chat)
     snapshot = styles.snapshot()
     assert snapshot.for_app(SLACK).id == chat
     assert snapshot.apps == {SLACK: chat}
     flags = styles.flags_for_app(SLACK, CaptureSettingsResponse(self_correction=False))
-    assert flags == RefinementFlags(
-        smart_cleanup=False,
-        self_correction=False,
-        preserve_technical=True,
-        punctuation_style="casual",
-        capitalize_first=False,
-        style=chat,
-    )
+    # Filler removal and a capitalized first word are no longer settings.
+    assert flags == RefinementFlags(self_correction=False, punctuation_style="casual", style=chat)
 
 
 def test_confirming_new_apps_keeps_them_in_their_style(storage):
@@ -280,7 +274,7 @@ def test_moved_corrections_become_pending_rules_for_the_new_style(storage, monke
 
 def snapshot_with(apps, *names):
     made = tuple(
-        styles.Style(name.lower(), name, index, index == 0, "standard", True, True, True)
+        styles.Style(name.lower(), name, index, index == 0, "standard", True)
         for index, name in enumerate(names)
     )
     return styles.Snapshot(made, apps)
@@ -449,6 +443,15 @@ def test_style_endpoints(storage, monkeypatch):
     assert listing["apps"][0]["corrections"] == 0
     assert client.put("/writing-styles/apps/x", json={"style_id": "missing"}).status_code == 404
     assert client.put("/writing-styles/apps/x", json={"style_id": chat, "corrections": "drop"}).status_code == 422
-    assert client.patch(f"/writing-styles/{chat}", json={"capitalize_first": False}).json()["capitalize_first"] is False
+    described = client.patch(f"/writing-styles/{chat}", json={"description": "  Informal.\nNo greetings.  "})
+    assert described.json()["description"] == "Informal.\nNo greetings."
+    assert client.patch(f"/writing-styles/{chat}", json={"description": "x" * 601}).status_code == 400
     assert client.delete("/writing-styles/personal").status_code == 400
     assert client.delete(f"/writing-styles/{chat}").status_code == 204
+
+
+def test_a_style_description_goes_into_only_its_own_cleanup_prompt(storage):
+    seed(storage)
+    chat = create(storage, "Chat", description="Mostly coworkers, so informal. No greetings.")
+    assert "Mostly coworkers, so informal. No greetings." in build_refinement_prompt(RefinementFlags(style=chat))
+    assert "coworkers" not in build_refinement_prompt(RefinementFlags(style="personal"))

@@ -1,7 +1,8 @@
 """Named writing styles and the apps assigned to them (docs/plans/PER_APP_STYLE.md).
 
 A style holds the settings that shape how dictation is written: punctuation,
-whether the first word is capitalized, filler removal and technical terms.
+technical terms, and the user's own description of how they write in its
+apps (docs/plans/TEACH_BY_REPLYING.md).
 Its calibration, habits, examples and rules are kept per style by
 ``writing_style``, ``personal_examples`` and ``correction_notes``. An app the
 user hasn't assigned uses the default style; the style most apps of its App
@@ -21,6 +22,7 @@ Dictation reads styles on every take, so the rows are kept in memory as a
 
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -38,7 +40,12 @@ MAX_STYLES = 6
 MIGRATED_STYLE = "personal"
 MIGRATED_NAME = "Personal"
 
-SETTINGS = ("punctuation_style", "capitalize_first", "smart_cleanup", "preserve_technical")
+# Voicebox's own window. Dictation there follows the style being taught while
+# a teach session is open (docs/plans/TEACH_BY_REPLYING.md).
+VOICEBOX_BUNDLE = "sh.voicebox.app"
+
+SETTINGS = ("punctuation_style", "preserve_technical")
+MAX_DESCRIPTION_CHARS = 600
 
 
 @dataclass(frozen=True)
@@ -48,13 +55,13 @@ class Style:
     position: int
     is_default: bool
     punctuation_style: str
-    capitalize_first: bool
-    smart_cleanup: bool
     preserve_technical: bool
+    # How the user says they write in the style's apps, for the cleanup prompt.
+    description: str = ""
 
 
 # Before the database exists (tests, tools), every app uses one Standard style.
-_FALLBACK = Style(MIGRATED_STYLE, MIGRATED_NAME, 0, True, "standard", True, True, True)
+_FALLBACK = Style(MIGRATED_STYLE, MIGRATED_NAME, 0, True, "standard", True)
 
 
 @dataclass(frozen=True)
@@ -72,7 +79,12 @@ class Snapshot:
         return next((s for s in self.styles if s.id == style_id), None)
 
     def for_app(self, bundle_id: str | None) -> Style:
-        """The style ``bundle_id`` is assigned to, or the default."""
+        """The style ``bundle_id`` is assigned to, or the default.
+
+        Voicebox's own window uses the style being taught, while one is.
+        """
+        if bundle_id == VOICEBOX_BUNDLE and (taught := self.get(teaching_style())):
+            return taught
         return self.get(self.apps.get(bundle_id or "")) or self.default
 
     def resolve(self, style_id: str | None) -> Style:
@@ -82,6 +94,23 @@ class Snapshot:
 
 _lock = threading.RLock()
 _snapshot: Snapshot | None = None
+# (style id, monotonic deadline) while a teach session is open.
+_teaching: tuple[str, float] | None = None
+
+
+def teach_in_voicebox(style_id: str | None, ttl_seconds: float) -> None:
+    """Clean up dictation in Voicebox's window in ``style_id`` for the next
+    ``ttl_seconds``; None stops."""
+    global _teaching
+    with _lock:
+        _teaching = (style_id, time.monotonic() + ttl_seconds) if style_id else None
+
+
+def teaching_style() -> str | None:
+    with _lock:
+        if _teaching and time.monotonic() < _teaching[1]:
+            return _teaching[0]
+        return None
 
 
 def _style(row: WritingStyle) -> Style:
@@ -91,9 +120,8 @@ def _style(row: WritingStyle) -> Style:
         position=row.position,
         is_default=row.is_default,
         punctuation_style=row.punctuation_style if row.punctuation_style in PUNCTUATION_STYLES else "standard",
-        capitalize_first=row.capitalize_first,
-        smart_cleanup=row.smart_cleanup,
         preserve_technical=row.preserve_technical,
+        description=row.description or "",
     )
 
 
@@ -143,13 +171,15 @@ def default_id() -> str:
 
 
 def flags_for(style: Style, settings) -> RefinementFlags:
-    """The refinement flags for dictation in ``style``; self-correction stays global."""
+    """The refinement flags for dictation in ``style``; self-correction stays global.
+
+    Filler removal and a capitalized first word are always on: the base prompt
+    removes fillers, and learned punctuation covers lowercase starts.
+    """
     return RefinementFlags(
-        smart_cleanup=style.smart_cleanup,
         self_correction=settings.self_correction,
         preserve_technical=style.preserve_technical,
         punctuation_style=style.punctuation_style,
-        capitalize_first=style.capitalize_first,
         style=style.id,
     )
 
@@ -281,8 +311,6 @@ def ensure_styles(db: Session) -> None:
                 position=0,
                 is_default=True,
                 punctuation_style=(saved.punctuation_style if saved else None) or "standard",
-                capitalize_first=True,
-                smart_cleanup=saved.smart_cleanup if saved else True,
                 preserve_technical=saved.preserve_technical if saved else True,
             )
         )
@@ -308,6 +336,16 @@ def _clean_name(db: Session, name: object, exclude: str | None = None) -> str:
     return cleaned
 
 
+def _clean_description(text: object) -> str:
+    if not isinstance(text, str):
+        raise ValueError("The description must be text")
+    # Keep the user's line breaks; trim trailing spaces on each line.
+    cleaned = "\n".join(line.rstrip() for line in text.strip().splitlines())
+    if len(cleaned) > MAX_DESCRIPTION_CHARS:
+        raise ValueError(f"Keep the description under {MAX_DESCRIPTION_CHARS} characters")
+    return cleaned
+
+
 def create_style(db: Session, name: str) -> Style:
     """A new style, starting from the default's settings with nothing learned."""
     if db.query(WritingStyle).count() >= MAX_STYLES:
@@ -328,7 +366,7 @@ def create_style(db: Session, name: str) -> Style:
 
 
 def update_style(db: Session, style_id: str, patch: dict) -> Style | None:
-    """Rename a style, change its settings, or make it the default."""
+    """Rename a style, change its settings or description, or make it the default."""
     row = db.get(WritingStyle, style_id)
     if row is None:
         return None
@@ -338,9 +376,10 @@ def update_style(db: Session, style_id: str, patch: dict) -> Style | None:
         if patch["punctuation_style"] not in PUNCTUATION_STYLES:
             raise ValueError("Unknown punctuation style")
         row.punctuation_style = patch["punctuation_style"]
-    for setting in ("capitalize_first", "smart_cleanup", "preserve_technical"):
-        if patch.get(setting) is not None:
-            setattr(row, setting, bool(patch[setting]))
+    if patch.get("preserve_technical") is not None:
+        row.preserve_technical = bool(patch["preserve_technical"])
+    if patch.get("description") is not None:
+        row.description = _clean_description(patch["description"])
     if patch.get("is_default"):
         db.query(WritingStyle).filter(WritingStyle.id != style_id).update({"is_default": False})
         row.is_default = True
@@ -362,10 +401,11 @@ def delete_style(db: Session, style_id: str) -> bool:
     db.delete(row)
     db.commit()
     _changed(examples=True)
-    from . import correction_notes, dictionary, writing_style
+    from . import correction_notes, dictionary, teach, writing_style
 
     dictionary.move_style(db, style_id, default_id())
     writing_style.forget_style(style_id)
+    teach.forget_style(style_id)
     correction_notes.forget_style(style_id)
     _refresh_habits(db)
     return True

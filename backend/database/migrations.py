@@ -45,6 +45,7 @@ def run_migrations(engine) -> None:
     _migrate_captures(engine, inspector, tables)
     _migrate_capture_feedback(engine, inspector, tables)
     _migrate_dictionary_entries(engine, inspector, tables)
+    _migrate_writing_styles(engine, inspector, tables)
 
 
 # -- helpers ---------------------------------------------------------------
@@ -91,6 +92,13 @@ def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "teaches_style_id"):
         if column not in columns:
             _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
+
+
+def _migrate_writing_styles(engine, inspector, tables: set[str]) -> None:
+    if "writing_styles" not in tables:
+        return
+    if "description" not in _get_columns(inspector, "writing_styles"):
+        _add_column(engine, "writing_styles", "description TEXT", "description")
 
 
 def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:

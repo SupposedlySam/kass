@@ -13,12 +13,12 @@ from backend.tests.test_capture_stream_style import SLACK, database  # noqa: F40
 
 STYLES = styles.Snapshot(
     (
-        styles.Style("personal", "Personal", 0, True, "standard", True, True, True),
-        styles.Style("formal", "Formal", 1, False, "standard", True, True, True),
-        styles.Style("work-email", "Work Email", 2, False, "standard", True, True, True),
-        styles.Style("work", "Work", 3, False, "standard", True, True, True),
-        styles.Style("chat", "Chat mode", 4, False, "casual", False, True, True),
-        styles.Style("casual", "Casual", 5, False, "casual", True, True, True),
+        styles.Style("personal", "Personal", 0, True, "standard", True),
+        styles.Style("formal", "Formal", 1, False, "standard", True),
+        styles.Style("work-email", "Work Email", 2, False, "standard", True),
+        styles.Style("work", "Work", 3, False, "standard", True),
+        styles.Style("chat", "Chat mode", 4, False, "casual", True),
+        styles.Style("casual", "Casual", 5, False, "casual", True),
     )
 )
 

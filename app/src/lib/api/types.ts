@@ -68,9 +68,9 @@ export interface WritingStyle {
   /** The style of every app the user hasn't assigned. */
   is_default: boolean;
   punctuation_style: PunctuationStyle;
-  capitalize_first: boolean;
-  smart_cleanup: boolean;
   preserve_technical: boolean;
+  /** How the user says they write in this style's apps; cleanup follows it. */
+  description: string;
 }
 
 /**
@@ -100,10 +100,7 @@ export interface WritingStylesResponse {
 export type MovedCorrections = 'bring' | 'leave';
 
 export type WritingStyleUpdate = Partial<
-  Pick<
-    WritingStyle,
-    'name' | 'punctuation_style' | 'capitalize_first' | 'smart_cleanup' | 'preserve_technical'
-  >
+  Pick<WritingStyle, 'name' | 'punctuation_style' | 'preserve_technical' | 'description'>
 > & { is_default?: true };
 
 /** Where a dictionary entry applies. Most specific wins: app, then style, then everywhere. */
@@ -187,24 +184,67 @@ export interface CorrectionNotesStatus {
   outcome: string;
 }
 
-export interface WritingStyleCalibrationStep {
-  session_id: string;
-  step: number;
-  total: number;
-  /** What was said, as speech-to-text wrote it; null when done. */
-  said: string | null;
-  /** Voicebox's cleanup of it, using everything learned so far; null when done. */
-  paragraph: string | null;
-  habits: WritingStyleHabit[];
-  /** Share of each submitted paragraph the user changed, 0 to 1. */
-  changes: number[];
-  done: boolean;
+/** The kinds of conversation teaching uses (docs/plans/TEACH_BY_REPLYING.md). */
+export type TeachKind =
+  | 'coding_agent'
+  | 'design_feedback'
+  | 'notes'
+  | 'writeup'
+  | 'team_chat'
+  | 'issue_comment'
+  | 'email'
+  | 'text_message';
+
+/** The facts for the user's next reply, and sometimes a trick to try. */
+export interface TeachNote {
+  facts: string | null;
+  answers: { ask: string; answer: string }[];
+  trick: 'change_of_mind' | 'long' | null;
+  example: string | null;
 }
 
-export interface WritingStyleCalibrationResult {
+/** Something a reply showed about how the user writes; the app words `code`. */
+export interface TeachChip {
+  code: string;
+  value: string | null;
+}
+
+export interface TeachConversation {
+  id: string;
+  kind: TeachKind;
+  persona: string;
+  relation: string;
+  title: string | null;
+  messages: { from_you: boolean; text: string }[];
+  note: TeachNote | null;
+  reply_count: number;
+  chips: TeachChip[];
+  wrapped: boolean;
+}
+
+export interface TeachSession {
+  session_id: string;
+  style_id: string;
+  /** Replies to aim for; finishing works after one. */
+  target: number;
+  replies: number;
+  /** The kinds that match the style's apps. */
+  suggested_kinds: TeachKind[];
+  conversations: TeachConversation[];
+}
+
+export interface TeachDictated {
+  text: string | null;
+}
+
+export interface TeachFinishResult {
   status: WritingStyleStatus;
-  before: string;
-  after: string;
+  /** One of the user's dictations cleaned up before and after; null without one. */
+  before: string | null;
+  after: string | null;
+  replies: number;
+  /** Replies that were dictated, and so teach cleanup. */
+  dictated: number;
 }
 
 export interface RefinementFlags {

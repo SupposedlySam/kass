@@ -34,7 +34,7 @@ export function CommandPalette() {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
-        // Leave another open dialog (calibration, a delete confirmation) alone.
+        // Leave another open dialog (teaching a style, a delete confirmation) alone.
         const otherDialog = document.querySelector(
           '[role="dialog"]:not([data-command-palette]), [role="alertdialog"]',
         );

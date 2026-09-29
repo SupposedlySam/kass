@@ -7,7 +7,8 @@ import { Kbd } from '@/components/ui/kbd';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
 import { displayLabelForKey, modifierSideHint, sortChordKeys } from '@/lib/utils/keyCodes';
 
-function ChordKeys({ keys }: { keys: string[] }) {
+/** A shortcut's keys, with which side a modifier is on. */
+export function ChordKeys({ keys }: { keys: string[] }) {
   return (
     <span className="flex items-center gap-1">
       {sortChordKeys(keys).map((key) => {

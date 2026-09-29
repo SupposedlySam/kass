@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import type { WritingStyle } from '@/lib/api/types';
 import { useWritingStyle } from '@/lib/hooks/useWritingStyle';
-import { StyleCalibrationDialog } from './StyleCalibrationDialog';
+import { TeachDialog } from './teach/TeachDialog';
 import { WritingStyleHabitChips } from './WritingStyleHabits';
 
-/** The invitation to calibrate a style, with what its last runs learned. */
+/** The invitation to teach a style how the user writes, with what earlier runs learned. */
 export function CalibrationCard({ style, apps }: { style: WritingStyle; apps: string[] }) {
   const { t } = useTranslation();
   const { data: status } = useWritingStyle(style.id);
@@ -56,7 +56,7 @@ export function CalibrationCard({ style, apps }: { style: WritingStyle; apps: st
         </>
       )}
 
-      <StyleCalibrationDialog open={open} onOpenChange={setOpen} style={style} />
+      <TeachDialog open={open} onOpenChange={setOpen} style={style} />
     </section>
   );
 }

@@ -1,8 +1,8 @@
 """The user's punctuation habits, learned from calibration and corrections.
 
-Calibration shows paragraphs punctuated the way Standard refinement writes
-dictation and asks the user to rewrite each one the way they would type it.
-Comparing the two, word by word, counts what the user does at each sentence
+Teaching (docs/plans/TEACH_BY_REPLYING.md) keeps each dictated reply: what
+was said, Voicebox's cleanup and what the user sent. Comparing the cleanup
+with what was sent, word by word, counts what the user does at each sentence
 break (keep the period, turn it into a comma, drop it), whether they lowercase
 sentence starts, drop commas after opening words or before conjunctions, and
 end with a period. Refined-output corrections add the same evidence.
@@ -23,22 +23,16 @@ import hashlib
 import json
 import logging
 import os
-import random
 import re
 import threading
-import time
-import uuid
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
 from .. import config
-from .writing_style_paragraphs import BY_ID, PARAGRAPHS, SITUATIONS
 
 logger = logging.getLogger(__name__)
 
-RUN_LENGTH = len(SITUATIONS)
 MAX_EXAMPLES = 50
-SESSION_TTL_SECONDS = 2 * 60 * 60
 # Least evidence before a habit is applied. Calibration alone gives about ten
 # sentence breaks and a handful of each comma kind per run.
 MIN_EVIDENCE = 2
@@ -50,7 +44,6 @@ _TRAILING = re.compile(r"[.,!?;:\u2026\u2014-]+$")
 
 _lock = threading.RLock()
 _state = None
-_sessions = {}
 
 
 # --- Tokens --------------------------------------------------------------------
@@ -253,7 +246,7 @@ def _empty_style() -> dict:
 
 
 def _empty_state() -> dict:
-    return {"version": 2, "styles": {}, "recent_paragraphs": [], "hidden_examples": []}
+    return {"version": 2, "styles": {}, "hidden_examples": []}
 
 
 def _migrate(loaded: dict) -> dict:
@@ -266,7 +259,6 @@ def _migrate(loaded: dict) -> dict:
     return {
         **_empty_state(),
         "styles": {MIGRATED_STYLE: {**_empty_style(), **profile}},
-        "recent_paragraphs": loaded.get("recent_paragraphs", []),
         "hidden_examples": loaded.get("hidden_examples", []),
     }
 
@@ -430,8 +422,6 @@ def reset(style: str | None = None) -> None:
     with _lock:
         state = _load()
         _save(_with_profile(state, style, _empty_style()))
-        for session_id in [key for key, value in _sessions.items() if value["style"] == _style_id(style)]:
-            del _sessions[session_id]
     _examples_changed()
 
 
@@ -485,148 +475,24 @@ def hide_example(example_id: str) -> None:
         _save(state)
 
 
-# --- Calibration -----------------------------------------------------------------
+# --- Teaching -------------------------------------------------------------------
 
 
-def _expire_sessions():
-    cutoff = time.monotonic() - SESSION_TTL_SECONDS
-    for session_id in [key for key, value in _sessions.items() if value["touched"] < cutoff]:
-        del _sessions[session_id]
+def save_run(style: str | None, examples: list[dict]) -> dict:
+    """Keep a teach session's replies in ``style``'s profile (docs/plans/TEACH_BY_REPLYING.md).
 
-
-def _pick_paragraphs(recent: list[str]) -> list[str]:
-    """One paragraph per situation, avoiding the ones shown most recently."""
-    chosen = []
-    for situation in SITUATIONS:
-        options = [p.id for p in PARAGRAPHS if p.situation == situation]
-        fresh = [option for option in options if option not in recent] or options
-        chosen.append(random.choice(fresh))
-    return chosen
-
-
-def _change(shown: str, written: str) -> float:
-    """Share of the paragraph the user changed, punctuation included (0 to 1)."""
-    return round(1 - SequenceMatcher(None, shown.split(), written.split(), autojunk=False).ratio(), 3)
-
-
-def _session(session_id: str) -> dict:
-    session = _sessions.get(session_id)
-    if session is None:
-        raise KeyError(session_id)
-    session["touched"] = time.monotonic()
-    return session
-
-
-def start_calibration(style: str | None = None) -> dict:
-    """Pick this run's paragraphs for ``style``; the caller cleans each one up before showing it."""
-    with _lock:
-        _expire_sessions()
-        state = _load()
-        session = {
-            "id": uuid.uuid4().hex,
-            "style": _style_id(style),
-            "paragraphs": _pick_paragraphs(state["recent_paragraphs"]),
-            "step": 0,
-            "examples": [],
-            "changes": [],
-            "shown": "",
-            "touched": time.monotonic(),
-        }
-        _sessions[session["id"]] = session
-        return {"session_id": session["id"], "said": BY_ID[session["paragraphs"][0]].said}
-
-
-def session_style(session_id: str) -> str:
-    """The style a calibration run is teaching."""
-    with _lock:
-        return _session(session_id)["style"]
-
-
-def session_examples(session_id: str) -> list[tuple[str, str]]:
-    """This run's rewrites so far, as "said, meant" examples for the next cleanup."""
-    with _lock:
-        return [(e["said"], e["written"]) for e in _session(session_id)["examples"] if e["written"] != e["shown"]]
-
-
-def present(session_id: str, shown: str) -> dict:
-    """Show the current paragraph as Voicebox cleaned it up."""
-    with _lock:
-        session = _session(session_id)
-        index = session["step"]
-        session["shown"] = shown
-        return {
-            "session_id": session_id,
-            "step": index,
-            "total": len(session["paragraphs"]),
-            "said": BY_ID[session["paragraphs"][index]].said,
-            "paragraph": shown,
-            "habits": summary(decide(_counts(_profile(session["style"]), session["examples"]))),
-            "changes": session["changes"],
-            "done": False,
-        }
-
-
-def submit_step(session_id: str, written: str) -> dict:
-    """Record the rewrite of the current paragraph.
-
-    Returns the next paragraph's ``said`` for the caller to clean up, or the
-    run's result when every paragraph is done.
+    Each example has ``said`` (None for a typed reply), ``shown`` and
+    ``written``, the way calibration rewrites were kept, so examples and
+    habits read them unchanged.
     """
+    if not examples:
+        raise ValueError("Reply at least once before saving")
     with _lock:
-        session = _session(session_id)
-        if session["step"] >= len(session["paragraphs"]):
-            raise ValueError("Calibration already has every paragraph")
-        written = written.strip()
-        if not written:
-            raise ValueError("Rewrite the paragraph, or keep it as it is")
-        paragraph_id = session["paragraphs"][session["step"]]
-        session["examples"].append(
-            {
-                "paragraph_id": paragraph_id,
-                "said": BY_ID[paragraph_id].said,
-                "shown": session["shown"],
-                "written": written,
-            }
-        )
-        session["changes"].append(_change(session["shown"], written))
-        session["step"] += 1
-        if session["step"] < len(session["paragraphs"]):
-            return {"done": False, "said": BY_ID[session["paragraphs"][session["step"]]].said}
-        return {
-            "session_id": session_id,
-            "step": session["step"],
-            "total": len(session["paragraphs"]),
-            "said": None,
-            "paragraph": None,
-            "habits": summary(decide(_counts(_profile(session["style"]), session["examples"]))),
-            "changes": session["changes"],
-            "done": True,
-        }
-
-
-def finish_calibration(session_id: str) -> dict:
-    """Keep the run's rewrites in the profile."""
-    with _lock:
-        session = _sessions.pop(session_id, None)
-        if session is None:
-            raise KeyError(session_id)
-        if not session["examples"]:
-            raise ValueError("Rewrite at least one paragraph before saving")
-        style = session["style"]
         profile = _profile(style)
         now = datetime.now(UTC).isoformat()
-        profile["examples"] = (profile["examples"] + [{**e, "created_at": now} for e in session["examples"]])[
-            -MAX_EXAMPLES:
-        ]
+        profile["examples"] = (profile["examples"] + [{**e, "created_at": now} for e in examples])[-MAX_EXAMPLES:]
         profile["runs"] += 1
         profile["last_run_at"] = now
-        state = _with_profile(_load(), style, profile)
-        state["recent_paragraphs"] = (state["recent_paragraphs"] + session["paragraphs"])[-len(PARAGRAPHS) // 2 :]
-        _save(state)
+        _save(_with_profile(_load(), style, profile))
     _examples_changed()
     return status(style)
-
-
-def discard_calibration(session_id: str) -> None:
-    with _lock:
-        _sessions.pop(session_id, None)

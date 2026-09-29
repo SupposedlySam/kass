@@ -141,6 +141,8 @@ class RefinementFlags:
     ``style`` is the writing style whose learned habits, examples and rules
     cleanup uses (docs/plans/PER_APP_STYLE.md); None is the default style.
     ``capitalize_first`` off lowercases a common first word after cleanup.
+    Styles no longer turn it or ``smart_cleanup`` off; both stay so captures
+    cleaned up before still replay with the flags they had.
     """
 
     smart_cleanup: bool = True
@@ -275,6 +277,19 @@ _PERSONAL = """The earlier conversation shows how this speaker wants their dicta
 - Never copy words from the examples that the speaker did not say in this transcript."""
 
 
+_DESCRIPTION = """How this speaker says they write here, in their own words:
+{description}
+
+Follow it for tone, punctuation, capitals and line breaks. It never adds words or ideas: write only what was said."""
+
+
+def _style_description(style: str | None) -> str:
+    """The user's description of how they write in ``style`` (docs/plans/TEACH_BY_REPLYING.md)."""
+    from .styles import snapshot
+
+    return snapshot().resolve(style).description.strip()
+
+
 def build_refinement_prompt(flags: RefinementFlags, personal: bool = False, notes: str | None = None) -> str:
     """Assemble the system prompt for a given flag combination.
 
@@ -307,6 +322,9 @@ def build_refinement_prompt(flags: RefinementFlags, personal: bool = False, note
         sections.append(_CASUAL_PUNCTUATION)
     elif learned:
         sections.append(learned)
+
+    if description := _style_description(flags.style):
+        sections.append(_DESCRIPTION.replace("{description}", description))
 
     if personal:
         sections.append(_PERSONAL)
@@ -413,9 +431,9 @@ def style_first_word(text: str, flags: RefinementFlags, names: frozenset[str] = 
     """The start of a dictation, cased the way its style writes.
 
     Cleanup capitalizes every text as the start of a sentence. With
-    "Capitalize the first word" off, a common first word is lowercased by the
-    rule mid-sentence dictation uses: "I", acronyms, names and ``names`` keep
-    their capitals.
+    ``capitalize_first`` off (flags saved before it stopped being a setting),
+    a common first word is lowercased by the rule mid-sentence dictation uses:
+    "I", acronyms, names and ``names`` keep their capitals.
     """
     if flags.capitalize_first:
         return text

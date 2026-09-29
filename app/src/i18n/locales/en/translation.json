@@ -945,13 +945,13 @@
       "description": "Teach Voicebox how you write so dictation comes out ready to send, in your own words. Everything stays on this device.",
       "calibrate": {
         "title": "Teach Voicebox how you write in {{style}}",
-        "description": "Rewrite 5 things said out loud the way you'd send them. About 3 minutes.",
-        "descriptionApps": "Rewrite 5 things said out loud the way you'd send them in {{apps}}. About 3 minutes.",
+        "description": "Reply to a few messages the way you normally would, by voice or by typing. Voicebox learns from how you actually write.",
+        "descriptionApps": "Reply to a few messages like the ones you write in {{apps}}, by voice or by typing. Voicebox learns from how you actually write.",
         "lastRun_one": "Last run {{date}} · {{count}} run so far",
         "lastRun_other": "Last run {{date}} · {{count}} runs so far",
         "habitsLabel": "Learned in {{style}}",
         "start": "Start",
-        "again": "Run again"
+        "again": "Teach more"
       },
       "learnsFrom": "What {{style}} learns from",
       "export": {
@@ -961,7 +961,7 @@
       },
       "reset": {
         "title": "Reset {{style}}",
-        "description": "Forget {{style}}'s calibration rewrites, the punctuation habits learned from them and from corrections, and its rules. Other styles keep theirs. Match my writing switches back to Standard.",
+        "description": "Forget what {{style}} learned from your replies, the punctuation habits learned from them and from corrections, and its rules. Other styles keep theirs. Match my writing switches back to Standard.",
         "action": "Reset…",
         "confirmTitle": "Reset {{style}}?",
         "confirm": "Reset"
@@ -977,14 +977,14 @@
         "title": "Your examples",
         "description_one": "{{count}} example of what you said and what you meant. Cleanup shows the most recent ones on every dictation.",
         "description_other": "{{count}} examples of what you said and what you meant. Cleanup shows the most recent ones on every dictation.",
-        "empty": "No examples yet. Use Teach Voicebox on a capture, or run the calibration above.",
+        "empty": "No examples yet. Use Teach Voicebox on a capture, or teach this style above.",
         "view": "View",
         "dialogTitle": "Your examples",
         "dialogDescription": "Cleanup shows the model your most recent examples. Older ones are summarized into rules. Removing an example stops Voicebox from using it.",
         "said": "You said",
         "meant": "You meant",
         "fromCorrection": "From a correction",
-        "fromCalibration": "From calibration",
+        "fromCalibration": "From teaching",
         "remove": "Remove",
         "removeFailed": "Could not remove the example"
       },
@@ -1000,39 +1000,8 @@
         "removeFailed": "Could not remove the rule"
       }
     },
-    "calibration": {
-      "title": "Teach Voicebox how you write",
-      "intro": "You'll see 5 things someone might say out loud, each with how Voicebox would clean it up today. Rewrite each cleanup into what you'd actually send. Each one arrives closer to how you write than the last. It takes about 3 minutes.",
-      "changesTitle": "Fix anything you'd fix before sending:",
-      "changes": {
-        "falseStarts": "False starts, repeats and half-finished thoughts",
-        "order": "Words and ideas said out of order",
-        "grammar": "Grammar and word choice",
-        "punctuation": "Punctuation and capitals, the way you type them"
-      },
-      "wordsNote": "Keep the meaning: don't add new ideas, summarize, or leave out anything that was said.",
-      "start": "Start",
-      "notNow": "Not now",
-      "progress": "paragraph {{current}} of {{total}}",
-      "instructions": "Edit the paragraph until it reads like something you'd send. If it already does, just save it.",
-      "voiceboxWrote": "How Voicebox wrote it",
-      "paragraphLabel": "How you'd write it",
-      "pickedUp": "Picked up so far:",
-      "wordDelta_one": "{{sign}}{{count}} word",
-      "wordDelta_other": "{{sign}}{{count}} words",
-      "saveNext": "Save & next",
-      "saveFinish": "Save & finish",
-      "failed": "Could not continue calibration",
-      "said": "What was said",
-      "cleaning": "Cleaning up the next one…"
-    },
     "summary": {
       "title": "Here's what Voicebox learned",
-      "progress": "{{total}} of {{total}} paragraphs · {{edited}} edited",
-      "runItAgain": "Run it again",
-      "settled": "Your last paragraphs needed little or no editing, so Voicebox has your style.",
-      "runAgain": "Your last paragraphs still needed edits. Running it again will sharpen it.",
-      "examplesSaved": "Your rewrites are saved as examples, and Voicebox uses them on your next dictations.",
       "habitsTitle": "Punctuation habits",
       "noHabits": "No punctuation habits beyond Standard yet.",
       "before": "One of your dictations, cleaned up before",
@@ -1043,7 +1012,7 @@
     },
     "prompt": {
       "title": "Make dictation write like you",
-      "description": "Rewrite 5 things said out loud the way you'd send them, so Voicebox learns how you write. About 3 minutes.",
+      "description": "Reply to a few messages the way you'd really send them, so Voicebox learns how you write. About 3 minutes.",
       "start": "Start",
       "dismiss": "Not now"
     },
@@ -1105,9 +1074,6 @@
         "title": "{{style}} settings",
         "name": "Name",
         "punctuationDescription": "How thoughts join and how the text ends. Match my writing follows the habits this style learned from you.",
-        "capitalize": "Capitalize the first word",
-        "capitalizeDescription": "Off starts dictation in lowercase. Names, \"I\" and acronyms keep their capitals.",
-        "filler": "Remove filler",
         "technical": "Keep technical terms exact",
         "default": "Default for new apps",
         "defaultOn": "Apps you haven't put in a style use this one.",
@@ -1118,7 +1084,12 @@
         "deleteAction": "Delete…",
         "deleteConfirmTitle": "Delete {{style}}?",
         "saveFailed": "Could not save the style",
-        "deleteFailed": "Could not delete the style"
+        "deleteFailed": "Could not delete the style",
+        "description": "How you write here",
+        "descriptionHelp": "In your own words: who you write to, how formal it is, and what's fine to skip. Voicebox follows it when it cleans up dictation in this style.",
+        "descriptionPlaceholder": "Mostly coworkers, so it's informal. Abbreviations like lmk are fine, run-on sentences are fine, no greetings or sign-offs…",
+        "descriptionSay": "Say it",
+        "descriptionStop": "Stop"
       }
     },
     "habits": {
@@ -1138,6 +1109,120 @@
       "drop_intro_comma": "No comma after “so”",
       "drop_conjunction_comma": "No comma before “and”",
       "drop_final_period": "No final period"
+    },
+    "teach": {
+      "title": "Teach Voicebox how you write",
+      "description": "Reply to messages the way you normally would. Voicebox learns from what you send.",
+      "starting": "Setting up your conversations…",
+      "failed": "Something went wrong while teaching",
+      "anyOrder": "{{style}} · any order",
+      "progress": "{{count}} of {{target}} replies",
+      "addConversation": "Add a conversation",
+      "finish": "Finish",
+      "finishNote_one": "Saves your reply as an example.",
+      "finishNote_other": "Saves your {{count}} replies as examples.",
+      "finishEmpty": "Reply at least once to finish.",
+      "savedOnClose_one": "Saved your reply",
+      "savedOnClose_other": "Saved your {{count}} replies",
+      "subtitle": "{{kind}} · {{relation}}",
+      "newTheme": "New theme",
+      "wrapUp": "Wrap up",
+      "wrapped": "You wrapped up this conversation. Pick another one, or add a new one.",
+      "wrappedShort": "Wrapped up",
+      "showLess": "Show less",
+      "you": "You",
+      "youInitial": "Y",
+      "typing": "{{persona}} is typing…",
+      "forYou": "For you",
+      "whatToAnswer": "What to answer",
+      "tell": "Tell {{persona}}:",
+      "tryThis": "Try this:",
+      "replyLabel": "Your reply",
+      "replyPlaceholder": "Dictate or type your reply, the way you'd really send it",
+      "send": "Send reply",
+      "sendShort": "send",
+      "dictate": "Dictate",
+      "stop": "Stop",
+      "listening": "Listening…",
+      "finishButton": "Click Stop when you're done.",
+      "finishHold": "Let go of",
+      "finishHandsFree": "or, hands-free, press again",
+      "escCancels": "Esc throws the take away.",
+      "cleaning": "Cleaning up what you said…",
+      "answersAfter": "{{persona}} answers after you send.",
+      "kindMenuNote": "Picking one starts a new conversation of that kind. This one stays in the list.",
+      "kindsOwn": "For this style's apps",
+      "kindsOther": "Other",
+      "kindsAll": "Kinds of conversation",
+      "kinds": {
+        "coding_agent": {
+          "label": "Instructions to a coding agent",
+          "short": "Coding agent"
+        },
+        "design_feedback": {
+          "label": "Feedback on a design or change",
+          "short": "Feedback"
+        },
+        "notes": {
+          "label": "Notes to yourself",
+          "short": "Notes"
+        },
+        "writeup": {
+          "label": "Longer write-up (plan, doc)",
+          "short": "Write-up"
+        },
+        "team_chat": {
+          "label": "Team chat",
+          "short": "Team chat"
+        },
+        "issue_comment": {
+          "label": "Issue or PR comment",
+          "short": "Issue comment"
+        },
+        "email": {
+          "label": "Email",
+          "short": "Email"
+        },
+        "text_message": {
+          "label": "Text message",
+          "short": "Text"
+        }
+      },
+      "tricks": {
+        "change_of_mind": {
+          "text": "change your mind partway through, the way you would out loud.",
+          "example": "For example, start with one answer, say “no wait”, then give the real one. Voicebox should write only the real one.",
+          "exampleWith": "For example, say {{example}}. Voicebox should write only what you settled on."
+        },
+        "long": {
+          "text": "take your time and explain, the way you'd talk it through.",
+          "example": "It's fine to ramble; Voicebox learns how to put it in order.",
+          "exampleWith": "It's fine to ramble, like {{example}}."
+        }
+      },
+      "chips": {
+        "correction_resolved": "change of mind cleaned up",
+        "term": "{{value}} spelled right",
+        "kept_exact": "{{value}} kept exact",
+        "greeting": "“{{value}}” greeting",
+        "no_greeting": "no greeting",
+        "sign_off": "“{{value}}” sign-off",
+        "list": "a list",
+        "line_per_thought": "one line per thought",
+        "lowercase_start": "lowercase starts",
+        "no_final_period": "no final period",
+        "abbreviation": "“{{value}}”",
+        "emoji": "{{value}} emoji",
+        "short": "short",
+        "run_on": "run-on sentences"
+      },
+      "summary": {
+        "saved_one": "{{count}} reply saved · {{dictated}} dictated",
+        "saved_other": "{{count}} replies saved · {{dictated}} dictated",
+        "examples": "Your dictated replies are saved as examples, and Voicebox uses them on your next dictations.",
+        "typedOnly": "You typed every reply, so Voicebox kept them but has no dictation to learn cleanup from. Dictate a few next time.",
+        "keepTeaching": "Keep teaching"
+      }
     }
   },
   "dictionary": {

@@ -501,9 +501,9 @@ class WritingStyleModel(BaseModel):
     position: int
     is_default: bool
     punctuation_style: str
-    capitalize_first: bool
-    smart_cleanup: bool
     preserve_technical: bool
+    # How the user says they write in this style's apps.
+    description: str = ""
 
 
 class StyledApp(BaseModel):
@@ -537,9 +537,8 @@ class WritingStyleCreate(BaseModel):
 class WritingStyleUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=80)
     punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
-    capitalize_first: Optional[bool] = None
-    smart_cleanup: Optional[bool] = None
     preserve_technical: Optional[bool] = None
+    description: Optional[str] = Field(default=None, max_length=2000)
     # Only true is meaningful: another style becomes the default by being made it.
     is_default: Optional[bool] = None
 
@@ -578,26 +577,89 @@ class CorrectionNotesStatus(BaseModel):
     outcome: str
 
 
-class WritingStyleStepRequest(BaseModel):
+TeachKind = Literal[
+    "coding_agent",
+    "design_feedback",
+    "notes",
+    "writeup",
+    "team_chat",
+    "issue_comment",
+    "email",
+    "text_message",
+]
+
+
+class TeachAnswer(BaseModel):
+    ask: str
+    answer: str
+
+
+class TeachNote(BaseModel):
+    """The facts for the user's next reply, so they only choose the words."""
+
+    facts: Optional[str] = None
+    answers: List[TeachAnswer] = []
+    # A teaching trick to try, with an example when the opener has one.
+    trick: Optional[Literal["change_of_mind", "long"]] = None
+    example: Optional[str] = None
+
+
+class TeachMessage(BaseModel):
+    from_you: bool
+    text: str
+
+
+class TeachChip(BaseModel):
+    """Something a reply showed about how the user writes; the app words ``code``."""
+
+    code: str
+    value: Optional[str] = None
+
+
+class TeachConversation(BaseModel):
+    id: str
+    kind: TeachKind
+    persona: str
+    relation: str
+    title: Optional[str] = None
+    messages: List[TeachMessage]
+    note: Optional[TeachNote] = None
+    reply_count: int
+    chips: List[TeachChip]
+    wrapped: bool
+
+
+class TeachSession(BaseModel):
+    """A teach session (docs/plans/TEACH_BY_REPLYING.md)."""
+
+    session_id: str
+    style_id: str
+    target: int
+    replies: int
+    # The kinds that match the style's apps.
+    suggested_kinds: List[TeachKind]
+    conversations: List[TeachConversation]
+
+
+class TeachConversationCreate(BaseModel):
+    kind: TeachKind
+
+
+class TeachReplyRequest(BaseModel):
     written: str = Field(..., max_length=4000)
 
 
-class WritingStyleCalibrationStep(BaseModel):
-    session_id: str
-    step: int
-    total: int
-    # What was said, and Voicebox's cleanup of it for the user to rewrite.
-    said: Optional[str] = None
-    paragraph: Optional[str] = None
-    habits: List[str]
-    changes: List[float]
-    done: bool
+class TeachDictated(BaseModel):
+    text: Optional[str] = None
 
 
-class WritingStyleCalibrationResult(BaseModel):
+class TeachFinishResult(BaseModel):
     status: WritingStyleStatus
-    before: str
-    after: str
+    before: Optional[str] = None
+    after: Optional[str] = None
+    replies: int
+    # Replies that were dictated, and so teach cleanup.
+    dictated: int
 
 
 class CaptureFeedbackResponse(BaseModel):
