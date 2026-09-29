@@ -184,20 +184,22 @@ function StyleCard({
         onDrop(bundleId);
       }}
       className={cn(
-        'flex flex-col gap-2.5 rounded-[10px] border p-3 transition-colors',
+        'relative flex flex-col gap-2.5 rounded-[10px] border p-3 transition-colors',
         over
           ? 'border-dashed border-accent bg-accent/[0.08]'
           : selected
             ? 'border-accent/55 bg-accent/[0.04]'
-            : 'border-border bg-card/40',
+            : 'border-border bg-card/40 hover:border-ring/40',
       )}
     >
+      {/* The button stretches over the whole card so any of it is clickable;
+          app icons and "+N more" sit above it to stay draggable and clickable. */}
       <button
         type="button"
         aria-pressed={selected}
         aria-label={t('writingStyle.styles.edit', { style: style.name })}
         onClick={onShow}
-        className="flex w-full items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full items-center gap-2 text-left before:absolute before:inset-0 before:rounded-[10px] focus-visible:outline-none focus-visible:before:ring-2 focus-visible:before:ring-ring"
       >
         <span className="truncate text-sm font-semibold">{style.name}</span>
         <span className="shrink-0 text-[11.5px] text-muted-foreground">
@@ -231,7 +233,7 @@ function StyleCard({
               onOver(false);
             }}
             className={cn(
-              'relative shrink-0 cursor-grab select-none rounded-lg hover:ring-2 hover:ring-ring/40',
+              'relative z-10 shrink-0 cursor-grab select-none rounded-lg hover:ring-2 hover:ring-ring/40',
               dragging === app.bundle_id && 'opacity-40',
             )}
           >
@@ -250,7 +252,7 @@ function StyleCard({
           </li>
         ))}
         {rest > 0 && (
-          <li>
+          <li className="relative z-10">
             <button
               type="button"
               onClick={onShowAll}
