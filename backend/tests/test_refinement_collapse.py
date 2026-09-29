@@ -153,3 +153,9 @@ def test_stt_artifacts_are_stripped_from_what_whisper_wrote():
     # Rhetorical repetition and ordinary text are left alone.
     assert strip_stt_artifacts("no, no, no, no, no") == "no, no, no, no, no"
     assert strip_stt_artifacts("Send  it") == "Send  it"
+
+
+def test_spelled_out_text_is_joined_in_what_whisper_wrote():
+    from backend.services.refinement import strip_stt_artifacts
+
+    assert strip_stt_artifacts("m-r-g-n-h-n-t at gmail.com") == "mrgnhnt at gmail.com"

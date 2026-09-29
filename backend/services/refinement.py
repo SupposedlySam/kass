@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits
 from .spoken_cleanup import apply_spoken_cleanup
+from .spelling import join_spelling
 from .spoken_corrections import apply_spoken_corrections
 from .voice_commands import commands_alone
 
@@ -71,11 +72,15 @@ def strip_stt_artifacts(text: str) -> str:
 
     Loops (see ``collapse_repetitive_artifacts``), and U+FFFD, which Whisper
     emits when it stops partway through a multi-byte character, typically
-    at the start of a loop ("box the\ufffd, the,R,A,A,A,..."). Applied to every
-    transcript, so saved captures and the examples made from them are clean.
+    at the start of a loop ("box the\ufffd, the,R,A,A,A,..."). Also spelled-out
+    text Whisper splits apart (see ``join_spelling``).
+    Applied to every transcript, so saved captures and the examples made from
+    them are clean.
     """
     cleaned = collapse_repetitive_artifacts(text.replace("\ufffd", ""))
-    return re.sub(r"[ \t]{2,}", " ", cleaned).strip() if cleaned != text else text
+    if cleaned != text:
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return join_spelling(cleaned)
 
 
 def _collapse_word_runs(text: str, min_run: int) -> str:
@@ -513,7 +518,9 @@ async def refine_transcript(
         prompt_cache_key.reset(key)
         if hint is not None:
             generation_hint.reset(hint)
-    text = text.strip()
+    # The model closes every text with a period, even one that ends on "!"
+    # or "?" ("CHENEY0021!.").
+    text = re.sub(r"(?<=[?!])\.$", "", text.strip())
     if flags.punctuation_style == "learned":
         from .writing_style import apply_learned
 
