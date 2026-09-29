@@ -25,7 +25,7 @@ import { SettingRow } from './SettingRow';
 
 const P = 'settings.captures.storage.retention';
 
-const CHOICES: Array<{ days: HistoryRetentionDays; key: string }> = [
+export const RETENTION_CHOICES: Array<{ days: HistoryRetentionDays; key: string }> = [
   { days: 7, key: 'd7' },
   { days: 30, key: 'd30' },
   { days: 90, key: 'd90' },
@@ -51,7 +51,7 @@ export function HistoryRetentionRow() {
   );
   const current = settings?.history_retention_days ?? 30;
   const label = (days: HistoryRetentionDays) =>
-    t(`${P}.${CHOICES.find((c) => c.days === days)?.key ?? 'd30'}`);
+    t(`${P}.${RETENTION_CHOICES.find((c) => c.days === days)?.key ?? 'd30'}`);
 
   const save = (days: HistoryRetentionDays) =>
     update(
@@ -81,7 +81,7 @@ export function HistoryRetentionRow() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CHOICES.map((choice) => (
+              {RETENTION_CHOICES.map((choice) => (
                 <SelectItem key={choice.days} value={String(choice.days)}>
                   {t(`${P}.${choice.key}`)}
                 </SelectItem>

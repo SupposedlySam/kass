@@ -64,6 +64,9 @@ def update_capture_settings(db: Session, patch: dict[str, Any]) -> DBCaptureSett
         from .commands import normalize_transforms
 
         patch = {**patch, "command_transforms": normalize_transforms(patch["command_transforms"])}
+    if patch.get("history_retention_days") is not None:
+        # Choosing a window, in Settings or when asked, lets the sweep delete.
+        patch = {**patch, "history_retention_confirmed": True}
     row = _get_or_create_capture_row(db)
     _apply_patch(row, patch)
     db.commit()

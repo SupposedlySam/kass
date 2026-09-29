@@ -12,6 +12,7 @@ import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
 import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
+import { RetentionAskDialog } from '@/components/ServerTab/RetentionAskDialog';
 import { SettingsLayout } from '@/components/ServerTab/ServerTab';
 import { CommandModePage } from '@/components/Settings/CommandModePage';
 import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPage';
@@ -42,6 +43,7 @@ function RootLayout() {
       </div>
       <StatusBar />
       <CommandPalette />
+      <RetentionAskDialog />
 
       {/* Show download toasts for any active downloads (from anywhere) */}
       {activeDownloads.map((download) => {

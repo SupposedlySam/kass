@@ -742,6 +742,19 @@
             "delete_one": "Delete {{count}} capture",
             "delete_other": "Delete {{count}} captures",
             "deleteUnknown": "Delete older captures"
+          },
+          "ask": {
+            "title": "Delete old captures?",
+            "description_one": "Voicebox now keeps {{window}} of history. {{count}} capture is older than that and would be deleted with its audio. Your corrections, the names it learned and your stats are kept.",
+            "description_other": "Voicebox now keeps {{window}} of history. {{count}} captures are older than that and would be deleted with their audio. Your corrections, the names they taught and your stats are kept.",
+            "choose": "Keep history for",
+            "counting": "Counting\u2026",
+            "later": "Not now",
+            "forever": "Keep forever",
+            "description_zero": "Voicebox now keeps {{window}} of history. No captures are older than that yet. Your corrections, the names they taught and your stats are always kept.",
+            "keep_zero": "Keep {{window}}",
+            "keep_one": "Keep {{window}}, delete {{count}}",
+            "keep_other": "Keep {{window}}, delete {{count}}"
           }
         },
         "folder": {
