@@ -576,6 +576,14 @@
         "action": "Restart",
         "busy": "Restarting…",
         "failed": "Restart failed"
+      },
+      "launchAtLogin": {
+        "title": "Launch at login",
+        "description": "Start Voicebox in the background when you log in, so dictation is ready.",
+        "unavailable": "Only the installed app in Applications can launch at login.",
+        "requiresApproval": "Turned off in System Settings › Login Items.",
+        "openLoginItems": "Open Login Items",
+        "failed": "Couldn't change launch at login"
       }
     },
     "captures": {
