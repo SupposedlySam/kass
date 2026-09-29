@@ -719,12 +719,22 @@
         "title": "Storage",
         "description": "Captures are saved as paired audio and transcript files in your Voicebox data directory.",
         "retention": {
-          "title": "Retention",
-          "description": "How long to keep captures. Applies to both audio and transcripts.",
+          "title": "Keep history",
+          "description": "Older captures are deleted with their audio. Corrections, what Voicebox learned and your stats are kept.",
           "forever": "Keep forever",
+          "d365": "1 year",
           "d90": "90 days",
           "d30": "30 days",
-          "d7": "7 days"
+          "d7": "7 days",
+          "confirm": {
+            "title": "Keep {{window}} of history?",
+            "description_one": "{{count}} capture older than {{window}} will be deleted with its audio. Its corrections, what Voicebox learned from it and your stats are kept.",
+            "description_other": "{{count}} captures older than {{window}} will be deleted with their audio. Their corrections, what Voicebox learned from them and your stats are kept.",
+            "unknown": "Captures older than {{window}} will be deleted with their audio. Their corrections, what Voicebox learned from them and your stats are kept.",
+            "delete_one": "Delete {{count}} capture",
+            "delete_other": "Delete {{count}} captures",
+            "deleteUnknown": "Delete older captures"
+          }
         },
         "folder": {
           "title": "Captures folder",
