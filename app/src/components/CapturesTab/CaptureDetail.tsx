@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse } from '@/lib/api/types';
+import { useUIStore } from '@/stores/uiStore';
 import { CaptureInspector } from './CaptureInspector';
 import { CommandDetail } from './CommandDetail';
 import { RefinementReviewNotice } from './RefinementReviewNotice';
@@ -11,7 +12,8 @@ import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './Transcript
  * The selected capture under the header: the text it delivered, what
  * refinement changed and what was heard, and the inspector beside them.
  * The card corrects the refined text, or the raw text when there is no
- * refinement; fixing a misheard word there teaches it too. Mount it keyed
+ * refinement; fixing a misheard word there teaches it too. The inspector
+ * shows only while the header's details button has it open. Mount it keyed
  * by capture id so drafts reset between captures. A Command Mode rewrite
  * has its own view: it isn't a dictation to correct.
  */
@@ -28,6 +30,7 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
     queryKey: ['capture-feedback', capture.id],
     queryFn: () => apiClient.listCaptureFeedback(capture.id),
   });
+  const detailsOpen = useUIStore((s) => s.capturesDetailsOpen);
 
   return (
     <div className="flex-1 min-h-0 flex">
@@ -47,7 +50,7 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
           </div>
         )}
       </div>
-      <CaptureInspector capture={capture} reports={reports} teach={teach} />
+      {detailsOpen && <CaptureInspector capture={capture} reports={reports} teach={teach} />}
     </div>
   );
 }

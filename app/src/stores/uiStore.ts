@@ -22,6 +22,9 @@ interface UIStore {
   // The Captures app list, shrunk to icons.
   capturesAppsCollapsed: boolean;
   setCapturesAppsCollapsed: (collapsed: boolean) => void;
+  // The selected capture's details (recording, models, corrections) beside it.
+  capturesDetailsOpen: boolean;
+  setCapturesDetailsOpen: (open: boolean) => void;
   // The app Captures and Insights show, shared so each opens on the other's.
   appFilter: CaptureAppFilter;
   setAppFilter: (filter: CaptureAppFilter) => void;
@@ -38,8 +41,10 @@ export const useUIStore = create<UIStore>()(
         set({ theme });
         applyTheme(theme);
       },
-      capturesAppsCollapsed: false,
+      capturesAppsCollapsed: true,
       setCapturesAppsCollapsed: (capturesAppsCollapsed) => set({ capturesAppsCollapsed }),
+      capturesDetailsOpen: false,
+      setCapturesDetailsOpen: (capturesDetailsOpen) => set({ capturesDetailsOpen }),
       appFilter: { kind: 'all' },
       setAppFilter: (appFilter) => set({ appFilter }),
       insightsPeriod: '7d',
@@ -47,9 +52,17 @@ export const useUIStore = create<UIStore>()(
     }),
     {
       name: 'voicebox-ui',
+      // Version 1 starts Captures with the app list collapsed, once, over
+      // the expanded list version 0 saved by default.
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<UIStore>;
+        return (version < 1 ? { ...state, capturesAppsCollapsed: true } : state) as UIStore;
+      },
       partialize: (state) => ({
         theme: state.theme,
         capturesAppsCollapsed: state.capturesAppsCollapsed,
+        capturesDetailsOpen: state.capturesDetailsOpen,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.theme);

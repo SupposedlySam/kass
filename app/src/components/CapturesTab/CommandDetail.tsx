@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CaptureResponse } from '@/lib/api/types';
 import { cn } from '@/lib/utils/cn';
-import { CaptureDeleteButton } from './CaptureDeleteButton';
+import { useUIStore } from '@/stores/uiStore';
 import { formatDuration } from './captureFormat';
 import { CopyButton } from './TranscriptCard';
 
@@ -34,6 +34,7 @@ export function CommandDetail({ capture }: { capture: CaptureResponse }) {
   const original = capture.command_selection ?? '';
   const said = capture.transcript_raw.trim();
   const instruction = capture.command_instruction ?? said;
+  const detailsOpen = useUIStore((s) => s.capturesDetailsOpen);
 
   return (
     <div className="flex-1 min-h-0 flex">
@@ -84,31 +85,30 @@ export function CommandDetail({ capture }: { capture: CaptureResponse }) {
           <p className="m-0 text-xs text-muted-foreground/80">{t('captures.command.undoHint')}</p>
         </section>
       </div>
-      <aside className="w-[250px] shrink-0 flex flex-col border-l border-border bg-card">
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 px-5 py-6">
-          {capture.duration_ms != null && (
-            <Row
-              label={t('captures.inspector.length')}
-              value={formatDuration(capture.duration_ms)}
-            />
-          )}
-          {capture.stt_model && (
-            <Row
-              label={t('captures.inspector.speech')}
-              value={t('captures.inspector.whisper', { model: capture.stt_model })}
-            />
-          )}
-          {capture.llm_model && (
-            <Row
-              label={t('captures.command.rewriting')}
-              value={t('captures.inspector.qwen', { model: capture.llm_model })}
-            />
-          )}
-        </div>
-        <div className="shrink-0 border-t border-border px-5 py-3.5">
-          <CaptureDeleteButton capture={capture} />
-        </div>
-      </aside>
+      {detailsOpen && (
+        <aside className="w-[250px] shrink-0 flex flex-col border-l border-border bg-card">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 px-5 py-6">
+            {capture.duration_ms != null && (
+              <Row
+                label={t('captures.inspector.length')}
+                value={formatDuration(capture.duration_ms)}
+              />
+            )}
+            {capture.stt_model && (
+              <Row
+                label={t('captures.inspector.speech')}
+                value={t('captures.inspector.whisper', { model: capture.stt_model })}
+              />
+            )}
+            {capture.llm_model && (
+              <Row
+                label={t('captures.command.rewriting')}
+                value={t('captures.inspector.qwen', { model: capture.llm_model })}
+              />
+            )}
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
-import { CaptureDeleteButton } from './CaptureDeleteButton';
 import { CorrectionLearning } from './CorrectionLearning';
 import { formatDuration, formatTime, languageName, wordsPerMinute } from './captureFormat';
 import type { TeachState } from './TeachCorrection';
@@ -112,7 +111,8 @@ function Corrections({
 
 /**
  * The capture's details beside its text: the recording, the models, and the
- * corrections. It scrolls on its own, with Delete pinned at the bottom.
+ * corrections. It scrolls on its own, and opens from the header's details
+ * button.
  */
 export function CaptureInspector({
   capture,
@@ -164,9 +164,6 @@ export function CaptureInspector({
           </Section>
         )}
         <Corrections reports={reports} teach={teach} />
-      </div>
-      <div className="shrink-0 border-t border-border px-5 py-3.5">
-        <CaptureDeleteButton capture={capture} />
       </div>
     </aside>
   );

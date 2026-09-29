@@ -13,14 +13,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Kbd } from '@/components/ui/kbd';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse } from '@/lib/api/types';
 import { isInOverlay, isTypingTarget } from './captureFormat';
 
 /**
- * Delete ⌫, pinned under the capture's inspector. The key works whenever
+ * Delete ⌫, a trash button in the capture's header. The key works whenever
  * focus isn't in a text field or an open overlay.
  */
 export function CaptureDeleteButton({ capture }: { capture: CaptureResponse }) {
@@ -62,15 +61,15 @@ export function CaptureDeleteButton({ capture }: { capture: CaptureResponse }) {
   return (
     <>
       <Button
-        variant="outline"
-        size="sm"
-        className="w-full border-destructive/30 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive"
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        aria-label={t('captures.actions.delete')}
+        title={`${t('captures.actions.delete')} ⌫`}
         onClick={() => setDeleteOpen(true)}
         disabled={deleteMutation.isPending}
       >
         {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
-        {t('captures.actions.delete')}
-        <Kbd className="border-0 bg-transparent px-0 text-destructive">⌫</Kbd>
       </Button>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

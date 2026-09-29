@@ -1,17 +1,64 @@
 import { Link } from '@tanstack/react-router';
-import { Settings2 } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Settings2 } from 'lucide-react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse } from '@/lib/api/types';
+import { cn } from '@/lib/utils/cn';
+import { useUIStore } from '@/stores/uiStore';
 import { AppIcon } from './AppIcon';
+import { CaptureDeleteButton } from './CaptureDeleteButton';
 import { CaptureInlinePlayer } from './CaptureInlinePlayer';
-import { formatDetailStamp } from './captureFormat';
+import { formatDetailStamp, isInOverlay } from './captureFormat';
+
+/**
+ * Shows or hides the capture's details, and ⌘I does the same from anywhere
+ * on the screen but an open overlay. Whether they're open is remembered.
+ */
+function DetailsToggle() {
+  const { t } = useTranslation();
+  const open = useUIStore((s) => s.capturesDetailsOpen);
+  const setOpen = useUIStore((s) => s.setCapturesDetailsOpen);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.metaKey) return;
+      if (event.altKey || event.ctrlKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== 'i' || isInOverlay(event.target)) return;
+      event.preventDefault();
+      const { capturesDetailsOpen, setCapturesDetailsOpen } = useUIStore.getState();
+      setCapturesDetailsOpen(!capturesDetailsOpen);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const Icon = open ? PanelRightClose : PanelRightOpen;
+  const label = t(open ? 'captures.details.hide' : 'captures.details.show');
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(
+        open
+          ? 'bg-muted text-accent hover:text-accent'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+      aria-label={label}
+      aria-expanded={open}
+      title={`${label} ⌘I`}
+      onClick={() => setOpen(!open)}
+    >
+      <Icon strokeWidth={1.7} />
+    </Button>
+  );
+}
 
 /**
  * The detail pane's header: the app the capture went to and when, its audio,
  * and a link to the settings of the style its app uses (Command Mode's, for
- * a command). Everything else about the capture is in the inspector beside it.
+ * a command), Delete, and the button that shows the capture's details.
  */
 export function CaptureDetailHeader({
   capture,
@@ -66,6 +113,12 @@ export function CaptureDetailHeader({
           </Link>
         )}
       </Button>
+      {capture && (
+        <>
+          <CaptureDeleteButton key={capture.id} capture={capture} />
+          <DetailsToggle />
+        </>
+      )}
     </header>
   );
 }
