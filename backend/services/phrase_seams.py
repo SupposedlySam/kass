@@ -144,7 +144,10 @@ def open_phrase(text: str, raw: str) -> str:
 
     A closing period always goes; a question or exclamation mark goes only when
     Whisper, which heard the earlier text, didn't end the phrase with it.
+    A phrase that ends with a spoken line break isn't open: it stays as it is.
     """
+    if "\n" in text[len(text.rstrip()) :]:
+        return text
     text = text.rstrip()
     heard = raw.rstrip()[-1:]
     if re.search(r"[\w)\"'\u201d][?!]$", text) and text[-1] != heard:
@@ -257,10 +260,14 @@ def continue_after_seam(before: str, phrase: str, earlier: str, names: frozenset
 
 
 def close_phrase(text: str) -> str:
-    """End a finished dictation that was left open at its last pause."""
+    """End a finished dictation that was left open at its last pause.
+
+    A spoken line break at the end stays, after the period.
+    """
     stripped = text.rstrip()
     if re.search(r"[\w)\"'\u201d]$", stripped):
-        return stripped + "."
+        trailing = text[len(stripped) :]
+        return stripped + "." + (trailing if "\n" in trailing else "")
     return text
 
 
@@ -277,6 +284,9 @@ def join_phrases(previous: str, phrase: str, raw_phrase: str, style: str) -> str
         return previous
     # Spoken formatting may end a phrase with a line or paragraph break.
     whitespace = previous[len(before) :] if "\n" in previous[len(before) :] else " "
+    if phrase[0] == "\n":
+        # The phrase starts with a spoken line break: it is the whole seam.
+        return f"{before}{whitespace.strip(' ')}{phrase}"
     new_sentence = _starts_sentence(raw_phrase)
     casual = style == "casual"
 

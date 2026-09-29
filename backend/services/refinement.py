@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 
 from . import llm as llm_service
-from .dictation_edits import apply_dictation_edits
+from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
 from .spoken_cleanup import apply_spoken_cleanup
 from .spelling import join_spelling
 from .spoken_corrections import apply_spoken_corrections
@@ -508,37 +508,55 @@ async def refine_transcript(
         adapter_path = active_adapter(resolved_size, flags.to_dict())
     options = {"adapter_path": adapter_path} if adapter_path else {}
     system_prompt, examples = _prompt(flags, use_personal_examples, extra_examples, correction_notes)
-    arguments = dict(
-        prompt=_without_final_period(cleaned_input),
-        system=system_prompt,
-        max_tokens=2048,
-        temperature=0.2,
-        model_size=resolved_size,
-        examples=examples,
-    )
-    from ..backends.qwen_llm_backend import generation_hint, prompt_cache_key
+    from ..backends.qwen_llm_backend import generation_hint, generation_listener, prompt_cache_key
+
+    async def clean(line: str) -> str:
+        arguments = dict(
+            prompt=_without_final_period(line),
+            system=system_prompt,
+            max_tokens=2048,
+            temperature=0.2,
+            model_size=resolved_size,
+            examples=examples,
+        )
+        try:
+            text = await backend.generate(**arguments, **options)
+        except Exception:
+            if not options or not use_personal_model:
+                raise
+            from .model_improvement.manager import quarantine_adapter
+
+            quarantine_adapter("The personal adapter failed to load or generate; reverted to the base model.")
+            options.clear()
+            text = await backend.generate(**arguments)
+        # The model closes every text with a period, even one that ends on "!"
+        # or "?" ("CHENEY0021!.").
+        return re.sub(r"(?<=[?!])\.$", "", text.strip())
 
     # A cleanup copies most of its transcript, so generation checks copied
     # words several per model call. The output is the same, in about a third
     # of the time. A caller may already have set a better hint.
     hint = generation_hint.set("") if generation_hint.get() is None else None
     key = prompt_cache_key.set(_cache_key(flags, use_personal_examples, correction_notes))
+    listener = generation_listener.get()
     try:
-        text = await backend.generate(**arguments, **options)
-    except Exception:
-        if not adapter_path or not use_personal_model:
-            raise
-        from .model_improvement.manager import quarantine_adapter
-
-        quarantine_adapter("The personal adapter failed to load or generate; reverted to the base model.")
-        text = await backend.generate(**arguments)
+        # Each line of spoken breaks is cleaned on its own: a small model
+        # flattens line breaks it is given.
+        parts = re.split(r"(\n+)", cleaned_input)
+        done = ""
+        for index in range(0, len(parts), 2):
+            if listener is not None:
+                # Whoever listens sees the whole text so far, not one line.
+                generation_listener.set(lambda partial, done=done: listener(done + partial))
+            cleaned = await clean(parts[index]) if parts[index].strip() else ""
+            done += cleaned + (parts[index + 1] if index + 1 < len(parts) else "")
+        text = done
     finally:
         prompt_cache_key.reset(key)
         if hint is not None:
             generation_hint.reset(hint)
-    # The model closes every text with a period, even one that ends on "!"
-    # or "?" ("CHENEY0021!.").
-    text = re.sub(r"(?<=[?!])\.$", "", text.strip())
+        if listener is not None:
+            generation_listener.set(listener)
     if flags.punctuation_style == "learned":
         from .writing_style import apply_learned
 
@@ -645,6 +663,16 @@ def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, st
         formatting=flags.smart_cleanup,
         corrections=flags.self_correction,
     )
+    if flags.smart_cleanup:
+        # Spoken breaks become real ones before the model sees the text, so
+        # the content check compares like with like. Marks go first, so a
+        # quoted "new line" stays words.
+        def spoken(text: str) -> str:
+            return apply_line_breaks(apply_spoken_marks(text))
+
+        cleaned_input = spoken(cleaned_input)
+        edited = spoken(edited) if edited is not None else None
+        corrected = spoken(corrected) if corrected is not None else None
     if edited is not None or corrected is not None:
         # Explicit structural edits are already resolved. A second generative
         # pass can reintroduce deleted text or flatten the list on small models.

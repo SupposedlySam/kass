@@ -283,3 +283,44 @@ async def test_each_cleanup_is_told_what_the_tail_cleaned_to_last_time(tmp_path,
     # Most of each cleanup repeats the last one, which the model checks in
     # large steps instead of generating again.
     assert hints == ["", "We are waiting on.", "We are waiting on QA."]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("heard", "cleaned", "expected"),
+    [
+        ("New line, hello there.", "\nHello there.", "\nHello there."),
+        ("Hello there, new line.", "Hello there.\n", "Hello there.\n"),
+        ("New line.", "\n", "\n"),
+    ],
+)
+async def test_a_spoken_line_break_at_either_end_is_kept(tmp_path, monkeypatch, heard, cleaned, expected):
+    # The field's sentence goes on, so a common first word is lowercased.
+    refine, _ = scripted({heard: cleaned, heard[0].lower() + heard[1:]: cleaned})
+    session, _ = refining_session(tmp_path, monkeypatch, refine)
+    # Even where the field's sentence goes on, the text starts on a new line.
+    session.set_context("We said")
+    session.finish()
+    await session.accept(heard)
+    await session.run()
+    session.close()
+    assert session.refined == expected
+
+
+@pytest.mark.asyncio
+async def test_a_line_break_settled_at_is_not_doubled(tmp_path, monkeypatch):
+    refine, prompts = scripted(
+        {
+            "Here is a list, new line, bananas": "Here is a list:\nBananas",
+            # Settled at the break; the open tail starts with the command.
+            "new line, bananas and peppers.": "\nBananas and peppers.",
+        }
+    )
+    session, _ = refining_session(tmp_path, monkeypatch, refine)
+    await session.accept("Here is a list, new line, bananas.", paused=True)
+    session.finish()
+    await session.accept("And peppers.")
+    await session.run()
+    session.close()
+    assert session.refined == "Here is a list:\nBananas and peppers."
+    assert prompts[-1] == "new line, bananas and peppers."

@@ -41,12 +41,25 @@ def test_open_phrase_drops_only_punctuation_the_pause_added():
     assert open_phrase("Is it?", "is it?") == "Is it?"
     # A lone "how" became a question only because it was cut off.
     assert open_phrase("How?", "how") == "How"
+    # Ended with a spoken line break: finished, not cut off.
+    assert open_phrase("It might.\n", "it might new line") == "It might.\n"
 
 
 def test_close_phrase_ends_an_open_dictation():
     assert close_phrase("It might") == "It might."
     assert close_phrase("Is it?") == "Is it?"
     assert close_phrase("") == ""
+    # A spoken line break at the end stays, after the period.
+    assert close_phrase("It might\n") == "It might.\n"
+    assert close_phrase("It might.\n") == "It might.\n"
+    assert close_phrase("\n") == "\n"
+
+
+def test_a_phrase_that_starts_with_a_line_break_joins_at_it():
+    assert join_phrases("Hello there.", "\nHow are you", "new line how are you", "standard") == (
+        "Hello there.\nHow are you"
+    )
+    assert join_phrases("Hello there", "\n\nHow", "new paragraph how", "casual") == "Hello there\n\nHow"
 
 
 @pytest.mark.parametrize(

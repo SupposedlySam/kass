@@ -30,7 +30,8 @@ pub fn plan(capture: &Value, allow_auto_paste: bool, refinement_error: Option<&s
         .and_then(Value::as_str)
         .or_else(|| capture.get("transcript_raw").and_then(Value::as_str))
         .unwrap_or("");
-    if !allow_auto_paste || text.trim().is_empty() {
+    // A spoken "new line" alone is a line break to type, not nothing.
+    if !allow_auto_paste || text.trim_matches([' ', '\t']).is_empty() {
         return Delivery::Nothing;
     }
     Delivery::Paste(text.to_string())
@@ -110,6 +111,12 @@ mod tests {
         assert_eq!(plan(&capture, true, None), Delivery::Nothing);
         let capture = json!({"transcript_raw": "hello", "transcript_refined": null});
         assert_eq!(plan(&capture, false, None), Delivery::Nothing);
+    }
+
+    #[test]
+    fn a_spoken_line_break_alone_is_pasted() {
+        let capture = json!({"transcript_raw": "new line", "transcript_refined": "\n"});
+        assert_eq!(plan(&capture, true, None), Delivery::Paste("\n".into()));
     }
 
     #[test]

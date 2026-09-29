@@ -487,8 +487,11 @@ class StreamingCapture:
 
         Cleanup capitalizes the start of every text; where the dictation
         continues the field's sentence, the transcript decided its case.
-        Elsewhere the style decides (``style_first_word``).
+        Elsewhere the style decides (``style_first_word``). Text that starts
+        with a spoken line break starts a new line, not the field's sentence.
         """
+        if text.lstrip(" \t")[:1] == "\n":
+            return text
         if self.continues:
             return match_raw_start(text, self.raw)
         return style_first_word(text, self.flags, self.names)
@@ -561,7 +564,8 @@ class StreamingCapture:
         if not text:
             return settled
         if self.settled_gap is not None:
-            return settled + self.settled_gap + text
+            # A tail that starts with a spoken break is the break the gap was.
+            return settled + (text if text[0] == "\n" else self.settled_gap + text)
         return self.join(settled, text, raw, learned)
 
     # --- Provisional text ------------------------------------------------------
@@ -604,7 +608,8 @@ class StreamingCapture:
         prefix = self.settled
 
         def project(partial: str) -> str:
-            refined = partial.strip()
+            # Keep a spoken line break the text starts with.
+            refined = partial.lstrip(" \t").rstrip()
             if self.flags.punctuation_style == "learned":
                 refined = learned(refined)
             text = self.corrected(self.compose(prefix, refined, prompt, learned))
