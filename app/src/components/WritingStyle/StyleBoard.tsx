@@ -15,7 +15,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { StyledApp, WritingStyle, WritingStylesResponse } from '@/lib/api/types';
-import { defaultStyle, WRITING_STYLES_KEY } from '@/lib/hooks/useWritingStyle';
+import { defaultStyle, useConfirmApps, WRITING_STYLES_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
 import { useMoveApp } from './MoveAppDialog';
 
@@ -336,6 +336,7 @@ export function StyleAppList({
 }) {
   const { t } = useTranslation();
   const mover = useMoveApp();
+  const confirmApps = useConfirmApps();
   const [query, setQuery] = useState('');
   const fallback = defaultStyle(data);
   const names = new Map(data.styles.map((s) => [s.id, s.name]));
@@ -372,7 +373,7 @@ export function StyleAppList({
             size="sm"
             className="font-semibold"
             onClick={() => {
-              for (const app of fresh) mover.move(app, app.style_id);
+              confirmApps.mutate(fresh);
               if (filter?.kind === 'new') onFilter(null);
             }}
           >

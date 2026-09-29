@@ -45,6 +45,38 @@ export function defaultStyle(data: WritingStylesResponse | undefined): WritingSt
  * corrections come along or stay (`corrections`), so everything learned is
  * refetched. Ask first with `useMoveApp`.
  */
+/** Keep every new app in the style it already uses, in one save. */
+export function useConfirmApps() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (apps: Pick<StyledApp, 'bundle_id' | 'name'>[]) => apiClient.confirmApps(apps),
+    onMutate: async (apps) => {
+      await queryClient.cancelQueries({ queryKey: WRITING_STYLES_KEY });
+      const previous = queryClient.getQueryData<WritingStylesResponse>(WRITING_STYLES_KEY);
+      if (previous) {
+        const ids = new Set(apps.map((app) => app.bundle_id));
+        queryClient.setQueryData<WritingStylesResponse>(WRITING_STYLES_KEY, {
+          ...previous,
+          apps: previous.apps.map((a) => (ids.has(a.bundle_id) ? { ...a, confirmed: true } : a)),
+        });
+      }
+      return { previous };
+    },
+    onError: (error: Error, _apps, context) => {
+      if (context?.previous) queryClient.setQueryData(WRITING_STYLES_KEY, context.previous);
+      toast({
+        title: t('writingStyle.styles.assignFailed'),
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+    onSuccess: (data) => queryClient.setQueryData(WRITING_STYLES_KEY, data),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['captures', 'apps'] }),
+  });
+}
+
 export function useAssignAppStyle() {
   const { t } = useTranslation();
   const { toast } = useToast();

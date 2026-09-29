@@ -526,6 +526,17 @@ class AppStyleAssign(BaseModel):
     corrections: Literal["bring", "leave"] = "bring"
 
 
+class AppToConfirm(BaseModel):
+    bundle_id: str = Field(min_length=1, max_length=255)
+    app_name: Optional[str] = Field(default=None, max_length=255)
+
+
+class AppsConfirm(BaseModel):
+    """New apps to keep in the style they already use."""
+
+    apps: list[AppToConfirm] = Field(max_length=500)
+
+
 class CorrectionNote(BaseModel):
     """One rule summarized from the user's older examples."""
 

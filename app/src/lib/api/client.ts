@@ -21,6 +21,7 @@ import type {
   ModelStatusListResponse,
   MovedCorrections,
   PersonalExample,
+  StyledApp,
   UsagePeriod,
   UsageStatsResponse,
   WhisperModelSize,
@@ -235,6 +236,15 @@ class ApiClient {
         body: JSON.stringify({ style_id: styleId, app_name: appName ?? null, corrections }),
       },
     );
+  }
+
+  async confirmApps(apps: Pick<StyledApp, 'bundle_id' | 'name'>[]): Promise<WritingStylesResponse> {
+    return this.request<WritingStylesResponse>('/writing-styles/apps/confirm', {
+      method: 'POST',
+      body: JSON.stringify({
+        apps: apps.map((app) => ({ bundle_id: app.bundle_id, app_name: app.name ?? null })),
+      }),
+    });
   }
 
   // Writing style: everything below is per style; none is the default style.

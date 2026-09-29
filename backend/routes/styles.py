@@ -102,6 +102,14 @@ async def delete_style(style_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Style not found")
 
 
+@router.post("/apps/confirm", response_model=models.WritingStylesResponse)
+async def confirm_apps(request: models.AppsConfirm, db: Session = Depends(get_db)):
+    """Keep every listed new app in the style it already uses."""
+    apps = [target_app(app.bundle_id, app.app_name) for app in request.apps]
+    styles_service.confirm_apps(db, [(bundle, name) for bundle, name in apps if bundle])
+    return _listing(db)
+
+
 @router.put("/apps/{bundle_id}", response_model=models.WritingStylesResponse)
 async def assign_app(bundle_id: str, request: models.AppStyleAssign, db: Session = Depends(get_db)):
     """Use ``style_id`` for an app; this also confirms a new app's style.

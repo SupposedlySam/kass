@@ -350,6 +350,23 @@ def assign_app(db: Session, bundle_id: str, app_name: str | None, style_id: str,
     _refresh_habits(db)
 
 
+def confirm_apps(db: Session, apps: list[tuple[str, str | None]]) -> None:
+    """Keep each new app in the style it already uses, confirming it.
+
+    One commit for the lot, so confirming many apps at once doesn't recount
+    the habits per app. Apps that already have a style are left alone.
+    """
+    current = snapshot()
+    added = False
+    for bundle_id, app_name in apps:
+        if db.get(AppStyle, bundle_id) is None:
+            db.add(AppStyle(bundle_id=bundle_id, app_name=app_name, style_id=current.for_app(bundle_id).id))
+            added = True
+    if added:
+        db.commit()
+        _changed()
+
+
 def _refresh_habits(db: Session) -> None:
     from . import writing_style
 

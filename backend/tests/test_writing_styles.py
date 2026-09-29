@@ -121,6 +121,15 @@ def test_assigning_an_app_confirms_it_and_picks_its_flags(storage):
     )
 
 
+def test_confirming_new_apps_keeps_them_in_their_style(storage):
+    seed(storage)
+    chat = create(storage, "Chat")
+    assign(storage, SLACK, chat)
+    with storage() as db:
+        styles.confirm_apps(db, [(SLACK, "Slack"), (MAIL, "Mail")])
+    assert styles.snapshot().apps == {SLACK: chat, MAIL: "personal"}
+
+
 def test_styles_are_created_renamed_and_deleted(storage):
     seed(storage)
     with storage() as db:
@@ -426,6 +435,11 @@ def test_style_endpoints(storage, monkeypatch):
             "suggested_style_id": "personal",
         }
     ]
+    confirmed = client.post(
+        "/writing-styles/apps/confirm", json={"apps": [{"bundle_id": "net.whatsapp.WhatsApp", "app_name": "WhatsApp"}]}
+    ).json()
+    assert confirmed["apps"][0]["confirmed"] is True
+    assert confirmed["apps"][0]["style_id"] == "personal"
     chat = client.post("/writing-styles", json={"name": "Chat"}).json()["id"]
     listing = client.put(
         "/writing-styles/apps/net.whatsapp.WhatsApp", json={"style_id": chat, "corrections": "leave"}
