@@ -213,8 +213,8 @@ def test_a_crash_midway_loses_nothing_and_counts_nothing_twice(storage, monkeypa
 
     real = history_retention._fold
 
-    def fold_then_crash(db, rows):
-        real(db, rows)
+    def fold_then_crash(db, rows, *args):
+        real(db, rows, *args)
         raise RuntimeError("power cut")
 
     monkeypatch.setattr(history_retention, "_fold", fold_then_crash)

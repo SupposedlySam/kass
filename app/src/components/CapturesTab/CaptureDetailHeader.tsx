@@ -13,6 +13,27 @@ import { CaptureInlinePlayer } from './CaptureInlinePlayer';
 import { formatDetailStamp, isInOverlay } from './captureFormat';
 
 /**
+ * The capture's recording: a player, or a note that it was deleted
+ * automatically. A command run from ⌘K never had a recording and shows nothing.
+ */
+function CaptureRecording({ capture }: { capture: CaptureResponse }) {
+  const { t } = useTranslation();
+
+  if (!capture.audio_path) {
+    return capture.audio_deleted ? (
+      <p className="shrink-0 text-xs text-muted-foreground">{t('captures.detail.audioDeleted')}</p>
+    ) : null;
+  }
+  return (
+    <CaptureInlinePlayer
+      audioUrl={apiClient.getCaptureAudioUrl(capture.id)}
+      fallbackDurationMs={capture.duration_ms}
+      className="w-60 shrink-0"
+    />
+  );
+}
+
+/**
  * Shows or hides the capture's details, and ⌘I does the same from anywhere
  * on the screen but an open overlay. Whether they're open is remembered.
  */
@@ -86,14 +107,7 @@ export function CaptureDetailHeader({
               })}
             </p>
           </div>
-          {/* A command run from ⌘K has no recording. */}
-          {capture.audio_path && (
-            <CaptureInlinePlayer
-              audioUrl={apiClient.getCaptureAudioUrl(capture.id)}
-              fallbackDurationMs={capture.duration_ms}
-              className="w-60 shrink-0"
-            />
-          )}
+          <CaptureRecording capture={capture} />
         </>
       ) : (
         <span className="flex-1" />

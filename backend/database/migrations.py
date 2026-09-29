@@ -81,6 +81,7 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
         ("style_id", "VARCHAR"),
         ("app_category", "VARCHAR"),
         ("teaches_style_id", "VARCHAR"),
+        ("audio_deleted", "BOOLEAN NOT NULL DEFAULT 0"),
     ):
         if column not in columns:
             _add_column(engine, "captures", f"{column} {kind}", column)
@@ -274,4 +275,11 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             "onboarding_completed BOOLEAN NOT NULL DEFAULT 1",
             "onboarding_completed",
+        )
+    if "discard_audio" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            "discard_audio BOOLEAN NOT NULL DEFAULT 0",
+            "discard_audio",
         )

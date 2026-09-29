@@ -298,6 +298,8 @@ export interface CaptureResponse {
   command_transform?: string | null;
   /** The writing style the capture was cleaned up with. */
   style_id?: string | null;
+  /** The recording was deleted once the transcript was saved (a ⌘K command never had one). */
+  audio_deleted: boolean;
   created_at: string;
 }
 
@@ -462,6 +464,8 @@ export interface CaptureSettings {
   history_retention_confirmed: boolean;
   /** First-run onboarding was finished or closed (docs/plans/ONBOARDING.md). */
   onboarding_completed: boolean;
+  /** Delete each recording once its transcript is saved. */
+  discard_audio: boolean;
 }
 
 export interface RetentionStatus {

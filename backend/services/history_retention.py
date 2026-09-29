@@ -6,7 +6,8 @@ Before a capture goes, everything learned from it moves somewhere that lasts
 (docs/plans/HISTORY_RETENTION.md):
 
 - its corrections stay, with the app and style they teach copied onto them
-  and their audio moved to the correction audio folder;
+  and their audio moved to the correction audio folder (unless the user keeps
+  no recordings, audio_retention.py);
 - usage stats get a ``RetiredCapture`` row of its numbers;
 - the names it wrote go into ``KnownName``.
 
@@ -132,8 +133,12 @@ def _keep_audio(row: Capture) -> str | None:
     return config.to_storage_path(target)
 
 
-def _fold(db, rows: list[Capture]) -> None:
-    """Move what ``rows`` taught into lasting storage. The caller commits."""
+def _fold(db, rows: list[Capture], keep_audio: bool = True) -> None:
+    """Move what ``rows`` taught into lasting storage. The caller commits.
+
+    ``keep_audio`` False keeps no recording for corrections: the user keeps none
+    (audio_retention.py).
+    """
     from .phrase_seams import mid_sentence_capitals
 
     ids = [row.id for row in rows]
@@ -163,7 +168,7 @@ def _fold(db, rows: list[Capture]) -> None:
         if row.transcript_refined and row.source != "command":
             for name in mid_sentence_capitals(row.transcript_refined):
                 names[name] = max(names.get(name, created), created)
-        audio = _keep_audio(row) if reports else None
+        audio = _keep_audio(row) if reports and keep_audio else None
         for report in reports:
             report.app_bundle_id = row.app_bundle_id
             report.teaches_style_id = row.teaches_style_id
@@ -218,8 +223,11 @@ def sweep(now: datetime | None = None) -> int:
     """Fold and delete every capture past a confirmed window. Returns how many went. Blocking."""
     if database_session.SessionLocal is None:
         return 0
+    from .settings import get_capture_settings
+
     deleted = 0
     with database_session.SessionLocal() as db:
+        keep_audio = not get_capture_settings(db).discard_audio
         days, confirmed, _ = status(db, now)
         before = cutoff(days, now)
         if before is None or not confirmed:
@@ -234,7 +242,7 @@ def sweep(now: datetime | None = None) -> int:
                     break
                 audio = [row.audio_path for row in rows if row.audio_path]
                 try:
-                    _fold(db, rows)
+                    _fold(db, rows, keep_audio)
                     db.query(Capture).filter(Capture.id.in_([row.id for row in rows])).delete(synchronize_session=False)
                     db.commit()
                 except Exception:

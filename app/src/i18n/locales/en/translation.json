@@ -392,7 +392,8 @@
     },
     "detail": {
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "audioDeleted": "Voice recording deleted automatically"
     },
     "changes": {
       "title": "What changed",
@@ -765,6 +766,10 @@
       "storage": {
         "title": "Storage",
         "description": "Captures are saved as paired audio and transcript files in your Kass data directory.",
+        "recordings": {
+          "title": "Delete voice recordings",
+          "description": "Each recording is deleted as soon as its text is saved. Captures keep their text, but can't be played back."
+        },
         "retention": {
           "title": "Keep history",
           "description": "Older captures are deleted with their audio. Corrections, what Kass learned and your stats are kept.",

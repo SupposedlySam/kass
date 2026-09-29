@@ -1077,15 +1077,26 @@ class StreamingCapture:
             f"refinement_error={'yes' if self.refinement_error else 'no'}"
         )
 
+    def stored_audio(self) -> str:
+        """The recording's storage path, or "" once it is deleted because the user keeps none."""
+        from .audio_retention import discard, discards_now
+
+        if discards_now(self.settings):
+            discard(self.path)
+            return ""
+        return config.to_storage_path(self.path)
+
     def persist(self, db):
         self.archive.close()
         if self.is_command:
             return self.persist_command(db)
         if self.edit is not None:
             return self.persist_edit(db)
+        stored = self.stored_audio()
         row = Capture(
             id=self.id,
-            audio_path=config.to_storage_path(self.path),
+            audio_path=stored,
+            audio_deleted=not stored,
             source=self.source,
             language=self.language,
             duration_ms=round(self.samples / self.rate * 1000),
@@ -1117,9 +1128,11 @@ class StreamingCapture:
         )
 
     def persist_command(self, db):
+        stored = self.stored_audio()
         row = Capture(
             id=self.id,
-            audio_path=config.to_storage_path(self.path),
+            audio_path=stored,
+            audio_deleted=not stored,
             source=self.source,
             language=self.language,
             duration_ms=round(self.samples / self.rate * 1000),
@@ -1150,9 +1163,11 @@ class StreamingCapture:
     def persist_edit(self, db):
         """A voice edit is saved like a command on the take it changed: the
         take before, what was said, and the take after (docs/plans/VOICE_EDITS.md)."""
+        stored = self.stored_audio()
         row = Capture(
             id=self.id,
-            audio_path=config.to_storage_path(self.path),
+            audio_path=stored,
+            audio_deleted=not stored,
             source="command",
             language=self.language,
             duration_ms=round(self.samples / self.rate * 1000),

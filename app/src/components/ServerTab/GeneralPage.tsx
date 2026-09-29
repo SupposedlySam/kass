@@ -12,6 +12,7 @@ import { SERVER_URL } from '@/stores/serverStore';
 import { BetaUpdatesRow } from './BetaUpdatesRow';
 import { HistoryRetentionRow } from './HistoryRetentionRow';
 import { LaunchAtLoginRow } from './LaunchAtLoginRow';
+import { RecordingRetentionRow } from './RecordingRetentionRow';
 import { SettingRow, SettingSection } from './SettingRow';
 import { ThemeSelect } from './ThemeSelect';
 import { VersionRow } from './VersionRow';
@@ -83,6 +84,7 @@ export function GeneralPage() {
 
       <SettingSection title={t('settings.captures.storage.title')}>
         <HistoryRetentionRow />
+        <RecordingRetentionRow />
         <CapturesFolderRow />
       </SettingSection>
     </>

@@ -13,7 +13,6 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
 import soundfile as sf
 from sqlalchemy import func
@@ -54,7 +53,7 @@ def _clean_app_field(value: object) -> str | None:
     return value.strip()[:MAX_APP_FIELD_CHARS] or None
 
 
-def target_app(bundle_id: object, name: object) -> tuple[Optional[str], Optional[str]]:
+def target_app(bundle_id: object, name: object) -> tuple[str | None, str | None]:
     """The dictation's target app as stored: blank or non-string parts become None."""
     return _clean_app_field(bundle_id), _clean_app_field(name)
 
@@ -92,7 +91,7 @@ def spoken_style(transcript: str, bundle_id: str | None) -> tuple[str, str | Non
 
 
 def _to_response(row: DBCapture) -> CaptureResponse:
-    flags_model: Optional[RefinementFlagsModel] = None
+    flags_model: RefinementFlagsModel | None = None
     if row.refinement_flags:
         try:
             flags_model = RefinementFlagsModel(**json.loads(row.refinement_flags))
@@ -124,6 +123,7 @@ def _to_response(row: DBCapture) -> CaptureResponse:
         command_instruction=row.command_instruction,
         command_transform=row.command_transform,
         style_id=row.style_id,
+        audio_deleted=bool(row.audio_deleted),
         created_at=row.created_at,
     )
 
@@ -133,11 +133,11 @@ async def create_capture(
     audio_bytes: bytes,
     filename: str,
     source: str,
-    language: Optional[str],
-    stt_model: Optional[str],
+    language: str | None,
+    stt_model: str | None,
     db: Session,
-    app_bundle_id: Optional[str] = None,
-    app_name: Optional[str] = None,
+    app_bundle_id: str | None = None,
+    app_name: str | None = None,
 ) -> CaptureResponse:
     """Persist raw audio, run STT, store the row."""
     if source not in VALID_SOURCES:
@@ -213,9 +213,18 @@ async def create_capture(
         transcript = mark_commands(transcript)
         logger.info("Capture %s transcription (including model load/queue): %.3fs for %sms audio", capture_id, time.monotonic() - transcription_started, duration_ms)
 
+        from .audio_retention import discard, discards_now
+        from .settings import get_capture_settings
+
+        stored_audio = config.to_storage_path(audio_path)
+        if discards_now(get_capture_settings(db)):
+            discard(audio_path)
+            written_files.remove(audio_path)
+            stored_audio = ""
         row = DBCapture(
             id=capture_id,
-            audio_path=config.to_storage_path(audio_path),
+            audio_path=stored_audio,
+            audio_deleted=not stored_audio,
             source=source,
             language=language,
             duration_ms=duration_ms,
@@ -233,10 +242,8 @@ async def create_capture(
         # disk has no row pointing at it — clean up so data/captures doesn't
         # accumulate orphan blobs across failed transcribes.
         for path in written_files:
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
         raise
 
     return _to_response(row)
@@ -319,7 +326,7 @@ def list_capture_apps(db: Session) -> CaptureAppsResponse:
     )
 
 
-def get_capture(capture_id: str, db: Session) -> Optional[CaptureResponse]:
+def get_capture(capture_id: str, db: Session) -> CaptureResponse | None:
     row = db.query(DBCapture).filter(DBCapture.id == capture_id).first()
     return _to_response(row) if row else None
 
@@ -347,9 +354,9 @@ def delete_capture(capture_id: str, db: Session) -> bool:
 async def refine_capture(
     capture_id: str,
     flags: RefinementFlags,
-    model_size: Optional[str],
+    model_size: str | None,
     db: Session,
-) -> Optional[CaptureResponse]:
+) -> CaptureResponse | None:
     with history_retention.in_use(capture_id):
         return await _refine_capture(capture_id, flags, model_size, db)
 
@@ -357,9 +364,9 @@ async def refine_capture(
 async def _refine_capture(
     capture_id: str,
     flags: RefinementFlags,
-    model_size: Optional[str],
+    model_size: str | None,
     db: Session,
-) -> Optional[CaptureResponse]:
+) -> CaptureResponse | None:
     row = db.query(DBCapture).filter(DBCapture.id == capture_id).first()
     if not row:
         return None
@@ -392,20 +399,20 @@ async def _refine_capture(
 
 async def retranscribe_capture(
     capture_id: str,
-    stt_model: Optional[str],
-    language: Optional[str],
+    stt_model: str | None,
+    language: str | None,
     db: Session,
-) -> Optional[CaptureResponse]:
+) -> CaptureResponse | None:
     with history_retention.in_use(capture_id):
         return await _retranscribe_capture(capture_id, stt_model, language, db)
 
 
 async def _retranscribe_capture(
     capture_id: str,
-    stt_model: Optional[str],
-    language: Optional[str],
+    stt_model: str | None,
+    language: str | None,
     db: Session,
-) -> Optional[CaptureResponse]:
+) -> CaptureResponse | None:
     row = db.query(DBCapture).filter(DBCapture.id == capture_id).first()
     if not row:
         return None

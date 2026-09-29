@@ -71,6 +71,8 @@ class CaptureResponse(BaseModel):
     command_transform: Optional[str] = None
     # The writing style the capture was cleaned up with.
     style_id: Optional[str] = None
+    # The recording was deleted once its transcript was saved.
+    audio_deleted: bool = False
     created_at: datetime
 
     class Config:
@@ -286,6 +288,8 @@ class CaptureSettingsResponse(BaseModel):
     # Set by saving history_retention_days; the sweep deletes nothing until then.
     history_retention_confirmed: bool = False
     onboarding_completed: bool = False
+    # Delete each recording once its transcript is saved.
+    discard_audio: bool = False
 
     class Config:
         from_attributes = True
@@ -318,6 +322,7 @@ class CaptureSettingsUpdate(BaseModel):
     command_transforms: Optional[List[Transform]] = None
     history_retention_days: Optional[HistoryRetentionDays] = None
     onboarding_completed: Optional[bool] = None
+    discard_audio: Optional[bool] = None
 
 
 class CommandRunRequest(BaseModel):

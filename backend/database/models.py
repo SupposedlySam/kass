@@ -1,9 +1,9 @@
 """ORM model definitions for the kass SQLite database."""
 
-from datetime import datetime
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 from ..services.commands import default_transforms
@@ -72,6 +72,8 @@ class CaptureSettings(Base):
     history_retention_confirmed = Column(Boolean, nullable=False, default=False)
     # First-run onboarding (docs/plans/ONBOARDING.md) was finished or closed.
     onboarding_completed = Column(Boolean, nullable=False, default=False)
+    # Delete each recording once its transcript is saved (services/audio_retention.py).
+    discard_audio = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -115,6 +117,9 @@ class Capture(Base):
     # The style this capture's corrections teach, when the user left them
     # behind as its app moved to another style. None follows the app.
     teaches_style_id = Column(String, nullable=True)
+    # The recording was deleted once its transcript was saved (services/audio_retention.py).
+    # A command run from ⌘K has no recording and is not marked.
+    audio_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
