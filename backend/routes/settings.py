@@ -34,6 +34,13 @@ async def update_capture_settings_endpoint(
     return saved
 
 
+@router.get("/captures/retention-status", response_model=models.RetentionStatusResponse)
+async def retention_status_endpoint(db: Session = Depends(get_db)):
+    """Whether to ask before history retention first deletes anything, and how much it would."""
+    days, confirmed, expiring = history_retention.status(db)
+    return models.RetentionStatusResponse(days=days, confirmed=confirmed, expiring=expiring)
+
+
 @router.get("/captures/retention-preview", response_model=models.RetentionPreviewResponse)
 async def retention_preview_endpoint(days: int, db: Session = Depends(get_db)):
     """How many captures keeping ``days`` of history would delete now."""

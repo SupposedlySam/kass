@@ -244,6 +244,15 @@ class RetentionPreviewResponse(BaseModel):
     expiring: int
 
 
+class RetentionStatusResponse(BaseModel):
+    """Whether the app should ask before history retention first deletes anything."""
+
+    days: HistoryRetentionDays
+    confirmed: bool
+    # Captures the current window would delete once confirmed.
+    expiring: int
+
+
 class CaptureSettingsResponse(BaseModel):
     """Server-persisted defaults for the capture / refine flow."""
 
@@ -273,6 +282,8 @@ class CaptureSettingsResponse(BaseModel):
     command_transforms: List[Transform] = Field(default_factory=default_transforms)
     # Days of capture history to keep; 0 keeps it forever.
     history_retention_days: HistoryRetentionDays = 30
+    # Set by saving history_retention_days; the sweep deletes nothing until then.
+    history_retention_confirmed: bool = False
 
     class Config:
         from_attributes = True

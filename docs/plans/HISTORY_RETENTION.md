@@ -8,13 +8,21 @@ Captures pile up forever: every dictation keeps its audio and transcripts. The u
 
 `capture_settings.history_retention_days`: 7, 30 (default), 90, 365 or 0 (keep forever). It sits under Settings → General → Storage as "Keep history". Choosing a shorter window asks first when it would delete captures: `GET /settings/captures/retention-preview?days=N` says how many, and the dialog names the number, in the style of the per-app "ask before moving corrections" dialog. Saving the setting sweeps before the request returns, so the Captures list the app reloads is already trimmed.
 
+## Asking first
+
+Nothing is deleted until the user confirms a window: `capture_settings.history_retention_confirmed`, false for new rows and for existing installs (the migration adds it as 0). Saving `history_retention_days` from anywhere sets it, so the Settings row's confirm-when-shortening dialog counts as confirming.
+
+At launch the app reads `GET /settings/captures/retention-status` (window, confirmed, how many captures it would delete). While unconfirmed with captures to delete, an app-level dialog (`RetentionAskDialog`, never the capture pill) says how many captures are older than the window and that corrections, names and stats are kept. It offers: keep the window (confirm and delete), another window from the same choices (the count updates), or Keep forever. Every choice saves the window, which confirms it. "Not now" saves nothing, and it asks again next launch.
+
+When an unconfirmed window would delete nothing, the status call or the sweep confirms it silently, so a fresh install never sees the dialog. Once confirmed, the hourly sweep deletes, without asking, only captures that age past the chosen window.
+
 ## Sweep
 
 `services/history_retention.py` runs at server startup and then hourly. It deletes captures created before the window, in batches of 200. The newest capture (the current take) is never deleted, nor one being refined or retranscribed (`history_retention.in_use`). A dictation in progress has no row until it finishes, so it is never a candidate.
 
 Each batch is one transaction: fold everything the batch taught (below), then delete its rows, then commit. A crash before the commit rolls back both, so nothing is lost; a folded capture is deleted in the same commit, so it is never folded twice (and the stats table's primary key would refuse a second row anyway). Audio files are removed after the commit. A crash between the commit and the unlink leaves files with no capture; each sweep deletes files in the captures folder whose name is not a capture id and that are older than the window, which never touches a dictation still being written.
 
-Keep forever (0) skips the sweep entirely.
+An unconfirmed window and Keep forever (0) both skip the sweep entirely.
 
 ## Audit: what reads captures, and how it survives
 
@@ -34,5 +42,4 @@ Keep forever (0) skips the sweep entirely.
 
 ## Open questions
 
-- The default is 30 days, so an existing install deletes captures older than 30 days on its first startup after upgrading, without the confirmation dialog.
 - Corrected captures keep their transcripts (in the report snapshot) and audio (in `correction-audio/`) indefinitely, since they are the learning data. Deleting a capture by hand still deletes its reports.

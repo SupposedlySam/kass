@@ -186,3 +186,11 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "history_retention_days INTEGER NOT NULL DEFAULT 30",
             "history_retention_days",
         )
+    if "history_retention_confirmed" not in columns:
+        # Existing installs are asked before their first deletion.
+        _add_column(
+            engine,
+            "capture_settings",
+            "history_retention_confirmed BOOLEAN NOT NULL DEFAULT 0",
+            "history_retention_confirmed",
+        )

@@ -108,7 +108,7 @@ def test_retention_defaults_to_30_days(storage):
         assert get_capture_settings(db).history_retention_days == 30
 
 
-def test_upgrading_keeps_30_days_and_detaches_nothing(tmp_path):
+def test_upgrading_keeps_30_days_unconfirmed_and_detaches_nothing(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE capture_settings (id INTEGER PRIMARY KEY, stt_model VARCHAR)"))
@@ -117,7 +117,10 @@ def test_upgrading_keeps_30_days_and_detaches_nothing(tmp_path):
     run_migrations(engine)
     run_migrations(engine)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT history_retention_days FROM capture_settings")).scalar() == 30
+        row = connection.execute(
+            text("SELECT history_retention_days, history_retention_confirmed FROM capture_settings")
+        ).one()
+        assert tuple(row) == (30, 0)
         columns = {row[1] for row in connection.execute(text("PRAGMA table_info(capture_feedback)"))}
     assert {"app_bundle_id", "teaches_style_id"} <= columns
 
@@ -132,6 +135,7 @@ def test_old_captures_and_their_audio_go_and_their_corrections_keep_teaching(sto
     before_examples = personal_examples.all_examples(work)
     with storage() as db:
         before_counts = styles.app_corrections(db)
+    keep(storage, 30)
 
     assert history_retention.sweep() == 2
 
@@ -159,6 +163,7 @@ def test_a_left_correction_keeps_its_style_after_its_capture_goes(storage):
     add(storage, "old", 40, app=SLACK, said="send the deck", meant="Send the deck.")
     with storage() as db:
         styles.assign_app(db, SLACK, "Slack", styles.default_id(), corrections="leave")
+    keep(storage, 30)
     history_retention.sweep()
     personal_examples.invalidate()
     assert [e["said"] for e in personal_examples.all_examples(work)] == ["send the deck"]
@@ -300,3 +305,67 @@ def test_preview_counts_what_a_shorter_window_would_delete(storage):
     # Saving a shorter window sweeps right away.
     assert client.put("/settings/captures", json={"history_retention_days": 30}).status_code == 200
     assert ids(storage) == {"c20", "c5", "c0"}
+
+
+def test_an_unconfirmed_window_deletes_nothing(storage):
+    audio = add(storage, "old", 40)
+    add(storage, "new", 1)
+    assert history_retention.sweep() == 0
+    assert ids(storage) == {"old", "new"}
+    assert audio.exists()
+    with storage() as db:
+        assert history_retention.status(db) == (30, False, 1)
+
+
+def test_confirming_the_window_lets_the_sweep_delete(storage):
+    add(storage, "old", 40)
+    add(storage, "new", 1)
+    history_retention.sweep()
+    with storage() as db:
+        # Keeping the default, as the launch dialog's first choice does.
+        assert update_capture_settings(db, {"history_retention_days": 30}).history_retention_confirmed
+    assert history_retention.sweep() == 1
+    assert ids(storage) == {"new"}
+
+
+def test_keep_forever_when_asked_confirms_and_deletes_nothing(storage):
+    add(storage, "old", 400)
+    add(storage, "new", 1)
+    keep(storage, 0)
+    with storage() as db:
+        assert history_retention.status(db) == (0, True, 0)
+    assert history_retention.sweep() == 0
+    assert ids(storage) == {"old", "new"}
+
+
+def test_nothing_to_delete_confirms_without_asking(storage):
+    add(storage, "first", 3)
+    with storage() as db:
+        assert not get_capture_settings(db).history_retention_confirmed
+    assert history_retention.sweep() == 0
+    with storage() as db:
+        assert get_capture_settings(db).history_retention_confirmed
+    # Once confirmed, captures that age past the window go without asking.
+    add(storage, "later", -40)
+    assert history_retention.sweep(now=NOW + timedelta(days=40)) == 1
+    assert ids(storage) == {"later"}
+
+
+def test_the_status_endpoint_says_whether_to_ask(storage):
+    add(storage, "old", 40)
+    add(storage, "new", 1)
+    app = FastAPI()
+    from backend.routes.settings import router
+
+    app.include_router(router)
+
+    def db():
+        with storage() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = db
+    client = TestClient(app)
+    assert client.get("/settings/captures/retention-status").json() == {"days": 30, "confirmed": False, "expiring": 1}
+    assert client.put("/settings/captures", json={"history_retention_days": 90}).json()["history_retention_confirmed"]
+    assert client.get("/settings/captures/retention-status").json() == {"days": 90, "confirmed": True, "expiring": 0}
+    assert ids(storage) == {"old", "new"}

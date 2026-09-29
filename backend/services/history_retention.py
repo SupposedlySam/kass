@@ -16,6 +16,11 @@ it is never folded twice. Audio files go after the commit; a crash before
 then leaves files with no capture, which the next sweep deletes once they are
 older than the window.
 
+Nothing is deleted until the user confirms the window
+(``history_retention_confirmed``): saving the setting does, and so does
+answering the dialog the app shows at launch while old captures are waiting.
+With nothing old to delete there is nothing to ask, so it confirms itself.
+
 The newest capture, the current take, is never deleted, nor one being
 refined or retranscribed (``in_use``).
 """
@@ -88,6 +93,22 @@ def count_expiring(db, days: int, now: datetime | None = None) -> int:
     """How many captures a window of ``days`` would delete now."""
     query = _expired(db, days, now)
     return 0 if query is None else query.count()
+
+
+def status(db, now: datetime | None = None) -> tuple[int, bool, int]:
+    """The window, whether it is confirmed, and how many captures it would delete.
+
+    An unconfirmed window with nothing to delete is confirmed here: asking
+    only matters when something would go.
+    """
+    from .settings import get_capture_settings
+
+    saved = get_capture_settings(db)
+    expiring = count_expiring(db, saved.history_retention_days, now)
+    if not saved.history_retention_confirmed and expiring == 0:
+        saved.history_retention_confirmed = True
+        db.commit()
+    return saved.history_retention_days, saved.history_retention_confirmed, expiring
 
 
 def _words(text: str | None) -> int:
@@ -194,16 +215,14 @@ def _remove_orphan_audio(db, before: datetime) -> int:
 
 
 def sweep(now: datetime | None = None) -> int:
-    """Fold and delete every capture past the window. Returns how many went. Blocking."""
-    from .settings import get_capture_settings
-
+    """Fold and delete every capture past a confirmed window. Returns how many went. Blocking."""
     if database_session.SessionLocal is None:
         return 0
     deleted = 0
     with database_session.SessionLocal() as db:
-        days = get_capture_settings(db).history_retention_days
+        days, confirmed, _ = status(db, now)
         before = cutoff(days, now)
-        if before is None:
+        if before is None or not confirmed:
             return 0
         while True:
             with _lock:

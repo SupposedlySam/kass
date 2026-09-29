@@ -64,6 +64,9 @@ class CaptureSettings(Base):
     command_transforms = Column(JSON, nullable=False, default=default_transforms)
     # Days of capture history to keep (docs/plans/HISTORY_RETENTION.md); 0 keeps it forever.
     history_retention_days = Column(Integer, nullable=False, default=30)
+    # Nothing is deleted until the user has chosen a window, or there was
+    # nothing old to delete when first asked.
+    history_retention_confirmed = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

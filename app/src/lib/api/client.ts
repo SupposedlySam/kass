@@ -23,6 +23,7 @@ import type {
   MovedCorrections,
   PersonalExample,
   RetentionPreview,
+  RetentionStatus,
   StyledApp,
   UsagePeriod,
   UsageStatsResponse,
@@ -338,6 +339,10 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(patch),
     });
+  }
+
+  async getRetentionStatus(): Promise<RetentionStatus> {
+    return this.request<RetentionStatus>('/settings/captures/retention-status');
   }
 
   async getRetentionPreview(days: HistoryRetentionDays): Promise<RetentionPreview> {

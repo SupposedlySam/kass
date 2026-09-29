@@ -339,6 +339,15 @@ export interface CaptureSettings {
   command_transforms: Transform[];
   /** Days of capture history to keep; older captures are deleted, what they taught is kept. */
   history_retention_days: HistoryRetentionDays;
+  /** Set by saving `history_retention_days`; nothing is deleted until then. */
+  history_retention_confirmed: boolean;
+}
+
+export interface RetentionStatus {
+  days: HistoryRetentionDays;
+  confirmed: boolean;
+  /** Captures the current window would delete once confirmed. */
+  expiring: number;
 }
 
 export interface RetentionPreview {
