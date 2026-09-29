@@ -16,6 +16,7 @@ mod join;
 mod key_codes;
 mod keyboard_layout;
 mod keystroke_insert;
+mod login_item;
 mod server_process;
 mod sound_cues;
 mod synthetic_keys;
@@ -30,6 +31,7 @@ use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
 
 pub const DICTATE_WINDOW_LABEL: &str = "dictate";
+const MAIN_WINDOW_LABEL: &str = "main";
 const DICTATE_WINDOW_WIDTH: f64 = 420.0;
 const DICTATE_WINDOW_HEIGHT: f64 = 64.0;
 const DICTATE_BOTTOM_PADDING: f64 = 24.0;
@@ -1249,6 +1251,14 @@ pub fn run() {
         .manage(dictation::DictationState::default())
         .manage(deep_link::DeepLinkState::default())
         .setup(|app| {
+            // The main window starts hidden (tauri.conf.json) so a login
+            // launch stays out of the way until the Dock icon is clicked.
+            if !login_item::launched_at_login() {
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    let _ = window.show();
+                }
+            }
+            login_item::register_by_default(app.handle());
             dictation::restore(app.handle());
             sound_cues::init(app.handle());
             #[cfg(desktop)]
@@ -1314,6 +1324,9 @@ pub fn run() {
             dictation::list_input_devices,
             sound_cues::configure_sound_cues,
             sound_cues::preview_sound_cue,
+            login_item::launch_at_login_status,
+            login_item::set_launch_at_login,
+            login_item::open_login_items_settings,
             deep_link::take_deep_link
         ])
         .on_window_event({
@@ -1370,6 +1383,15 @@ pub fn run() {
                 RunEvent::Opened { urls } => {
                     for url in urls {
                         deep_link::open(app, url.as_str());
+                    }
+                }
+                RunEvent::Reopen {
+                    has_visible_windows: false,
+                    ..
+                } => {
+                    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                        let _ = window.show();
+                        let _ = window.set_focus();
                     }
                 }
                 RunEvent::Exit => {

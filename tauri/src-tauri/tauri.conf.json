@@ -51,6 +51,7 @@
         "devtools": true,
         "userAgent": null,
         "titleBarStyle": "Overlay",
+        "visible": false,
         "dragDropEnabled": false
       }
     ],
