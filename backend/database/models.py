@@ -3,7 +3,7 @@
 from datetime import datetime
 import uuid
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean, JSON, Float, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 from ..services.commands import default_transforms
@@ -192,3 +192,25 @@ class KnownName(Base):
     name = Column(String, primary_key=True)
     # The newest deleted capture that wrote it.
     last_seen_at = Column(DateTime, nullable=False)
+
+
+class DictionaryEntry(Base):
+    """A word or phrase dictation should get right (docs/plans/DICTIONARIES.md).
+
+    A term has only ``written``; a replacement writes ``written`` where
+    ``spoken`` was said.
+    """
+
+    __tablename__ = "dictionary_entries"
+    # One entry per scope for the same word said, whatever its case.
+    __table_args__ = (UniqueConstraint("scope", "scope_id", "key"),)
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    scope = Column(String, nullable=False)  # global | style | app
+    # A style id or bundle id; "" for global, since SQLite never finds two nulls equal.
+    scope_id = Column(String, nullable=False, default="")
+    app_name = Column(String, nullable=True)
+    written = Column(String, nullable=False)
+    spoken = Column(String, nullable=True)
+    key = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

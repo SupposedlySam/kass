@@ -16,12 +16,17 @@ import type {
   CaptureSource,
   CorrectionLearningStatus,
   CorrectionNotesStatus,
+  DictionaryEntry,
+  DictionaryEntryCreate,
+  DictionaryEntryUpdate,
+  DictionaryListResponse,
   HealthResponse,
   HistoryRetentionDays,
   ModelDownloadRequest,
   ModelStatusListResponse,
   MovedCorrections,
   PersonalExample,
+  ResolvedDictionaryResponse,
   RetentionPreview,
   RetentionStatus,
   StyledApp,
@@ -56,6 +61,17 @@ function formatErrorDetail(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+/** A failed request; `status` is the HTTP status (409 for a duplicate, say). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 class ApiClient {
   private getBaseUrl(): string {
     return SERVER_URL;
@@ -75,7 +91,10 @@ class ApiClient {
       const error = await response.json().catch(() => ({
         detail: response.statusText,
       }));
-      throw new Error(formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`));
+      throw new ApiError(
+        formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`),
+        response.status,
+      );
     }
 
     return response.json();
@@ -323,6 +342,38 @@ class ApiClient {
     if (!response.ok && response.status !== 404) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+  }
+
+  // Dictionary: words dictation should get right, everywhere, per style or per app
+  async listDictionary(): Promise<DictionaryListResponse> {
+    return this.request<DictionaryListResponse>('/dictionary');
+  }
+
+  async createDictionaryEntry(body: DictionaryEntryCreate): Promise<DictionaryEntry> {
+    return this.request<DictionaryEntry>('/dictionary', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateDictionaryEntry(id: string, patch: DictionaryEntryUpdate): Promise<DictionaryEntry> {
+    return this.request<DictionaryEntry>(`/dictionary/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async deleteDictionaryEntry(id: string): Promise<{ deleted: true }> {
+    return this.request<{ deleted: true }>(`/dictionary/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /** The entries that apply in an app: its own, its style's and everywhere's. */
+  async resolveDictionary(bundleId: string): Promise<ResolvedDictionaryResponse> {
+    return this.request<ResolvedDictionaryResponse>(
+      `/dictionary/resolved?bundle_id=${encodeURIComponent(bundleId)}`,
+    );
   }
 
   // Settings

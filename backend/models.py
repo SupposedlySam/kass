@@ -608,3 +608,46 @@ class CaptureFeedbackResponse(BaseModel):
     notes: str
     snapshot: CaptureResponse
     created_at: datetime
+
+
+class DictionaryEntryModel(BaseModel):
+    """A word dictation should get right (docs/plans/DICTIONARIES.md)."""
+
+    id: str
+    scope: Literal["global", "style", "app"]
+    scope_id: str | None = None
+    app_name: str | None = None
+    written: str
+    spoken: str | None = None
+    created_at: datetime | None = None
+
+
+class DictionaryResponse(BaseModel):
+    entries: list[DictionaryEntryModel]
+
+
+class DictionaryEntryCreate(BaseModel):
+    scope: Literal["global", "style", "app"]
+    scope_id: str | None = Field(default=None, max_length=255)
+    app_name: str | None = Field(default=None, max_length=255)
+    written: str = Field(max_length=1000)
+    spoken: str | None = Field(default=None, max_length=1000)
+
+
+class DictionaryEntryUpdate(BaseModel):
+    written: str | None = Field(default=None, max_length=1000)
+    spoken: str | None = Field(default=None, max_length=1000)
+
+
+class ResolvedDictionaryEntry(DictionaryEntryModel):
+    # A more specific scope has an entry for the same word said.
+    overridden: bool = False
+
+
+class ResolvedDictionaryResponse(BaseModel):
+    """What one app's dictations use."""
+
+    entries: list[ResolvedDictionaryEntry]
+    # Terms Whisper is prompted with, and those that don't fit its prompt.
+    prompt_terms: list[str]
+    dropped_terms: list[str]

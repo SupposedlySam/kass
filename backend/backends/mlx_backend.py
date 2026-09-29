@@ -2,6 +2,7 @@
 MLX backend implementation for Whisper STT using mlx-audio.
 """
 
+from collections.abc import Sequence
 from typing import Optional
 import logging
 import numpy as np
@@ -23,7 +24,31 @@ from .base import (
 from ..services import speech_detect
 from ..services.refinement import strip_stt_artifacts
 from ..services.mlx_thread import run_on_mlx_thread, clear_mlx_cache
+from ..services import dictionary
 from . import mlx_whisper_loader, whisper_audio
+
+# Whisper keeps only the last tokens of its prompt (mlx-audio decoding, n_ctx // 2 - 1).
+PROMPT_TOKENS = 223
+
+
+def phrase_prompt(tokenizer, terms: str, previous_text: str | None) -> str | None:
+    """Whisper's prompt: the dictionary terms, then as much earlier text as fits.
+
+    Whisper drops a long prompt's first tokens, which would drop the terms;
+    the earlier text is cut from its start instead. It stays last, so a
+    phrase still continues its sentence.
+    """
+    previous = (previous_text or "").strip()
+    if not terms:
+        return previous or None
+    if not previous:
+        return terms
+    # One token of slack: the two parts may tokenize a little differently joined.
+    room = PROMPT_TOKENS - len(tokenizer.encode(" " + terms)) - 1
+    tokens = tokenizer.encode(" " + previous)
+    if len(tokens) > room:
+        previous = tokenizer.decode(tokens[len(tokens) - room :]).strip()
+    return f"{terms} {previous}"
 
 
 def vocabulary_decoder(tokenizer):
@@ -45,6 +70,8 @@ class MLXSTTBackend:
     def __init__(self, model_size: str = "base"):
         self.model = None
         self.model_size = model_size
+        # The prompt each dictionary's terms fit into, for the loaded model.
+        self._term_prompts: dict[tuple[str, ...], str] = {}
 
     def is_loaded(self) -> bool:
         """Check if model is loaded."""
@@ -97,6 +124,7 @@ class MLXSTTBackend:
             self.model = mlx_whisper_loader.load_whisper(model_name)
 
         self.model_size = model_size
+        self._term_prompts = {}
         logger.info("MLX Whisper model %s loaded successfully", model_size)
 
     def unload_model(self):
@@ -114,6 +142,7 @@ class MLXSTTBackend:
         model_size: Optional[str] = None,
         previous_text: Optional[str] = None,
         check_speech: bool = True,
+        vocabulary: Sequence[str] = (),
     ) -> str:
         """
         Transcribe an audio file to text.
@@ -125,6 +154,7 @@ class MLXSTTBackend:
             previous_text: Earlier dictation text when transcribing one phrase
             check_speech: Return "" without running Whisper when no voice is
                 detected; False when the caller already checked
+            vocabulary: Dictionary terms, most important first
 
         Returns:
             Transcribed text
@@ -132,7 +162,12 @@ class MLXSTTBackend:
         # Decoded here rather than by mlx-audio, whose resampler would import
         # scipy.signal on the first file that is not 16 kHz.
         return await self._transcribe(
-            lambda: whisper_audio.read_audio_file(audio_path), language, model_size, previous_text, check_speech
+            lambda: whisper_audio.read_audio_file(audio_path),
+            language,
+            model_size,
+            previous_text,
+            check_speech,
+            vocabulary,
         )
 
     async def transcribe_array(
@@ -143,6 +178,7 @@ class MLXSTTBackend:
         model_size: Optional[str] = None,
         previous_text: Optional[str] = None,
         check_speech: bool = True,
+        vocabulary: Sequence[str] = (),
     ) -> str:
         """
         Transcribe in-memory audio to text, without a temporary file.
@@ -156,6 +192,7 @@ class MLXSTTBackend:
             previous_text: Earlier dictation text when transcribing one phrase
             check_speech: Return "" without running Whisper when no voice is
                 detected; False when the caller already checked
+            vocabulary: Dictionary terms, most important first
 
         Returns:
             Transcribed text, identical to ``transcribe`` of the same audio
@@ -170,9 +207,23 @@ class MLXSTTBackend:
             model_size,
             previous_text,
             check_speech,
+            vocabulary,
         )
 
-    async def _transcribe(self, prepare_audio, language, model_size, previous_text, check_speech=True) -> str:
+    def _terms_prompt(self, tokenizer, vocabulary: Sequence[str]) -> str:
+        """The terms that fit Whisper's share of the prompt, as it reads them."""
+        key = tuple(vocabulary)
+        if (cached := self._term_prompts.get(key)) is None:
+            fit, _ = dictionary.fit_terms(key, lambda term: len(tokenizer.encode(" " + term)))
+            cached = dictionary.prompt(fit)
+            if len(self._term_prompts) >= 32:
+                self._term_prompts.clear()
+            self._term_prompts[key] = cached
+        return cached
+
+    async def _transcribe(
+        self, prepare_audio, language, model_size, previous_text, check_speech=True, vocabulary=()
+    ) -> str:
         def _transcribe_sync():
             audio = prepare_audio()
             # Whisper invents text ("Thank you.") for audio without a voice.
@@ -182,14 +233,17 @@ class MLXSTTBackend:
             decode_options = {}
             if language:
                 decode_options["language"] = language
-            if previous_text is not None:
+            tokenizer = None
+            if previous_text is not None or vocabulary:
                 tokenizer = self.model.get_tokenizer(language=language or "en")
+            if previous_text is not None:
                 decode_options["suppress_tokens"] = [
                     -1,
                     *ellipsis_token_ids(self.model_size, tokenizer.decode, tokenizer.eot, vocabulary_decoder(tokenizer)),
                 ]
-                if previous_text:
-                    decode_options["initial_prompt"] = previous_text
+            terms = self._terms_prompt(tokenizer, vocabulary) if vocabulary else ""
+            if prompt := phrase_prompt(tokenizer, terms, previous_text):
+                decode_options["initial_prompt"] = prompt
 
             # Inference runs with the process's default HF_HUB_OFFLINE
             # state — see the comment in MLXTTSBackend.generate for the

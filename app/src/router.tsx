@@ -16,6 +16,7 @@ import { RetentionAskDialog } from '@/components/ServerTab/RetentionAskDialog';
 import { SettingsLayout } from '@/components/ServerTab/ServerTab';
 import { CommandModePage } from '@/components/Settings/CommandModePage';
 import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPage';
+import { DictionaryPage } from '@/components/Settings/DictionaryPage';
 import { TranscriptionSettingsPage } from '@/components/Settings/TranscriptionSettingsPage';
 import { WritingStylePage } from '@/components/Settings/WritingStylePage';
 import { SetupFlow } from '@/components/Setup/SetupFlow';
@@ -167,6 +168,16 @@ const settingsWritingStyleRoute = createRoute({
   }),
 });
 
+const settingsDictionaryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: '/dictionary',
+  component: DictionaryPage,
+  // `?scope=` is `style:<id>` or `app:<bundle id>`; none is everywhere.
+  validateSearch: (search: Record<string, unknown>): { scope?: string } => ({
+    scope: typeof search.scope === 'string' ? search.scope : undefined,
+  }),
+});
+
 // Dictation, transcription and writing style used to share one page.
 const settingsCapturesRedirectRoute = createRoute({
   getParentRoute: () => settingsRoute,
@@ -210,6 +221,7 @@ const routeTree = rootRoute.addChildren([
     settingsCommandModeRoute,
     settingsTranscriptionRoute,
     settingsWritingStyleRoute,
+    settingsDictionaryRoute,
     settingsCapturesRedirectRoute,
     settingsLogsRoute,
   ]),

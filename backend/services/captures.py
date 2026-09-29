@@ -194,7 +194,10 @@ async def create_capture(
         from .model_improvement.manager import speech_model
         resolved_stt = speech_model(resolved_stt)
         transcription_started = time.monotonic()
-        transcript = mark_commands(await whisper.transcribe(str(audio_path), language, resolved_stt))
+        from . import dictionary
+
+        terms = dictionary.for_app(app_bundle_id).terms
+        transcript = mark_commands(await whisper.transcribe(str(audio_path), language, resolved_stt, vocabulary=terms))
         logger.info("Capture %s transcription (including model load/queue): %.3fs for %sms audio", capture_id, time.monotonic() - transcription_started, duration_ms)
 
         row = DBCapture(
@@ -354,9 +357,13 @@ async def _refine_capture(
     )
     refined, verdict = check_refinement(row.transcript_raw or "", refined, flags)
 
+    from . import dictionary
     from .correction_learning import apply_learned_corrections
 
-    refined = style_first_word(apply_learned_corrections(refined, row.language), flags)
+    # The user's own dictionary entries win over learned corrections.
+    found = dictionary.for_app(row.app_bundle_id)
+    refined = found.apply(apply_learned_corrections(refined, row.language))
+    refined = style_first_word(refined, flags, found.names)
 
     row.transcript_refined = refined
     row.style_id = flags.style
@@ -395,7 +402,10 @@ async def _retranscribe_capture(
 
     whisper = get_whisper_model()
     resolved_stt = stt_model or whisper.model_size
-    transcript = mark_commands(await whisper.transcribe(str(resolved), language, resolved_stt))
+    from . import dictionary
+
+    terms = dictionary.for_app(row.app_bundle_id).terms
+    transcript = mark_commands(await whisper.transcribe(str(resolved), language, resolved_stt, vocabulary=terms))
 
     row.transcript_raw = transcript
     row.stt_model = resolved_stt

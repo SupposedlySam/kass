@@ -287,8 +287,9 @@ def delete_style(db: Session, style_id: str) -> bool:
     db.delete(row)
     db.commit()
     _changed(examples=True)
-    from . import correction_notes, writing_style
+    from . import correction_notes, dictionary, writing_style
 
+    dictionary.move_style(db, style_id, default_id())
     writing_style.forget_style(style_id)
     correction_notes.forget_style(style_id)
     _refresh_habits(db)

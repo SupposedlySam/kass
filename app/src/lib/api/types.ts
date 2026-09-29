@@ -106,6 +106,55 @@ export type WritingStyleUpdate = Partial<
   >
 > & { is_default?: true };
 
+/** Where a dictionary entry applies. Most specific wins: app, then style, then everywhere. */
+export type DictionaryScope = 'global' | 'style' | 'app';
+
+/**
+ * A word dictation should get right. A term has only `written` (helps
+ * speech-to-text hear it and fixes its capitals); a replacement also has
+ * `spoken`, what the user says to get `written`.
+ */
+export interface DictionaryEntry {
+  id: string;
+  scope: DictionaryScope;
+  /** The style id or app bundle id; null for global. */
+  scope_id: string | null;
+  app_name: string | null;
+  written: string;
+  spoken: string | null;
+  created_at: string;
+}
+
+export interface DictionaryListResponse {
+  entries: DictionaryEntry[];
+}
+
+export interface DictionaryEntryCreate {
+  scope: DictionaryScope;
+  scope_id?: string | null;
+  app_name?: string | null;
+  written: string;
+  spoken?: string | null;
+}
+
+export interface DictionaryEntryUpdate {
+  written?: string;
+  spoken?: string | null;
+}
+
+/** An entry in an app's merged view; `overridden` when a more specific entry wins. */
+export interface ResolvedDictionaryEntry extends DictionaryEntry {
+  overridden: boolean;
+}
+
+export interface ResolvedDictionaryResponse {
+  entries: ResolvedDictionaryEntry[];
+  /** Terms given to speech-to-text as a hint. */
+  prompt_terms: string[];
+  /** Terms that did not fit in the speech-to-text prompt. */
+  dropped_terms: string[];
+}
+
 export interface CorrectionNote {
   id: string;
   text: string;

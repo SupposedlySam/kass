@@ -9,6 +9,7 @@ type SettingsPath =
   | '/settings/command-mode'
   | '/settings/transcription'
   | '/settings/writing-style'
+  | '/settings/dictionary'
   | '/settings/logs';
 
 const tabs: Array<{ labelKey: string; path: SettingsPath; tauriOnly?: boolean }> = [
@@ -17,6 +18,7 @@ const tabs: Array<{ labelKey: string; path: SettingsPath; tauriOnly?: boolean }>
   { labelKey: 'settings.tabs.commandMode', path: '/settings/command-mode' },
   { labelKey: 'settings.tabs.transcription', path: '/settings/transcription' },
   { labelKey: 'settings.tabs.writingStyle', path: '/settings/writing-style' },
+  { labelKey: 'settings.tabs.dictionary', path: '/settings/dictionary' },
   { labelKey: 'settings.tabs.logs', path: '/settings/logs', tauriOnly: true },
 ];
 

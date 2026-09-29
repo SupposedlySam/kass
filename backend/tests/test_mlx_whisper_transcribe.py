@@ -150,3 +150,53 @@ def test_load_goes_through_the_lean_whisper_loader(monkeypatch):
     assert loaded == ["openai/whisper-large-v3-turbo"]
     assert isinstance(backend.model, FakeWhisper)
     assert backend.model_size == "turbo"
+
+
+class WordTokenizer:
+    """One token per word, with the leading space Whisper's tokenizer keeps."""
+
+    def encode(self, text):
+        return text.split()
+
+    def decode(self, tokens):
+        return " ".join(tokens)
+
+
+def test_dictionary_terms_come_first_and_earlier_text_last():
+    from backend.backends.mlx_backend import phrase_prompt
+
+    assert phrase_prompt(WordTokenizer(), "Kubernetes, Zed.", "and then we") == "Kubernetes, Zed. and then we"
+    assert phrase_prompt(WordTokenizer(), "Kubernetes, Zed.", "") == "Kubernetes, Zed."
+    assert phrase_prompt(WordTokenizer(), "", "and then we") == "and then we"
+    assert phrase_prompt(WordTokenizer(), "", "") is None
+
+
+def test_long_earlier_text_is_cut_from_its_start_so_the_terms_survive():
+    from backend.backends.mlx_backend import PROMPT_TOKENS, phrase_prompt
+
+    earlier = " ".join(f"w{i}" for i in range(400))
+
+    prompt = phrase_prompt(WordTokenizer(), "Kubernetes, Zed.", earlier)
+
+    assert prompt.startswith("Kubernetes, Zed. ")
+    assert prompt.endswith("w399")
+    assert len(prompt.split()) <= PROMPT_TOKENS
+
+
+@pytest.mark.asyncio
+async def test_whisper_is_prompted_with_the_terms_that_fit(stt, monkeypatch):
+    from backend.backends import mlx_backend
+
+    monkeypatch.setattr(mlx_backend.dictionary, "PROMPT_TOKENS", 6)
+    tokenizer = SimpleNamespace(decode=lambda tokens: "", eot=50257, encode=lambda text: text.split())
+    stt.model.get_tokenizer = lambda language="en": tokenizer
+
+    await stt.transcribe_array(
+        pcm(16000, 0.5), 16000, "en", "turbo", previous_text="we met", vocabulary=["Zed", "Kubernetes", "Tailscale"]
+    )
+    await stt.transcribe_array(pcm(16000, 0.5), 16000, "en", "turbo", vocabulary=["Zed"])
+
+    (_, _, phrase), (_, _, whole) = stt.model.calls
+    # 1 for the period, 2 per one-word term: two fit in 6.
+    assert phrase["initial_prompt"] == "Zed, Kubernetes. we met"
+    assert whole == {"language": "en", "initial_prompt": "Zed."}

@@ -1,0 +1,90 @@
+# Dictionaries
+
+## Problem
+
+Voicebox learns vocabulary only on its own: `known_names.py` guesses names from past dictations, and `correction_rules.py` learns a fix after the same correction shows up in at least two captures. The user can't just tell it "I say Kubernetes", "write my handle as mrgnhnt96", or "in Zed, 'voice box' means Voicebox". Whisper hears such words wrong every time until corrections pile up, and some never qualify: `candidate()` refuses digits, single-word context and dissimilar spellings.
+
+## Entries
+
+An entry is one row: what to **write**, and optionally what is **said**.
+
+| Kind | Example | Effect |
+| --- | --- | --- |
+| Term (`spoken` empty) | `Kubernetes`, `mrgnhnt96`, `Zed` | Whisper is prompted with it, so it is heard right. A term that isn't a common word also has its capitals fixed after cleanup ("kubernetes" → "Kubernetes"). A capitalized term counts as a known name. |
+| Replacement | said `voice box` → written `Voicebox`; said `my work email` → `morgan@…` | After cleanup, the spoken phrase is swapped for the written text, matched case-insensitively on word boundaries. `written` is also a term. |
+
+Capitals are fixed only for terms that aren't common words, using `phrase_seams._common_word`. That way the term `Mark` never capitalizes the verb "mark", and `mrgnhnt96` always gets fixed. This is one general rule, with no per-term exceptions.
+
+## Scopes
+
+An entry belongs to exactly one scope:
+
+- **Everywhere**: every dictation.
+- **A writing style**: every app assigned to that style (`app_styles`, or the default style for a new app).
+- **An app**: one bundle id.
+
+A dictation merges the three scopes for its app. For terms, the lists are combined and duplicates dropped. For replacements with the same spoken phrase, the most specific scope wins: app, then style, then everywhere. Deleting a style moves its entries to the default style, the same way it moves the style's apps. An app entry keeps its bundle id even while the app has no captures.
+
+## Storage
+
+The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `created_at`. The table is created by `Base.metadata.create_all`, so it needs no column migration. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`).
+
+`services/dictionary.py` keeps an in-memory snapshot, like `styles.snapshot()`. Writes rebuild it. `for_app(bundle_id)` returns a resolved `Dictionary`: prompt terms in priority order, compiled replacements, and the recase set. That result is cached per (bundle id, style) until the next write. Dictation itself never reads from disk or the database.
+
+## Where it applies
+
+**Whisper prompt.** `transcribe` / `transcribe_array` take a new `vocabulary: Sequence[str]` argument, the terms in priority order. `_transcribe_sync` builds `initial_prompt` as the terms that fit, then `previous_text` (`mlx_backend.phrase_prompt`). Whisper keeps only the last ~223 prompt tokens and cuts from the front, so the terms, which come first, would be cut first. To prevent that, `previous_text` is trimmed (by tokens, not the 600-char `PHRASE_CONTEXT_CHARS`) so terms plus context fit. Terms get at most 64 tokens. They fill in priority order (app, then style, then everywhere, newest first within a scope; plain terms before what replacements write, since a replacement fixes its word whatever Whisper hears). The first term that doesn't fit ends the list, and whatever doesn't fit is left out of the prompt but still applies after cleanup. The prompt reads as a plain list: `"Kubernetes, mrgnhnt96, Zed."`. The earlier sentence still comes last, so continuing a phrase works the same as it does today.
+
+Every path that runs Whisper passes it: phrase recognition (`capture_stream.recognize`), full-audio reconcile, upload (`captures.py:197`) and retranscribe (`captures.py:398`). The stream resolves the global and default-style dictionary when the session starts, and the app's at `set_app`, usually before the first phrase.
+
+**After cleanup.** `Dictionary.apply` runs directly after `apply_learned_corrections` everywhere that function is called (`StreamingCapture.corrected` in the stream, and `captures.py` refine). That way the user's explicit entries win over learned rules. It applies replacements (overlapping matches: the longest spoken phrase wins), then fixes term capitals. With cleanup off, only the Whisper prompt applies: the raw transcript is saved as heard. Provisional text holds back the longest match plus one word, so a replacement never lands after its words were shown.
+
+**Names.** Capitalized terms join `known_names()` for that dictation, so `continue_phrase` and `style_first_word` keep their capitals.
+
+**Not in the cleanup prompt.** The LLM's system prompt is cached per style (`refinement._cache_key`), and switching apps would re-prefill it (1.6–3.2 s, measured in PER_APP_STYLE.md). Terms reach the text through Whisper, and the fixes run deterministically afterward, so the LLM doesn't need them.
+
+**Command mode.** Terms go into Whisper's prompt so the instruction is heard right. Replacements don't touch command output, which may be a translation or a rewrite.
+
+## Speed and quality gates
+
+- Replacement and recase run with the same hard 5 ms limit that `correction_rules.evaluate` uses, tested at `MAX_TEXT` with 500 entries.
+- There are at most 1,000 entries across all scopes.
+- Whisper prompt: measure the phrase decode time with 0 and with 64 term tokens on the M2 Max. Expect under 15 ms. If it's slower, lower the token cap.
+- Quality: replay the corrected captures in `capture_feedback` with the global terms taken from their expected text. Word errors must not rise on any capture that has no dictionary words. If Whisper starts hallucinating the list into silent or short phrases, `speech_detect` already skips silent audio; add a test that a phrase never outputs only the term list.
+
+## API
+
+- `GET /dictionary`: every entry, grouped by scope.
+- `POST /dictionary`: `{scope, scope_id?, app_name?, written, spoken?}`.
+- `PATCH /dictionary/{id}`, `DELETE /dictionary/{id}`.
+- `GET /dictionary/resolved?bundle_id=`: the merged view for one app, with each entry's source scope and whether its term made it into the Whisper prompt.
+
+## UI
+
+Settings gets a new **Dictionary** page, next to Writing style.
+
+- A scope picker at the top: Everywhere, each style, each app (from the capture app list and `app_styles`).
+- A list of entries in that scope, each shown as `written` with an optional "when I say …" line. An inline add row has two fields: "Write" (required) and "When I say" (optional).
+- In app scope, an "Also applies here" list shows the style and global entries this app gets, read-only, marking any entry that an app entry overrides. There's also a note when some terms don't fit in the Whisper prompt.
+
+This covers only the Settings page. The capture pill doesn't change. An "Add to dictionary" action from a correction in the Captures tab is a possible follow-up, not part of this work.
+
+## Tests
+
+- `test_dictionary.py`: scope merge and precedence, deleting a style moves its entries, replacement boundaries and case, longest-match overlap, common-word terms left uncapitalized, 5 ms limit.
+- `test_mlx_whisper_transcribe.py`: prompt layout, and the token budget keeping terms when previous text is long.
+- `test_capture_stream_*`: a dictionary set at `set_app` reaches `recognize` and the finished text. A late app falls back to the global terms.
+- `app/tests`: the Dictionary page's add, edit and delete per scope.
+
+## Measured
+
+Whisper large-v3-turbo on 42 of the user's corrected dictations (1.5–25 s), with a full 64-token term list (18 terms):
+
+| | Word errors | Punctuation marks | Decode time |
+| --- | --- | --- | --- |
+| No dictionary | 82 | 122 | median 479 ms |
+| Comma list (shipped) | 83 | 119 | +0 ms median, +34 ms p90 (noise) |
+| "Words I use: …" | 85 | 110 | |
+| "Glossary: …" with sample sentences | 98 | 128 | |
+
+Recordings containing a dictionary word improved (13 → 11 word errors). One without any went from "the recording" to "that recording". Whisper's raw punctuation drops slightly, and cleanup repunctuates.

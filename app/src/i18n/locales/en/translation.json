@@ -552,6 +552,7 @@
       "commandMode": "Command Mode",
       "transcription": "Transcription & refinement",
       "writingStyle": "Writing style",
+      "dictionary": "Dictionary",
       "logs": "Logs"
     },
     "theme": {
@@ -1136,6 +1137,46 @@
       "drop_intro_comma": "No comma after “so”",
       "drop_conjunction_comma": "No comma before “and”",
       "drop_final_period": "No final period"
+    }
+  },
+  "dictionary": {
+    "title": "Dictionary",
+    "description": "Words dictation should get right. The most specific entry wins: an app's, then its writing style's, then everywhere.",
+    "scope": {
+      "title": "Applies to",
+      "description": "Everywhere, one writing style, or one app.",
+      "everywhere": "Everywhere",
+      "styles": "Writing styles",
+      "apps": "Apps"
+    },
+    "entries": {
+      "title": "Words in {{scope}}",
+      "whenISay": "when I say “{{spoken}}”",
+      "edit": "Edit {{written}}",
+      "delete": "Delete {{written}}",
+      "save": "Save",
+      "cancel": "Cancel",
+      "deleteFailed": "Couldn't delete that word"
+    },
+    "empty": {
+      "term": "A term is a word to always spell right, like a name or product: fill in only Write.",
+      "replacement": "A replacement writes one thing when you say another: fill in both."
+    },
+    "add": {
+      "write": "Write",
+      "say": "When I say (optional)",
+      "action": "Add",
+      "duplicate": "That's already in this list.",
+      "limit": "The dictionary is full at {{count}} words. Delete some to add more."
+    },
+    "inherited": {
+      "title": "Also applies here",
+      "description": "From this app's writing style and from everywhere. Change them there.",
+      "style": "Writing style",
+      "overridden": "Replaced by this app's entry",
+      "empty": "Nothing from its writing style or everywhere yet.",
+      "dropped_one": "{{count}} term doesn't fit in the speech model's prompt; its capitals are still fixed.",
+      "dropped_other": "{{count}} terms don't fit in the speech model's prompt; their capitals are still fixed."
     }
   }
 }

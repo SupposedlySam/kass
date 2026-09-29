@@ -48,6 +48,7 @@ import numpy as np
 from .. import config, models
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
+from . import dictionary as dictionaries
 from .captures import _to_response
 from .commands import (
     MAX_SELECTION_CHARS,
@@ -166,6 +167,9 @@ class StreamingCapture:
         self.continues = False
         # Words the user capitalizes mid-sentence, loaded when the run starts.
         self.names = frozenset()
+        # The user's dictionary (docs/plans/DICTIONARIES.md): the global and
+        # default style's entries until the app is known. Read once per change.
+        self.dictionary = dictionaries.for_app(None)
         self.names_loading = None
         self.source = start.get("source", "dictation")
         if not isinstance(self.source, str) or self.source not in {"dictation", "recording", "command"}:
@@ -313,6 +317,10 @@ class StreamingCapture:
         """
         self.app_bundle_id, self.app_name = bundle_id, name
         self.app_category = category or self.app_category
+        # Dictionary words are spelled right for the rest of the take, even
+        # after the style is fixed.
+        self.dictionary = dictionaries.for_app(bundle_id)
+        self.names = self.names | self.dictionary.names
         if self.cleanup_started:
             return False
         self.style = styles_snapshot().for_app(bundle_id)
@@ -388,6 +396,17 @@ class StreamingCapture:
     def learned(self, text: str) -> str:
         return apply_learned(text, self.flags.style)
 
+    def corrected(self, text: str) -> str:
+        """Learned corrections, then the dictionary, so the user's own entries win."""
+        from .correction_learning import apply_learned_corrections
+
+        return self.dictionary.apply(apply_learned_corrections(text, self.language))
+
+    def holdback(self, minimum: int) -> int:
+        """Words provisional text holds back: a correction or dictionary entry may still change them."""
+        span = self.dictionary.span + 1 if self.dictionary.span else 0
+        return max(CORRECTION_HOLDBACK if _has_corrections() else minimum, span)
+
     def _spent(self, stage: str, started: float) -> None:
         if self.finished_at is not None:
             self.after_release[stage] += time.monotonic() - max(started, self.finished_at)
@@ -413,6 +432,7 @@ class StreamingCapture:
                     self.stt_model,
                     previous_text=previous_text,
                     check_speech=False,
+                    vocabulary=self.dictionary.terms,
                 )
             ).strip()
         finally:
@@ -470,10 +490,8 @@ class StreamingCapture:
 
     async def show_cleaned_so_far(self) -> None:
         # Only settled text is final; the open sentence may still change.
-        from .correction_learning import apply_learned_corrections
-
-        settled = apply_learned_corrections(self.settled, self.language) if self.settled else ""
-        await self.show(settled, CORRECTION_HOLDBACK if _has_corrections() else 0)
+        settled = self.corrected(self.settled) if self.settled else ""
+        await self.show(settled, self.holdback(0))
 
     def _projection(self, prompt: str):
         """What finish would deliver if the cleanup of ``prompt`` ended now and passed the check.
@@ -481,8 +499,6 @@ class StreamingCapture:
         Mirrors refine_transcript's post-processing, then ``accept`` and
         ``close_dictation``. Habits are read once, not per token.
         """
-        from .correction_learning import apply_learned_corrections
-
         style = self.flags.style
         learned = (lambda text, h=habits(style): apply_style(text, h)) if is_ready(style) else (lambda text: text)
         prefix = self.settled
@@ -491,7 +507,7 @@ class StreamingCapture:
             refined = partial.strip()
             if self.flags.punctuation_style == "learned":
                 refined = learned(refined)
-            text = apply_learned_corrections(self.compose(prefix, refined, prompt, learned), self.language)
+            text = self.corrected(self.compose(prefix, refined, prompt, learned))
             return self.close_dictation(text, refined.rstrip().endswith("."), learned)
 
         return project
@@ -526,8 +542,8 @@ class StreamingCapture:
                 if done[0] or latest[0] is None:
                     return
                 project = project or self._projection(prompt)
-                # Learned corrections may span a few words; hold them back too.
-                await self.show(project(latest[0]), CORRECTION_HOLDBACK if _has_corrections() else 1)
+                # Learned corrections and dictionary entries may span a few words; hold them back too.
+                await self.show(project(latest[0]), self.holdback(1))
 
         relay_task = asyncio.create_task(relay())
         token = generation_listener.set(listener)
@@ -590,9 +606,7 @@ class StreamingCapture:
                 if self.flags.self_correction and self.last_settle and _CORRECTION_CUE.search(text):
                     self.reopen()
                 await self.clean_tail()
-            from .correction_learning import apply_learned_corrections
-
-            self.refined = apply_learned_corrections(self.refined, self.language)
+            self.refined = self.corrected(self.refined)
             await self.emit("refined", text=self.refined)
         except Exception as error:
             logger.exception("Streaming refinement failed")
@@ -664,8 +678,6 @@ class StreamingCapture:
 
     async def finish_cleanup(self):
         """Deliver settled text and the cleaned tail, closed like a finished dictation."""
-        from .correction_learning import apply_learned_corrections
-
         try:
             if self.tail_dirty and self.tail_raw:
                 # A cleanup was stopped at release, and nothing was said after it.
@@ -673,9 +685,7 @@ class StreamingCapture:
             if self.needs_final_refinement:
                 await self.reconcile_refinement()
                 return
-            text = apply_learned_corrections(
-                self.compose(self.settled, self.tail_cleaned, self.tail_raw), self.language
-            )
+            text = self.corrected(self.compose(self.settled, self.tail_cleaned, self.tail_raw))
         except Exception as error:
             logger.exception("Streaming refinement failed")
             self.refinement_error = str(error)
@@ -695,9 +705,11 @@ class StreamingCapture:
 
     async def load_names(self):
         try:
-            self.names = await asyncio.to_thread(lambda: (load_word_data(), known_names())[1])
+            names = await asyncio.to_thread(lambda: (load_word_data(), known_names())[1])
         except Exception:
             logger.exception("Could not read the user's names; names in the word lists still count")
+            return
+        self.names = self.names | names | self.dictionary.names
 
     async def _run(self):
         while True:
@@ -769,7 +781,12 @@ class StreamingCapture:
             before = self.field_before if self.continues else None
             self.raw = (
                 await get_whisper_model().transcribe(
-                    str(self.path), self.language, self.stt_model, previous_text=before, check_speech=False
+                    str(self.path),
+                    self.language,
+                    self.stt_model,
+                    previous_text=before,
+                    check_speech=False,
+                    vocabulary=self.dictionary.terms,
                 )
             ).strip()
             if self.continues:
@@ -800,9 +817,7 @@ class StreamingCapture:
                 self.refined, verdict = guard_phrase_refinement(self.raw, refined, self.flags)
                 self.refined = self.start_like_raw(self.refined)
                 self.reviews = [verdict]
-                from .correction_learning import apply_learned_corrections
-
-                self.refined = apply_learned_corrections(self.refined, self.language)
+                self.refined = self.corrected(self.refined)
                 self.refinement_error = None
                 await self.emit("refined", text=self.refined)
             except Exception as error:

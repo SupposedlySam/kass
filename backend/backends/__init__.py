@@ -14,6 +14,7 @@ from ..utils import hf_offline_patch  # noqa: F401
 
 import threading
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Protocol, Optional
 from typing_extensions import runtime_checkable
 import numpy as np
@@ -59,6 +60,7 @@ class STTBackend(Protocol):
         model_size: Optional[str] = None,
         previous_text: Optional[str] = None,
         check_speech: bool = True,
+        vocabulary: Sequence[str] = (),
     ) -> str:
         """
         Transcribe audio to text.
@@ -70,6 +72,9 @@ class STTBackend(Protocol):
         Audio without a voice gives "" instead of whatever Whisper would
         invent; ``check_speech=False`` skips that check when the caller
         already made it.
+
+        ``vocabulary`` is the user's dictionary terms, most important first
+        (docs/plans/DICTIONARIES.md). Whisper is prompted with those that fit.
 
         Returns:
             Transcribed text
@@ -84,6 +89,7 @@ class STTBackend(Protocol):
         model_size: Optional[str] = None,
         previous_text: Optional[str] = None,
         check_speech: bool = True,
+        vocabulary: Sequence[str] = (),
     ) -> str:
         """
         Transcribe in-memory audio, as ``transcribe`` does for a file.
