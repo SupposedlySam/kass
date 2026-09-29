@@ -70,14 +70,15 @@ test('the desktop pill follows native dictation and never uses browser audio', a
   expect(handlers.has('dictate:start')).toBe(false);
   expect(handlers.has('dictation:state')).toBe(true);
   expect(invoke.mock.calls.map((call) => call[0])).toContain('dictation_configure');
-  expect(renderer?.toJSON()).toMatchObject({ children: null });
+  // Idle, the pill's slot is empty.
+  expect(renderer?.toJSON()).toMatchObject({ children: [{ children: null }] });
   await act(async () =>
     handlers.get('dictation:state')?.({ payload: { take: 1, state: 'recording' } }),
   );
   await act(async () =>
     handlers.get('dictation:state')?.({ payload: { take: 1, state: 'preparing' } }),
   );
-  expect(renderer?.toJSON()).toMatchObject({ children: [expect.anything()] });
+  expect(renderer?.toJSON()).toMatchObject({ children: [{ children: [expect.anything()] }] });
   expect(getUserMedia).not.toHaveBeenCalled();
 });
 

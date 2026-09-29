@@ -75,6 +75,7 @@ test('pushes the server, origin and saved native microphone to Rust', async () =
     origin: 'tauri://localhost',
     inputDeviceId: 'native:AirPods',
     deviceKnown: true,
+    liveText: false,
   });
 });
 
@@ -86,6 +87,7 @@ test('does not replace the remembered microphone before settings load', async ()
     origin: 'tauri://localhost',
     inputDeviceId: null,
     deviceKnown: false,
+    liveText: false,
   });
 });
 
