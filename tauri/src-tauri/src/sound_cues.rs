@@ -38,6 +38,10 @@ pub const START_CUE_SPAN_MS: u32 = 300;
 /// The same for the style cue, a 200 ms sound played while the user speaks:
 /// its latency, plus the audio captured but not yet sent when it starts.
 pub const STYLE_CUE_SPAN_MS: u32 = 350;
+/// The style cue waits for the HUD chip's glow (`GLOW_S[0]` in
+/// `StyleChip.tsx`), so it rings as the ring lights up and grows, not as the
+/// chip fades in.
+pub const STYLE_CUE_DELAY_MS: u32 = 920;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cue {
@@ -162,6 +166,28 @@ pub fn play(cue: Cue) -> bool {
     current()
         .playback_volume()
         .is_some_and(|volume| send(cue, volume * cue.gain()))
+}
+
+/// Play `cue` after `delay` if cues are on now and `still_wanted` holds
+/// then. Returns whether it was scheduled.
+pub fn play_after(
+    cue: Cue,
+    delay: std::time::Duration,
+    still_wanted: impl FnOnce() -> bool + Send + 'static,
+) -> bool {
+    let Some(volume) = current().playback_volume() else {
+        return false;
+    };
+    let volume = volume * cue.gain();
+    thread::Builder::new()
+        .name("voicebox-sound-cue-delay".into())
+        .spawn(move || {
+            thread::sleep(delay);
+            if still_wanted() {
+                send(cue, volume);
+            }
+        })
+        .is_ok()
 }
 
 fn send(cue: Cue, volume: f32) -> bool {

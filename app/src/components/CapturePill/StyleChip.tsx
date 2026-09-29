@@ -14,6 +14,7 @@ export interface StyleChange {
 const TOTAL_S = 2.72;
 const ENTER_S = 0.32;
 const ROLL_S = [0.64, 1.04] as const;
+// The style cue plays at the glow's start (`STYLE_CUE_DELAY_MS` in sound_cues.rs).
 const GLOW_S = [0.92, 1.08, 1.76] as const;
 const EXIT_S = 2.32;
 const ROW_PX = 14;

@@ -257,9 +257,11 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
                 0
             });
         let style_env = env.clone();
-        let client = client.with_style(crate::sound_cues::STYLE_CUE_SPAN_MS, move |from, to| {
-            style_env.emit_style(from, to)
-        });
+        let client = client.with_style(
+            crate::sound_cues::STYLE_CUE_DELAY_MS,
+            crate::sound_cues::STYLE_CUE_SPAN_MS,
+            move |from, to| style_env.emit_style(from, to),
+        );
         let client = match env.mode {
             TakeMode::Dictation => client,
             TakeMode::Command => client.with_command(),
@@ -567,14 +569,20 @@ impl AppEnv {
     }
 
     /// The writing style the user asked for by name, for the HUD's style
-    /// chip, with its cue. `from` is the style it replaced, `None` when it
-    /// was already that. Returns whether the cue played.
+    /// chip, with its cue as the chip glows. `from` is the style it
+    /// replaced, `None` when it was already that. Returns whether the cue
+    /// was scheduled; Escape before it plays silences it.
     fn emit_style(&self, from: Option<String>, to: String) -> bool {
         let payload = serde_json::json!({ "take": self.take_id, "from": from, "to": to });
         let _ = self
             .app
             .emit_to(DICTATE_WINDOW_LABEL, "dictation:style", payload);
-        crate::sound_cues::play(crate::sound_cues::Cue::Style)
+        let cancel = self.cancel.clone();
+        crate::sound_cues::play_after(
+            crate::sound_cues::Cue::Style,
+            std::time::Duration::from_millis(crate::sound_cues::STYLE_CUE_DELAY_MS.into()),
+            move || !cancel.is_cancelled(),
+        )
     }
 }
 

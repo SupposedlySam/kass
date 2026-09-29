@@ -55,6 +55,7 @@ pub struct StreamClient {
     outcome: Option<Outcome>,
     on_provisional: Option<Box<dyn Fn(String) + Send>>,
     on_style: Option<Box<dyn Fn(Option<String>, String) -> bool + Send>>,
+    style_cue_delay_ms: u32,
     style_cue_ms: u32,
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,
     app_sent: bool,
@@ -94,6 +95,7 @@ impl StreamClient {
             outcome: None,
             on_provisional: None,
             on_style: None,
+            style_cue_delay_ms: 0,
             style_cue_ms: 0,
             target_app: None,
             app_sent: false,
@@ -182,24 +184,28 @@ impl StreamClient {
 
     /// Hear when the user asks for a writing style by name, with the style
     /// it replaced (`None` when the take was already in it) and the new one.
-    /// `on_style` returns whether it played a cue; the microphone may pick up
-    /// its next `cue_ms`, which the server then doesn't take for a voice.
+    /// `on_style` returns whether it scheduled a cue, which plays `delay_ms`
+    /// later; the microphone may pick up the `cue_ms` from then, which the
+    /// server then doesn't take for a voice.
     pub fn with_style(
         mut self,
+        delay_ms: u32,
         cue_ms: u32,
         on_style: impl Fn(Option<String>, String) -> bool + Send + 'static,
     ) -> Self {
+        self.style_cue_delay_ms = delay_ms;
         self.style_cue_ms = cue_ms;
         self.on_style = Some(Box::new(on_style));
         self
     }
 
-    /// A `cue` message: the audio from what was sent so far, for `ms`, holds
-    /// a sound Voicebox played, not the user's voice.
-    fn cue_action(&self, ms: u32) -> Option<Action> {
+    /// A `cue` message: the audio from `delay_ms` past what was sent so far,
+    /// for `ms`, holds a sound Voicebox played, not the user's voice.
+    fn cue_action(&self, delay_ms: u32, ms: u32) -> Option<Action> {
         let rate = self.sample_rate?;
-        let span = (u64::from(rate) * u64::from(ms) / 1000) as u32;
-        let start = self.sample_offset;
+        let samples = |ms: u32| (u64::from(rate) * u64::from(ms) / 1000) as u32;
+        let start = self.sample_offset.saturating_add(samples(delay_ms));
+        let span = samples(ms);
         let message = serde_json::json!({
             "type": "cue",
             "start_samples": start,
@@ -377,7 +383,9 @@ impl StreamClient {
                 };
                 // After finish the server has all the audio; nothing to mark.
                 if played && !self.finish_sent {
-                    self.cue_action(self.style_cue_ms).into_iter().collect()
+                    self.cue_action(self.style_cue_delay_ms, self.style_cue_ms)
+                        .into_iter()
+                        .collect()
                 } else {
                     Vec::new()
                 }
@@ -757,7 +765,7 @@ mod tests {
     fn a_spoken_style_reaches_the_sink_while_speaking() {
         let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink = seen.clone();
-        let mut client = StreamClient::new(1 << 20).with_style(350, move |from, to| {
+        let mut client = StreamClient::new(1 << 20).with_style(0, 350, move |from, to| {
             sink.lock().unwrap().push((from, to));
             false
         });
@@ -779,7 +787,7 @@ mod tests {
 
     #[test]
     fn a_style_cue_marks_the_audio_it_may_reach() {
-        let mut client = StreamClient::new(1 << 20).with_style(350, |_, _| true);
+        let mut client = StreamClient::new(1 << 20).with_style(920, 350, |_, _| true);
         client.set_format(48_000);
         client.on_open();
         ready(&mut client);
@@ -787,10 +795,13 @@ mod tests {
         let event = r#"{"type":"style","session_id":"s1","name":"Formal","from_name":"Chat"}"#;
         assert_eq!(
             texts(&client.on_text(event)),
-            vec![serde_json::json!({"type": "cue", "start_samples": 4800, "end_samples": 4800 + 16_800})]
+            // It plays 920 ms on, as the chip glows.
+            vec![
+                serde_json::json!({"type": "cue", "start_samples": 4800 + 44_160, "end_samples": 4800 + 44_160 + 16_800})
+            ]
         );
         // Cues off: nothing played, nothing to mark.
-        let mut quiet = StreamClient::new(1 << 20).with_style(350, |_, _| false);
+        let mut quiet = StreamClient::new(1 << 20).with_style(920, 350, |_, _| false);
         quiet.set_format(48_000);
         quiet.on_open();
         ready(&mut quiet);
