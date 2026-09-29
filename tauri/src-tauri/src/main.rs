@@ -927,8 +927,12 @@ fn update_chord_bindings(
 /// Open the Privacy & Security → Accessibility pane in System Settings so
 /// the user can grant the permission. The URL scheme is stable across
 /// macOS 10.14–15.
+///
+/// Asks for the permission first: a pane that doesn't list Voicebox leaves
+/// the user nothing to switch on, and only the request adds the entry.
 #[command]
 fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = accessibility::request();
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
     app.shell()
         .open(url, None)
@@ -939,8 +943,12 @@ fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
 /// Open the Privacy & Security → Input Monitoring pane in System Settings.
 /// Used by the Captures settings UI when the toggle is on but the grant
 /// is missing, so the user can flip the system toggle without hunting.
+///
+/// Asks for the permission first: a pane that doesn't list Voicebox leaves
+/// the user nothing to switch on, and only the request adds the entry.
 #[command]
 fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = input_monitoring::request();
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
     app.shell()
         .open(url, None)
