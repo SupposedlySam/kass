@@ -43,6 +43,7 @@ def run_migrations(engine) -> None:
 
     _migrate_capture_settings(engine, inspector, tables)
     _migrate_captures(engine, inspector, tables)
+    _migrate_capture_feedback(engine, inspector, tables)
 
 
 # -- helpers ---------------------------------------------------------------
@@ -80,6 +81,15 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
     ):
         if column not in columns:
             _add_column(engine, "captures", f"{column} {kind}", column)
+
+
+def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
+    if "capture_feedback" not in tables:
+        return
+    columns = _get_columns(inspector, "capture_feedback")
+    for column in ("app_bundle_id", "teaches_style_id"):
+        if column not in columns:
+            _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
 
 
 def _sql_literal(value: str) -> str:
@@ -168,4 +178,11 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             "punctuation_style VARCHAR NOT NULL DEFAULT 'standard'",
             "punctuation_style",
+        )
+    if "history_retention_days" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            "history_retention_days INTEGER NOT NULL DEFAULT 30",
+            "history_retention_days",
         )

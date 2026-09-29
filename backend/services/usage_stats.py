@@ -5,6 +5,8 @@ Everything is counted from the captures table with two queries: one sums
 words, captures, speaking time and fixes per local hour and app, and one
 reads each capture's length and raw word count for the medians. Command
 captures are left out, since they rewrite a selection rather than dictate.
+Captures history retention deleted count from their ``RetiredCapture`` rows
+(docs/plans/HISTORY_RETENTION.md), so deleting history never lowers a total.
 
 Days and hours are the Mac's local time. ``created_at`` is naive UTC, and
 SQLite's ``localtime`` modifier converts it with the same zone rules as the
@@ -21,7 +23,7 @@ from typing import Literal
 from sqlalchemy import case, exists, func, literal_column
 from sqlalchemy.orm import Session
 
-from ..database import Capture as DBCapture, CaptureFeedback
+from ..database import Capture as DBCapture, CaptureFeedback, RetiredCapture
 from ..models import (
     UsageApp,
     UsageDay,
@@ -112,9 +114,43 @@ def _dictation(db: Session):
     return db.query(DBCapture).filter(DBCapture.source != "command")
 
 
+def _retired(db: Session):
+    # A capture still in the table was never deleted; count it once, from there.
+    return db.query(RetiredCapture).filter(
+        RetiredCapture.source != "command",
+        ~exists().where(DBCapture.id == RetiredCapture.capture_id),
+    )
+
+
 def _first_day(db: Session) -> date | None:
-    first = _dictation(db).with_entities(func.min(func.datetime(DBCapture.created_at, "localtime"))).scalar()
-    return datetime.fromisoformat(first).date() if first else None
+    firsts = [
+        _dictation(db).with_entities(func.min(func.datetime(DBCapture.created_at, "localtime"))).scalar(),
+        _retired(db).with_entities(func.min(func.datetime(RetiredCapture.created_at, "localtime"))).scalar(),
+    ]
+    firsts = [first for first in firsts if first]
+    return datetime.fromisoformat(min(firsts)).date() if firsts else None
+
+
+def _slots(grouped) -> list[_Slot]:
+    return [
+        _Slot(
+            day=date.fromisoformat(slot[:10]),
+            hour=int(slot[11:13]),
+            app=app,
+            captures=count,
+            words=int(words or 0),
+            speaking_ms=int(speaking or 0),
+            fixed=int(fixes or 0),
+        )
+        for slot, app, count, words, speaking, fixes in grouped
+    ]
+
+
+def _recordings(rows) -> list[_Recording]:
+    return [
+        _Recording(day=date.fromisoformat(day), app=app, duration_ms=duration, raw_words=raw)
+        for day, app, duration, raw in rows
+    ]
 
 
 def _load(db: Session, start: date, end: date) -> tuple[list[_Slot], list[_Recording]]:
@@ -139,28 +175,46 @@ def _load(db: Session, start: date, end: date) -> tuple[list[_Slot], list[_Recor
         .group_by(literal_column("slot"), DBCapture.app_bundle_id)
         .all()
     )
-    slots = [
-        _Slot(
-            day=date.fromisoformat(slot[:10]),
-            hour=int(slot[11:13]),
-            app=app,
-            captures=count,
-            words=int(words or 0),
-            speaking_ms=int(speaking or 0),
-            fixed=int(fixes or 0),
-        )
-        for slot, app, count, words, speaking, fixes in grouped
-    ]
+    slots = _slots(grouped)
     lengths = in_window.with_entities(
         func.date(DBCapture.created_at, "localtime"),
         DBCapture.app_bundle_id,
         DBCapture.duration_ms,
         getattr(func, _WORDS_FN)(DBCapture.transcript_raw),
     ).filter(DBCapture.duration_ms > 0)
-    recordings = [
-        _Recording(day=date.fromisoformat(day), app=app, duration_ms=duration, raw_words=raw)
-        for day, app, duration, raw in lengths.all()
-    ]
+    recordings = _recordings(lengths.all())
+    retired_slots, retired_recordings = _load_retired(db, start, end)
+    return slots + retired_slots, recordings + retired_recordings
+
+
+def _load_retired(db: Session, start: date, end: date) -> tuple[list[_Slot], list[_Recording]]:
+    """``_load`` for captures history retention deleted. A slot may repeat one
+    from ``_load``; everything that reads slots adds them up."""
+    local = func.strftime("%Y-%m-%d %H", RetiredCapture.created_at, "localtime").label("slot")
+    in_window = _retired(db).filter(
+        RetiredCapture.created_at >= _utc(start),
+        RetiredCapture.created_at < _utc(end + timedelta(days=1)),
+    )
+    grouped = (
+        in_window.with_entities(
+            local,
+            RetiredCapture.app_bundle_id,
+            func.count(RetiredCapture.capture_id),
+            func.sum(RetiredCapture.words),
+            func.sum(func.coalesce(RetiredCapture.duration_ms, 0)),
+            func.sum(case((RetiredCapture.fixed, 1), else_=0)),
+        )
+        .group_by(literal_column("slot"), RetiredCapture.app_bundle_id)
+        .all()
+    )
+    slots = _slots(grouped)
+    lengths = in_window.with_entities(
+        func.date(RetiredCapture.created_at, "localtime"),
+        RetiredCapture.app_bundle_id,
+        RetiredCapture.duration_ms,
+        RetiredCapture.raw_words,
+    ).filter(RetiredCapture.duration_ms > 0)
+    recordings = _recordings(lengths.all())
     return slots, recordings
 
 

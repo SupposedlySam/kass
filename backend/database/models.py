@@ -62,6 +62,8 @@ class CaptureSettings(Base):
     # cleanup model, llm_model.
     chord_command_keys = Column(JSON, nullable=False, default=default_command_chord)
     command_transforms = Column(JSON, nullable=False, default=default_transforms)
+    # Days of capture history to keep (docs/plans/HISTORY_RETENTION.md); 0 keeps it forever.
+    history_retention_days = Column(Integer, nullable=False, default=30)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -151,4 +153,39 @@ class CaptureFeedback(Base):
     expected_text = Column(Text, nullable=False)
     notes = Column(Text, nullable=False, default="")
     snapshot = Column(Text, nullable=False)
+    # Copied from the capture when history retention deletes it, so the
+    # correction keeps teaching the same style (docs/plans/HISTORY_RETENTION.md).
+    # Null while the capture exists: read the capture's own columns then.
+    app_bundle_id = Column(String, nullable=True)
+    teaches_style_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RetiredCapture(Base):
+    """What usage stats count from a capture history retention deleted.
+
+    Numbers only, no text or audio, one row per capture so medians stay exact
+    and folding the same capture twice cannot count it twice.
+    """
+
+    __tablename__ = "retired_captures"
+
+    capture_id = Column(String, primary_key=True)
+    created_at = Column(DateTime, nullable=False, index=True)
+    source = Column(String, nullable=False)
+    app_bundle_id = Column(String, nullable=True)
+    # Words delivered (refined, else raw) and words said, as usage stats count them.
+    words = Column(Integer, nullable=False, default=0)
+    raw_words = Column(Integer, nullable=False, default=0)
+    duration_ms = Column(Integer, nullable=True)
+    fixed = Column(Boolean, nullable=False, default=False)
+
+
+class KnownName(Base):
+    """A name from a capture history retention deleted, for known_names.py."""
+
+    __tablename__ = "known_names"
+
+    name = Column(String, primary_key=True)
+    # The newest deleted capture that wrote it.
+    last_seen_at = Column(DateTime, nullable=False)

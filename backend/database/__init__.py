@@ -11,6 +11,8 @@ from .models import (
     Capture,
     CaptureFeedback,
     CaptureSettings,
+    KnownName,
+    RetiredCapture,
     WritingStyle,
 )
 from .session import engine, SessionLocal, _db_path, init_db, get_db
@@ -22,6 +24,8 @@ __all__ = [
     "Capture",
     "CaptureFeedback",
     "CaptureSettings",
+    "KnownName",
+    "RetiredCapture",
     "WritingStyle",
     # Session
     "engine",
