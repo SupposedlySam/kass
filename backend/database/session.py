@@ -45,9 +45,11 @@ def init_db() -> None:
 
 
 def _rename_old_db(db_path) -> None:
-    """Herga was Voicebox, whose database was voicebox.db; carry it over once."""
-    old = db_path.with_name("voicebox.db")
-    if db_path.exists() or not old.exists():
+    """Kass was Herga (herga.db), and before that Voicebox (voicebox.db); carry it over once."""
+    if db_path.exists():
+        return
+    old = next((db_path.with_name(n) for n in ("herga.db", "voicebox.db") if db_path.with_name(n).exists()), None)
+    if old is None:
         return
     # SQLite's journal files travel with the database they belong to.
     for suffix in ("-wal", "-shm"):

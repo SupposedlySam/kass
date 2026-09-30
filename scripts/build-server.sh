@@ -6,7 +6,7 @@ set -e
 # Determine platform
 PLATFORM=$(rustc --print host-tuple 2>/dev/null || echo "unknown")
 
-echo "Building Herga server sidecar for platform: $PLATFORM"
+echo "Building Kass server sidecar for platform: $PLATFORM"
 
 # Build Python binary
 # Resolve PATH to absolute paths before changing directory
@@ -23,15 +23,15 @@ fi
 mkdir -p ../tauri/src-tauri/binaries
 
 # The server is a PyInstaller folder (executable plus _internal/). Tauri copies
-# it into Herga.app/Contents/Resources (see bundle.macOS.files).
+# it into Kass.app/Contents/Resources (see bundle.macOS.files).
 python build_binary.py
-rm -rf ../tauri/src-tauri/binaries/herga-server ../tauri/src-tauri/binaries/herga-server-*
-if [ ! -x dist/herga-server/herga-server ]; then
-    echo "Error: dist/herga-server/herga-server not found"
+rm -rf ../tauri/src-tauri/binaries/kass-server ../tauri/src-tauri/binaries/kass-server-*
+if [ ! -x dist/kass-server/kass-server ]; then
+    echo "Error: dist/kass-server/kass-server not found"
     exit 1
 fi
 # ditto keeps the symlinks PyInstaller creates between bundled libraries.
-ditto dist/herga-server ../tauri/src-tauri/binaries/herga-server
-echo "Built herga-server for ${PLATFORM}"
+ditto dist/kass-server ../tauri/src-tauri/binaries/kass-server
+echo "Built kass-server for ${PLATFORM}"
 
 echo "Build complete!"

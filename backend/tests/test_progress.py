@@ -252,7 +252,7 @@ async def test_full_integration():
 async def main():
     """Run all tests."""
     print("\n" + "=" * 60)
-    print("Herga Progress Tracking Test Suite")
+    print("Kass Progress Tracking Test Suite")
     print("=" * 60)
 
     results = []

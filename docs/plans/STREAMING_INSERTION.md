@@ -150,7 +150,7 @@ the interquartile range was ±0.3 s.
   arrived while a write was in flight. After the first write, writes are at
   least 100 ms apart (`WRITE_INTERVAL`), which is 3–4 writes per take instead
   of ~8 events. The worker never holds the state lock while it waits.
-- **Eligible targets:** the snapshotted target is not Herga, Accessibility
+- **Eligible targets:** the snapshotted target is not Kass, Accessibility
   is trusted, and the target is still frontmost. Live text never activates
   another app.
 - **`finish(Some(final))`** is called from `AppEnv::paste`. It waits for any
@@ -177,7 +177,7 @@ The final text is written over the owned range when:
 
 Only the tail after the common prefix is rewritten. If the user edited the
 text or moved the caret (`intact` fails), nothing is written. The pill then
-shows "Text saved in Captures. The field changed while Herga was typing…".
+shows "Text saved in Captures. The field changed while Kass was typing…".
 The final text is never written over something the user touched.
 
 ## Correctness argument

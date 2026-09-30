@@ -16,7 +16,7 @@ export async function openAudioInput(
   }
   if (denied) {
     throw new DOMException(
-      'Microphone permission is not granted. Enable Herga in System Settings → Privacy & Security → Microphone.',
+      'Microphone permission is not granted. Enable Kass in System Settings → Privacy & Security → Microphone.',
       'NotAllowedError',
     );
   }

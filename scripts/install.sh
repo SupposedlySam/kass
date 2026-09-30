@@ -1,24 +1,24 @@
 #!/bin/bash
-# Build Herga from this checkout and install it to /Applications.
+# Build Kass from this checkout and install it to /Applications.
 #
 #   ./scripts/install.sh
 #
-# For working on Herga. Everyone else installs the DMG from GitHub
+# For working on Kass. Everyone else installs the DMG from GitHub
 # Releases. Checks what the build needs and says how to install anything
 # missing, pulls the latest code, builds the server (only when it changed)
-# and the app, and replaces /Applications/Herga.app. Every build is signed
+# and the app, and replaces /Applications/Kass.app. Every build is signed
 # with the same identity, so updates keep the app's privacy permissions.
 #
 # Options:
 #   --no-pull          build the checkout as it is
 #   --rebuild-server   rebuild the Python server even if it hasn't changed
-#   --no-launch        don't open Herga afterwards
+#   --no-launch        don't open Kass afterwards
 set -euo pipefail
 
 # Always /Applications: macOS privacy permissions (Input Monitoring,
 # Accessibility, Microphone) don't work reliably for an app anywhere else.
-app=/Applications/Herga.app
-bundle_id="com.mrgnhnt.herga"
+app=/Applications/Kass.app
+bundle_id="com.mrgnhnt.kass"
 
 pull=1
 rebuild_server=0
@@ -64,7 +64,7 @@ cd "$root"
 step "Checking requirements"
 
 if [ "$(uname)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-  die "Herga only runs on Apple Silicon Macs."
+  die "Kass only runs on Apple Silicon Macs."
 fi
 
 missing=()
@@ -111,7 +111,7 @@ fi
 
 if [ ${#missing[@]} -gt 0 ]; then
   echo
-  echo "${red}${bold}Some things Herga needs to build are missing.${reset} Install them, then run this again:"
+  echo "${red}${bold}Some things Kass needs to build are missing.${reset} Install them, then run this again:"
   for item in "${missing[@]}"; do
     echo
     echo "  ${bold}${item%%|*}${reset}"
@@ -150,7 +150,7 @@ ok "JavaScript packages"
 
 step "Setting up the Python environment"
 python_stamp=$(stamp_of cat backend/requirements.txt scripts/setup-python.sh)
-python_stamp_file=backend/venv/.herga-install-stamp
+python_stamp_file=backend/venv/.kass-install-stamp
 if [ -f "$python_stamp_file" ] && [ "$(cat "$python_stamp_file")" = "$python_stamp" ]; then
   ok "Up to date"
 else
@@ -169,8 +169,8 @@ server_inputs() {
   cat scripts/build-server.sh "$python_stamp_file"
 }
 server_stamp=$(stamp_of server_inputs)
-server_stamp_file=tauri/src-tauri/binaries/.herga-server-stamp
-if [ "$rebuild_server" = 0 ] && [ -x tauri/src-tauri/binaries/herga-server/herga-server ] &&
+server_stamp_file=tauri/src-tauri/binaries/.kass-server-stamp
+if [ "$rebuild_server" = 0 ] && [ -x tauri/src-tauri/binaries/kass-server/kass-server ] &&
   [ -f "$server_stamp_file" ] && [ "$(cat "$server_stamp_file")" = "$server_stamp" ]; then
   ok "Unchanged since the last build"
 else
@@ -183,7 +183,7 @@ fi
 step "Building the app"
 echo "  ${dim}The first build compiles the Rust app shell and takes a while.${reset}"
 ./scripts/build-local-app.sh
-built=tauri/src-tauri/target/release/bundle/macos/Herga.app
+built=tauri/src-tauri/target/release/bundle/macos/Kass.app
 ok "Built and signed with \"$(codesign -dvv "$built" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)\""
 
 # ─── Install ──────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ if [ -d "$old_app" ]; then
   fi
 fi
 
-# Herga was Voicebox. Retire the old app, or it would still start at login
+# Kass was Voicebox. Retire the old app, or it would still start at login
 # and answer the same hotkey. Upstream Voicebox, the text-to-speech app,
 # shares the old bundle id, so only a copy whose data folder holds a file
 # only this app writes counts as ours.
@@ -248,14 +248,35 @@ if [ -d "$voicebox_app" ]; then
       tccutil reset "$service" "$voicebox_id" >/dev/null 2>&1 || true
     done
     if mv "$voicebox_app" "$HOME/.Trash/Voicebox $(date '+%Y-%m-%d %H.%M.%S').app" 2>/dev/null; then
-      ok "Moved Voicebox.app, Herga's old name, to the Trash"
+      ok "Moved Voicebox.app, Kass's old name, to the Trash"
     else
       rm -rf "$voicebox_app"
-      ok "Removed Voicebox.app, Herga's old name"
+      ok "Removed Voicebox.app, Kass's old name"
     fi
-    warn "Herga keeps your captures and settings, but macOS will ask for"
+    warn "Kass keeps your captures and settings, but macOS will ask for"
     warn "Microphone, Accessibility and Input Monitoring again under the new name."
   fi
+fi
+
+# Kass was Herga. Retire the old app the same way, so it doesn't start at
+# login and answer the same hotkey.
+herga_app=/Applications/Herga.app
+herga_id=com.mrgnhnt.herga
+if [ -d "$herga_app" ] &&
+  [ "$(plutil -extract CFBundleIdentifier raw "$herga_app/Contents/Info.plist" 2>/dev/null || true)" = "$herga_id" ]; then
+  osascript -e 'quit app id "'"$herga_id"'"' >/dev/null 2>&1 || true
+  pkill -f "$herga_app/Contents/" 2>/dev/null || true
+  for service in Microphone Accessibility ListenEvent PostEvent; do
+    tccutil reset "$service" "$herga_id" >/dev/null 2>&1 || true
+  done
+  if mv "$herga_app" "$HOME/.Trash/Herga $(date '+%Y-%m-%d %H.%M.%S').app" 2>/dev/null; then
+    ok "Moved Herga.app, Kass's old name, to the Trash"
+  else
+    rm -rf "$herga_app"
+    ok "Removed Herga.app, Kass's old name"
+  fi
+  warn "Kass keeps your captures and settings, but macOS will ask for"
+  warn "Microphone, Accessibility and Input Monitoring again under the new name."
 fi
 
 # An unreadable old requirement counts as a change, so it resets instead of
@@ -299,8 +320,8 @@ fi
 
 if [ "$launch" = 1 ]; then
   open "$app"
-  ok "Opened Herga"
+  ok "Opened Kass"
 fi
 
 echo
-echo "${green}${bold}Herga is installed.${reset} Run this script again to update."
+echo "${green}${bold}Kass is installed.${reset} Run this script again to update."

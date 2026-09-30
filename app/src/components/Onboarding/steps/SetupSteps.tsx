@@ -21,7 +21,7 @@ import type { ModelProgress, OnboardingDownloads } from '../useOnboardingDownloa
 
 export function WelcomeStep({ onNext }: { onNext: () => void }) {
   const { t } = useTranslation();
-  // The filler is struck out after the line lands, the way Herga cleans it.
+  // The filler is struck out after the line lands, the way Kass cleans it.
   return (
     <>
       <Headline size="md">{t('onboarding.welcome.title')}</Headline>
@@ -185,7 +185,7 @@ export function DownloadStep({
 }
 
 /**
- * Input Monitoring. macOS makes the user quit Herga before it applies,
+ * Input Monitoring. macOS makes the user quit Kass before it applies,
  * so the step says so first; onboarding reopens here afterward, where a
  * green card and "Try it now" pick up.
  */

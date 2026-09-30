@@ -17,7 +17,7 @@ versions() {
     echo "$file $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$file")"
   done
   echo "tauri/src-tauri/Cargo.toml $(sed -n 's/^version = "\(.*\)"/\1/p' tauri/src-tauri/Cargo.toml | head -1)"
-  echo "tauri/src-tauri/Cargo.lock $(grep -A1 '^name = "herga"$' tauri/src-tauri/Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')"
+  echo "tauri/src-tauri/Cargo.lock $(grep -A1 '^name = "kass"$' tauri/src-tauri/Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')"
   echo "backend/pyproject.toml $(sed -n 's/^version = "\(.*\)"/\1/p' backend/pyproject.toml | head -1)"
   echo "backend/__init__.py $(sed -n 's/^__version__ = "\(.*\)"/\1/p' backend/__init__.py)"
 }
@@ -57,7 +57,7 @@ open(path, "w").write(text)
 PY
 done
 sed -i '' "1,/^version = /s/^version = \".*\"/version = \"$version\"/" tauri/src-tauri/Cargo.toml backend/pyproject.toml
-sed -i '' "/^name = \"herga\"$/{n;s/^version = \".*\"/version = \"$version\"/;}" tauri/src-tauri/Cargo.lock
+sed -i '' "/^name = \"kass\"$/{n;s/^version = \".*\"/version = \"$version\"/;}" tauri/src-tauri/Cargo.lock
 sed -i '' "s/^__version__ = \".*\"/__version__ = \"$version\"/" backend/__init__.py
 
 versions

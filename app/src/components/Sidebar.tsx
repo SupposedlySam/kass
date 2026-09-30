@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import hergaLogo from '@/assets/herga-logo.png';
+import kassLogo from '@/assets/kass-logo.png';
 import { type ModelAlerts, useModelAlerts } from '@/lib/hooks/useModelAlerts';
 import { useUpdateCheck } from '@/lib/hooks/useUpdateCheck';
 import { cn } from '@/lib/utils/cn';
@@ -35,7 +35,7 @@ export function Sidebar() {
       aria-label="Main"
       className="w-[68px] shrink-0 flex flex-col items-center gap-1 pt-3 pb-3 bg-sidebar border-r border-border"
     >
-      <img src={hergaLogo} alt="Herga" className="mb-4 h-8 w-8 object-contain" />
+      <img src={kassLogo} alt="Kass" className="mb-4 h-8 w-8 object-contain" />
 
       {tabs.map((tab) => {
         const Icon = tab.icon;

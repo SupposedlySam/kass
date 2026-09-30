@@ -4,7 +4,7 @@ Cleanup shows the model only the most recent examples, so without this an
 example would stop counting once enough newer ones pushed it out. When enough
 examples have left the prompt, an idle-time job has the cleanup model fold
 them into the notes it already has: a bounded list of plain rules such as
-"Write Herga as one word." Every cleanup reads the same notes, so the
+"Write Kass as one word." Every cleanup reads the same notes, so the
 cached prompt still matches until they change.
 
 A new version is kept only when replaying the user's own examples with it

@@ -28,7 +28,7 @@ const MEDIUM_MESSAGE = 110;
 interface Take {
   /** What was heard, from each take's raw transcript. */
   heard: string;
-  /** Herga's cleanup of it, in the style being taught. */
+  /** Kass's cleanup of it, in the style being taught. */
   shown: string;
   /** What the user sends: `shown`, or their edit of it. */
   written: string;
@@ -57,8 +57,8 @@ async function openConversation(
 }
 
 /**
- * Teach Herga how the user writes (docs/plans/ONBOARDING.md, "Your style"):
- * they answer a text in their own words, check Herga's version and edit it
+ * Teach Kass how the user writes (docs/plans/ONBOARDING.md, "Your style"):
+ * they answer a text in their own words, check Kass's version and edit it
  * until it's how they'd send it, then see their way beside standard cleanup.
  * It runs on a teach-by-replying session, so the reply and every edit are
  * saved as examples when they go on.
@@ -111,7 +111,7 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
           return;
         }
         const heard = [take.heard, capture.transcript_raw ?? ''].filter(Boolean).join(' ');
-        // Every take this turn, cleaned up together, is what Herga shows.
+        // Every take this turn, cleaned up together, is what Kass shows.
         apiClient
           .teachDictated(session.session_id, conversation.id)
           .then(({ text }) => {
@@ -319,7 +319,7 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
         )}
         {editing ? (
           <div className="grid max-w-[700px] grid-cols-[130px_1fr] items-baseline gap-x-3.5 gap-y-2">
-            <span className={cn(LABEL, 'opacity-75')}>{t('onboarding.style.hergaWrote')}</span>
+            <span className={cn(LABEL, 'opacity-75')}>{t('onboarding.style.kassWrote')}</span>
             <span className="line-clamp-2 text-[15px] leading-snug opacity-75">{take.shown}</span>
             <span className={LABEL}>{t('onboarding.style.youChanged')}</span>
             <span className="line-clamp-2 text-[15px] leading-relaxed">

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useWritingStyle } from '@/lib/hooks/useWritingStyle';
 import { TeachDialog } from './teach/TeachDialog';
 
-const DISMISSED_KEY = 'herga.writingStyle.promptDismissed';
+const DISMISSED_KEY = 'kass.writingStyle.promptDismissed';
 
 function readDismissed(): boolean {
   try {
@@ -15,7 +15,7 @@ function readDismissed(): boolean {
 }
 
 /**
- * First-run invitation to teach Herga how the user writes, shown once they
+ * First-run invitation to teach Kass how the user writes, shown once they
  * have dictated and until they teach it or dismiss it. Never blocks dictating.
  */
 export function StyleCalibrationPrompt({ hasCaptures }: { hasCaptures: boolean }) {

@@ -17,7 +17,7 @@ def allowed_origins() -> list[str]:
         "https://tauri.localhost",
         "http://tauri.localhost",
     ]
-    configured = os.environ.get("HERGA_CORS_ORIGINS", "")
+    configured = os.environ.get("KASS_CORS_ORIGINS", "")
     return defaults + [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 

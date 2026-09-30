@@ -120,7 +120,7 @@ pub async fn delete_capture(http: &reqwest::Client, server_url: &str, capture_id
 
 /// What a command runs on its selection.
 pub enum CommandInput<'a> {
-    /// Typed or chosen in Herga: an instruction or a transform's name.
+    /// Typed or chosen in Kass: an instruction or a transform's name.
     Instruction {
         instruction: &'a str,
         bundle_id: Option<&'a str>,
@@ -179,8 +179,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn real_server_batch_smoke() {
-        let server = std::env::var("HERGA_SMOKE_SERVER").expect("HERGA_SMOKE_SERVER");
-        let wav = std::fs::read(std::env::var("HERGA_SMOKE_WAV").expect("HERGA_SMOKE_WAV"))
+        let server = std::env::var("KASS_SMOKE_SERVER").expect("KASS_SMOKE_SERVER");
+        let wav = std::fs::read(std::env::var("KASS_SMOKE_WAV").expect("KASS_SMOKE_WAV"))
             .unwrap();
         let http = client();
         let capture = upload(&http, &server, wav, "dictation", None)

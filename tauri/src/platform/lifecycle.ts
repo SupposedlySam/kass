@@ -54,7 +54,7 @@ class TauriLifecycle implements PlatformLifecycle {
         // Only stop the server if this app instance started it; a server
         // started by hand for development keeps running.
         // @ts-expect-error - accessing module-level variable from another module
-        const serverStartedByApp = window.__hergaServerStartedByApp ?? false;
+        const serverStartedByApp = window.__kassServerStartedByApp ?? false;
 
         console.log(
           '[lifecycle] window-close-requested: serverStartedByApp=%s',

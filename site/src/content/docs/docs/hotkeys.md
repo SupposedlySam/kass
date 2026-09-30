@@ -3,7 +3,7 @@ title: Hotkeys
 description: The default chords for dictation and Command Mode, and how to change them.
 ---
 
-Herga uses chords: keys you hold together. The defaults use the modifier keys on the **right** side of the keyboard, so they don't collide with the shortcuts you already use. Left and right modifiers count as different keys.
+Kass uses chords: keys you hold together. The defaults use the modifier keys on the **right** side of the keyboard, so they don't collide with the shortcuts you already use. Left and right modifiers count as different keys.
 
 | Action | Default chord |
 | --- | --- |
@@ -35,5 +35,5 @@ You can also start hands-free directly: press <kbd>right ⌘</kbd> + <kbd>right 
 A chord can have one to six keys. Keys that can't be used show a message saying they aren't supported in chords. The Command Mode chord is set in **Settings › Command Mode**, and it must be different from the dictation chords.
 
 :::note
-Chords need **Input Monitoring** permission. If nothing happens when you hold a chord, check that Herga is allowed in **System Settings › Privacy & Security › Input Monitoring** and that the global shortcut is on in **Settings › Dictation**.
+Chords need **Input Monitoring** permission. If nothing happens when you hold a chord, check that Kass is allowed in **System Settings › Privacy & Security › Input Monitoring** and that the global shortcut is on in **Settings › Dictation**.
 :::

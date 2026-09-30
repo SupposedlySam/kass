@@ -22,9 +22,9 @@ interface AppLocation {
 let asked = false;
 
 /**
- * Asks to move Herga into /Applications when it runs from anywhere else
+ * Asks to move Kass into /Applications when it runs from anywhere else
  * (the build folder, Downloads, a disk image). macOS permissions don't work
- * reliably for an app outside Applications: Herga can be missing from
+ * reliably for an app outside Applications: Kass can be missing from
  * the Input Monitoring list, or its switch is on but does nothing. Moving
  * copies the app, puts the old copies in the Trash and relaunches.
  */

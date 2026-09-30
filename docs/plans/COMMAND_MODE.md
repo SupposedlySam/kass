@@ -72,7 +72,7 @@ A command always replaces the selection. The "Paste automatically" setting doesn
 `capture_settings.command_transforms`: a JSON list of `{id, name, instruction}`, defaulting to Polish and Prompt Engineer. Users can edit or delete the defaults. Settings has a list editor.
 
 - **By voice:** `match_transform` above.
-- **From the ⌘K palette:** one command per transform. Herga's window is in front then, so Rust finds the app the user came from (the frontmost on-screen window that isn't Herga's), reads its selection, calls `/commands/run`, brings the app back, and inserts. The pill shows progress.
+- **From the ⌘K palette:** one command per transform. Kass's window is in front then, so Rust finds the app the user came from (the frontmost on-screen window that isn't Kass's), reads its selection, calls `/commands/run`, brings the app back, and inserts. The pill shows progress.
 
 ## Latency budget
 

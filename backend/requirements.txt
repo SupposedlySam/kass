@@ -1,4 +1,4 @@
-# Herga backend runs on Apple Silicon only, with MLX as its sole backend.
+# Kass backend runs on Apple Silicon only, with MLX as its sole backend.
 
 # FastAPI and server
 fastapi>=0.109.0
@@ -18,7 +18,7 @@ jinja2>=3.1.0
 
 # NOTE: mlx-audio and mlx-lm are intentionally not listed here. They declare
 # `transformers>=5.0.0`, which conflicts with the `transformers<=4.57.6` cap
-# above. The parts Herga uses (mlx-audio's Whisper STT, mlx-lm generation)
+# above. The parts Kass uses (mlx-audio's Whisper STT, mlx-lm generation)
 # work on transformers 4.57.x, so install them after this file with:
 #
 #   pip install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1

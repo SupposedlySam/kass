@@ -30,7 +30,7 @@ Code: `tauri/src-tauri/src/text_insert.rs`, hooked at the top of
      back to clipboard + ⌘V at once. If it accepted the set, re-read up to
      3 times, 15 ms apart (45 ms at most), then fall back. This covers
      apps that apply the change late.
-   - The element can't be read afterwards: **no paste.** Herga shows
+   - The element can't be read afterwards: **no paste.** Kass shows
      an error, and the text is still in Captures.
 4. Every AX call has a 250 ms timeout, so a hung app can't stall the
    paste for the default 6 s.
@@ -38,7 +38,7 @@ Code: `tauri/src-tauri/src/text_insert.rs`, hooked at the top of
    (no settle sleep), as the ⌘V path did before.
 
 Each attempt writes one log line to stderr:
-`[herga] text insert into <bundle id>: <outcome> in <n> ms`. The
+`[kass] text insert into <bundle id>: <outcome> in <n> ms`. The
 outcome is `Inserted { exact: true }`, `Inserted { exact: false }`,
 `UseClipboard(<reason>)` or `Uncertain(..)`. Run a dev build from a
 terminal to see these lines.
@@ -62,7 +62,7 @@ once.
 | Terminal / iTerm2 / Ghostty | Clipboard (`ClipboardOnlyApp`) | Same as before this change: pasted at the prompt. |
 | Slack (Electron) message box | Either | One copy in the composer, and Send posts it. |
 | Password field (Safari login, System Settings) | Clipboard (`SecureField`) | Never inserted directly. Same behavior as before. |
-| Herga's own windows | Skipped | No change: pasting into Herga stays disabled. |
+| Kass's own windows | Skipped | No change: pasting into Kass stays disabled. |
 
 Report any app where the text appears twice, doesn't appear, or appears
 but the app ignores it. The fix is usually to add its bundle ID to

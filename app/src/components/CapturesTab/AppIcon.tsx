@@ -21,7 +21,7 @@ export function AppIcon({
     queryKey: ['appIcon', bundleId],
     queryFn: () => invoke<string | null>('app_icon', { bundleId }),
     enabled: !!bundleId,
-    // An app's icon doesn't change while Herga runs.
+    // An app's icon doesn't change while Kass runs.
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
   });

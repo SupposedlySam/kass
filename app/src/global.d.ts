@@ -1,3 +1,3 @@
 interface Window {
-  __hergaServerStartedByApp?: boolean;
+  __kassServerStartedByApp?: boolean;
 }

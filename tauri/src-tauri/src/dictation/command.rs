@@ -1,5 +1,5 @@
 //! Command Mode (docs/plans/COMMAND_MODE.md): the selection a command
-//! rewrites, and commands run from Herga's own window.
+//! rewrites, and commands run from Kass's own window.
 //!
 //! A command take is a dictation take whose words are an instruction. The
 //! selection is read here, on a blocking thread right after key-down, while
@@ -19,7 +19,7 @@ use crate::text_insert::SelectionRead;
 
 pub const NO_SELECTION_MESSAGE: &str = "Select text to rewrite first";
 pub const NOT_EDITABLE_MESSAGE: &str = "This text can't be rewritten in place";
-pub const IN_HERGA_MESSAGE: &str = "Command Mode rewrites text in other apps";
+pub const IN_KASS_MESSAGE: &str = "Command Mode rewrites text in other apps";
 pub const NO_TARGET_MESSAGE: &str = "No app to rewrite text in. Select text in an app first.";
 
 /// Settle time after bringing an app forward before ⌘C, as for pastes.
@@ -50,7 +50,7 @@ pub fn decide(
     Ok(text)
 }
 
-/// The selection a Herga window reported, or `None` when it didn't in
+/// The selection a Kass window reported, or `None` when it didn't in
 /// time. Blank is no selection.
 pub fn decide_in_app(reply: Option<String>) -> Result<String, &'static str> {
     match reply {
@@ -63,8 +63,8 @@ pub fn decide_in_app(reply: Option<String>) -> Result<String, &'static str> {
 /// app is frontmost, which ⌘C needs; otherwise it is brought forward first.
 /// Blocking.
 pub fn read_selection(focus: &FocusSnapshot, in_front: bool) -> Result<String, &'static str> {
-    if focus.bundle_id.as_deref() == Some(crate::HERGA_BUNDLE_ID) {
-        return Err(IN_HERGA_MESSAGE);
+    if focus.bundle_id.as_deref() == Some(crate::KASS_BUNDLE_ID) {
+        return Err(IN_KASS_MESSAGE);
     }
     let started = Instant::now();
     // An Electron app's tree builds lazily; asking now helps the insertion
@@ -92,14 +92,14 @@ pub fn read_selection(focus: &FocusSnapshot, in_front: bool) -> Result<String, &
 }
 
 /// Run `instruction` (or the transform it names) on the selection in the app
-/// the user was in before Herga's window, for the ⌘K palette. Progress
+/// the user was in before Kass's window, for the ⌘K palette. Progress
 /// and errors show in the pill.
-pub async fn run_from_herga(app: &AppHandle, instruction: String) -> Result<(), String> {
+pub async fn run_from_kass(app: &AppHandle, instruction: String) -> Result<(), String> {
     let state = app.state::<DictationState>();
     let take_id = state.next_take_id();
     let (server_url, http_client) = state.server();
     let emit = |event: PillEvent| emit_pill(app, take_id, event);
-    let focus = crate::focus_capture::app_behind_herga().ok_or(NO_TARGET_MESSAGE)?;
+    let focus = crate::focus_capture::app_behind_kass().ok_or(NO_TARGET_MESSAGE)?;
     super::show_hud(app);
     emit(PillEvent::Refining);
 
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn a_herga_window_selection_is_used_as_is() {
+    fn a_kass_window_selection_is_used_as_is() {
         assert_eq!(
             decide_in_app(Some(" two words ".into())),
             Ok(" two words ".into())
@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn no_reply_or_a_blank_one_from_a_herga_window_is_no_selection() {
+    fn no_reply_or_a_blank_one_from_a_kass_window_is_no_selection() {
         assert_eq!(decide_in_app(None), Err(NO_SELECTION_MESSAGE));
         assert_eq!(decide_in_app(Some(" \n".into())), Err(NO_SELECTION_MESSAGE));
     }

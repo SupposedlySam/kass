@@ -392,7 +392,7 @@ export function RewriteStep({
     setDone(instruction);
   };
 
-  // Said with the command keys: Herga pastes the rewrite into the field too.
+  // Said with the command keys: Kass pastes the rewrite into the field too.
   useTakes((capture: CaptureResponse) => {
     const rewritten = (capture.transcript_refined ?? '').trim();
     if (capture.source !== 'command' || !rewritten || done !== null) return;

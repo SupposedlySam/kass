@@ -11,7 +11,7 @@ showed, why it wasn't built, and what building it would take.
 These were in the mockups but the API had nothing to build them on.
 
 - **Turning off individual learned habits.** The writing-style summary
-  ("Here's what Herga learned") and the Writing style page list habits
+  ("Here's what Kass learned") and the Writing style page list habits
   without on/off switches. The API only returns habit codes, with no way to
   disable one. Needs a per-habit enabled flag stored with the style profile,
   and refinement that respects it.
@@ -56,7 +56,7 @@ These were in the mockups but the API had nothing to build them on.
 - **Command palette commands.** Left out:
   - "Import audio file…": importing lives on the Captures session
     (`useCaptureRecordingSession().uploadFile`). One way: Captures listens for a
-    window event such as `herga:import-audio` and opens its file input.
+    window event such as `kass:import-audio` and opens its file input.
   - "Start dictation" (could call `dictation_start`).
   - "Re-refine selected capture" (needs the palette to know the selection).
   - "Move models to a new location…" (open the Models storage flow).

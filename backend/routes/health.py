@@ -24,7 +24,7 @@ async def root():
     """Root endpoint."""
     from .. import __version__
 
-    return {"message": "herga API", "version": __version__}
+    return {"message": "kass API", "version": __version__}
 
 
 @router.post("/shutdown")
@@ -109,7 +109,7 @@ async def filesystem_health():
         writable = False
         error = None
         if exists:
-            probe = dir_path / ".herga_probe"
+            probe = dir_path / ".kass_probe"
             try:
                 probe.write_text("ok")
                 probe.unlink()

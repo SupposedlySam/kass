@@ -3,7 +3,7 @@
 In Captures, select Raw or Refined, then **Report incorrect output**. Edit the
 expected output and optionally describe the error. An empty expected output is
 valid for hallucinated speech or other output that should have been omitted.
-Reports are stored on the connected Herga server. This does not train a model
+Reports are stored on the connected Kass server. This does not train a model
 or transmit examples to an external service.
 
 Each report stores the capture ID, target stage, expected output, notes, timestamp,

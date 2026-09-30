@@ -1,16 +1,16 @@
 #!/bin/bash
-# Packs Herga.app into a DMG with the branded window: the background from
+# Packs Kass.app into a DMG with the branded window: the background from
 # tauri/assets/dmg, the app on the left and Applications on the right.
 #
 #   ./scripts/build-dmg.sh [app] [out.dmg]
 #
-# Defaults to the app `just build` makes and Herga.dmg.
+# Defaults to the app `just build` makes and Kass.dmg.
 # The layout lives in scripts/dmg-settings.py.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-app="${1:-tauri/src-tauri/target/release/bundle/macos/Herga.app}"
-out="${2:-Herga.dmg}"
+app="${1:-tauri/src-tauri/target/release/bundle/macos/Kass.app}"
+out="${2:-Kass.dmg}"
 [ -d "$app" ] || { echo "No app at $app. Build it first (just build)." >&2; exit 1; }
 
 # dmgbuild writes Finder's layout file directly, so it works on CI without
@@ -31,5 +31,5 @@ trap 'rm -rf "$venv"' EXIT
 
 "$venv/bin/dmgbuild" -s scripts/dmg-settings.py \
   -D app="$(cd "$(dirname "$app")" && pwd)/$(basename "$app")" -D root="$PWD" \
-  Herga "$out"
+  Kass "$out"
 echo "Wrote $out"

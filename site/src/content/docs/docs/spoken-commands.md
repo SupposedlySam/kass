@@ -3,7 +3,7 @@ title: Spoken commands
 description: Say line breaks, lists, punctuation, symbols and spelling, and paste your clipboard by voice.
 ---
 
-Some words in a dictation are instructions rather than text. Herga follows them and leaves them out of the result. When you're talking *about* one of these phrases, it stays as words: "we need a new line of products" isn't a line break.
+Some words in a dictation are instructions rather than text. Kass follows them and leaves them out of the result. When you're talking *about* one of these phrases, it stays as words: "we need a new line of products" isn't a line break.
 
 ## Line breaks
 
@@ -25,7 +25,7 @@ Changed your mind? End with **"remove the last item"** or **"remove that list"**
 
 ## Changing your mind
 
-You don't need to start over when you misspeak. Say the correction and Herga keeps only the final version:
+You don't need to start over when you misspeak. Say the correction and Kass keeps only the final version:
 
 - "no no", "no actually", "no wait", "wait no", "sorry, I mean"
 - "send it Tuesday, or was it Wednesday"
@@ -60,7 +60,7 @@ When the word is clearly used as a verb, it stays a word: "pipe it into the file
 
 ## Spelling things out
 
-To spell a username, a code or an unusual name, say the letters one at a time. Herga joins three or more spelled letters into one word.
+To spell a username, a code or an unusual name, say the letters one at a time. Kass joins three or more spelled letters into one word.
 
 - Say **"capital"** before a letter to capitalize it: "capital C" becomes `C`.
 - Numbers and symbols said in the same run join in too: underscore, dash, hyphen, period, dot, slash, at sign, dollar sign, percent sign, pound sign, hash, ampersand, asterisk, plus sign, question mark and exclamation point.
@@ -75,11 +75,11 @@ Say **"paste from clipboard"** anywhere in a dictation and whatever is on your c
 
 > "here's the link paste from clipboard let me know what you think"
 
-If you say only "paste from clipboard", Herga pastes the clipboard as it is, including images and rich text.
+If you say only "paste from clipboard", Kass pastes the clipboard as it is, including images and rich text.
 
 ## Switch writing style
 
-Start a dictation by naming a [writing style](/docs/writing-styles/) and Herga uses it for that dictation, whatever app you're in:
+Start a dictation by naming a [writing style](/docs/writing-styles/) and Kass uses it for that dictation, whatever app you're in:
 
 - "use formal mode", "use the casual style"
 - "switch to formal"

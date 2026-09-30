@@ -15,7 +15,7 @@ function newestFirst(a: PersonalExample, b: PersonalExample): number {
 
 /**
  * The latest examples that came from correcting a capture in one of a style's
- * apps, said → meant, each removable so Herga stops learning from it.
+ * apps, said → meant, each removable so Kass stops learning from it.
  */
 export function RecentCorrections({ style }: { style: WritingStyle }) {
   const { t } = useTranslation();

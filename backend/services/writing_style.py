@@ -1,7 +1,7 @@
 """The user's punctuation habits, learned from calibration and corrections.
 
 Teaching (docs/plans/TEACH_BY_REPLYING.md) keeps each dictated reply: what
-was said, Herga's cleanup and what the user sent. Comparing the cleanup
+was said, Kass's cleanup and what the user sent. Comparing the cleanup
 with what was sent, word by word, counts what the user does at each sentence
 break (keep the period, turn it into a comma, drop it), whether they lowercase
 sentence starts, drop commas after opening words or before conjunctions, and

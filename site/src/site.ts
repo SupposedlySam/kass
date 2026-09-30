@@ -1,5 +1,5 @@
-export const REPO = 'https://github.com/mrgnhnt96/herga';
-export const REPO_API = 'https://api.github.com/repos/mrgnhnt96/herga';
+export const REPO = 'https://github.com/mrgnhnt96/kass';
+export const REPO_API = 'https://api.github.com/repos/mrgnhnt96/kass';
 // The site's download page, which starts the newest release's DMG.
 export const DOWNLOAD = '/download/';
 export const RELEASES = `${REPO}/releases/latest`;

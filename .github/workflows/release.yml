@@ -96,14 +96,14 @@ jobs:
       # which installed copies download in the background.
       - name: Build, sign and notarize app
         env:
-          HERGA_SIGNING_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
+          KASS_SIGNING_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
           APPLE_API_KEY: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APPLE_API_ISSUER: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           ./scripts/build-local-app.sh
-          app=tauri/src-tauri/target/release/bundle/macos/Herga.app
+          app=tauri/src-tauri/target/release/bundle/macos/Kass.app
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
           test -f "$app.tar.gz" && test -f "$app.tar.gz.sig"
@@ -113,8 +113,8 @@ jobs:
       - name: Make DMG
         id: dmg
         run: |
-          name="Herga-${GITHUB_REF_NAME#v}-macos-arm64"
-          ./scripts/build-dmg.sh tauri/src-tauri/target/release/bundle/macos/Herga.app "$name.dmg"
+          name="Kass-${GITHUB_REF_NAME#v}-macos-arm64"
+          ./scripts/build-dmg.sh tauri/src-tauri/target/release/bundle/macos/Kass.app "$name.dmg"
           echo "file=$name.dmg" >> "$GITHUB_OUTPUT"
 
       # The DMG gets its own signature and notarization ticket, so the
@@ -148,7 +148,7 @@ jobs:
           }
           section "${GITHUB_REF_NAME#v}" > notes.md
           [ -s notes.md ] || section Unreleased > notes.md
-          [ -s notes.md ] || echo "See the [changelog](https://herga.mrgnhnt.com/changelog/)." > notes.md
+          [ -s notes.md ] || echo "See the [changelog](https://kass.mrgnhnt.com/changelog/)." > notes.md
 
       # What the background updater reads: the version, and where to get the
       # signed archive. The app checks releases/latest/download/latest.json.
@@ -156,13 +156,13 @@ jobs:
         id: updater
         run: |
           version="${GITHUB_REF_NAME#v}"
-          archive="Herga-$version-macos-arm64.app.tar.gz"
-          cp tauri/src-tauri/target/release/bundle/macos/Herga.app.tar.gz "$archive"
+          archive="Kass-$version-macos-arm64.app.tar.gz"
+          cp tauri/src-tauri/target/release/bundle/macos/Kass.app.tar.gz "$archive"
           python3 - "$version" "$archive" <<'PY'
           import json, sys, datetime
           version, archive = sys.argv[1], sys.argv[2]
-          signature = open('tauri/src-tauri/target/release/bundle/macos/Herga.app.tar.gz.sig').read().strip()
-          url = f'https://github.com/mrgnhnt96/herga/releases/download/v{version}/{archive}'
+          signature = open('tauri/src-tauri/target/release/bundle/macos/Kass.app.tar.gz.sig').read().strip()
+          url = f'https://github.com/mrgnhnt96/kass/releases/download/v{version}/{archive}'
           json.dump({
               'version': version,
               'notes': open('notes.md').read(),
@@ -183,7 +183,7 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.file }}" \
             "${{ steps.updater.outputs.archive }}" latest.json \
-            --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md "${flags[@]}"
+            --title "Kass ${GITHUB_REF_NAME#v}" --notes-file notes.md "${flags[@]}"
 
       # What the beta channel reads: releases/download/channels/beta.json
       # names the newest release, beta or not. A stable hotfix older than
@@ -195,7 +195,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           if ! gh release view channels >/dev/null 2>&1; then
             gh release create channels --prerelease --latest=false --title "Update channels" \
-              --notes "Where Herga's beta channel looks for updates. Not a release to download."
+              --notes "Where Kass's beta channel looks for updates. Not a release to download."
           fi
           current=$(gh release download channels --pattern beta.json --output - 2>/dev/null \
             | python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' || true)

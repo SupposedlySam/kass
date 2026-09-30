@@ -1,5 +1,5 @@
 [project]
-name = "herga-backend"
+name = "kass-backend"
 version = "0.6.2"
 requires-python = ">=3.12"
 
@@ -14,7 +14,7 @@ src = ["."]
 
 # Files/dirs to skip entirely.
 extend-exclude = [
-    "herga-server.spec",
+    "kass-server.spec",
     "build_binary.py",
 ]
 

@@ -4,7 +4,7 @@ import { restartProgress } from './onboardingFlow';
 /**
  * Open the onboarding window. Opened by the user (`/setup`, the ⌘K palette,
  * Settings › Features) it starts from the beginning; `resume` picks up the
- * step it was on, for the launch after a permission made Herga quit.
+ * step it was on, for the launch after a permission made Kass quit.
  */
 export function openOnboarding({ resume = false }: { resume?: boolean } = {}) {
   if (!resume) restartProgress();

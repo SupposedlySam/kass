@@ -1,6 +1,6 @@
 ---
 title: Captures and corrections
-description: Review past dictations, fix mistakes so Herga learns, see your stats and choose how long to keep history.
+description: Review past dictations, fix mistakes so Kass learns, see your stats and choose how long to keep history.
 ---
 
 ## Captures
@@ -20,9 +20,9 @@ From a capture you can:
 - **Copy** the text, if it didn't land where you wanted
 - **Delete** it
 
-## Fix it, and Herga learns
+## Fix it, and Kass learns
 
-When the cleaned-up text isn't what you meant, edit it right in the capture. This is the most useful thing you can do to improve Herga:
+When the cleaned-up text isn't what you meant, edit it right in the capture. This is the most useful thing you can do to improve Kass:
 
 - The fix is used as an example for your next dictation right away.
 - Fixes teach the [writing style](/docs/writing-styles/) of the app you dictated into.
@@ -34,7 +34,7 @@ You can export all your corrections as JSON.
 
 ### Personal speech model
 
-After enough corrected recordings (12 for training plus a handful set aside for testing), Herga can fine-tune the speech model to your voice while your Mac is idle. The new model is only used if it tests better, and **Undo model update** puts the old one back.
+After enough corrected recordings (12 for training plus a handful set aside for testing), Kass can fine-tune the speech model to your voice while your Mac is idle. The new model is only used if it tests better, and **Undo model update** puts the old one back.
 
 ## Insights
 
@@ -44,4 +44,4 @@ The **Insights** tab shows how much you dictate: words, your speaking pace, time
 
 Choose how long captures are kept in **Settings › General › Keep history**: 7 days, 30 days (the default), 90 days, 1 year or Forever.
 
-Nothing is deleted until you confirm. The first time history would delete old captures, Herga asks you first. Your corrections, dictionary, learned names and stats are kept even after the captures they came from are deleted.
+Nothing is deleted until you confirm. The first time history would delete old captures, Kass asks you first. Your corrections, dictionary, learned names and stats are kept even after the captures they came from are deleted.

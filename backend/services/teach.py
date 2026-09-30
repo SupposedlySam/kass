@@ -1,12 +1,12 @@
-"""Teach Herga how you write by replying to conversations (docs/plans/TEACH_BY_REPLYING.md).
+"""Teach Kass how you write by replying to conversations (docs/plans/TEACH_BY_REPLYING.md).
 
 A session teaches one writing style. It holds conversations of different
 kinds (a coding agent, team chat, an email...). Each opens with a
 hand-written message; after every reply the cleanup model writes the other
 side's next message and the facts for the user's next reply.
 
-The user dictates replies in Herga's own window, which is cleaned up in
-the style being taught while a session is open (``styles.teach_in_herga``).
+The user dictates replies in Kass's own window, which is cleaned up in
+the style being taught while a session is open (``styles.teach_in_kass``).
 A reply is linked to the captures made there since its turn was shown: their
 raw transcripts are what was said, their cleanups what was shown. Finishing
 saves the dictated replies to the style's profile the way calibration saved
@@ -413,12 +413,12 @@ def style_apps(db, style_id: str) -> list[tuple[str, str | None]]:
     from sqlalchemy import func
 
     from ..database.models import Capture
-    from .styles import HERGA_BUNDLE, snapshot
+    from .styles import KASS_BUNDLE, snapshot
 
     styles = snapshot()
     rows = (
         db.query(Capture.app_bundle_id, func.max(Capture.app_category))
-        .filter(Capture.app_bundle_id.isnot(None), Capture.app_bundle_id != HERGA_BUNDLE)
+        .filter(Capture.app_bundle_id.isnot(None), Capture.app_bundle_id != KASS_BUNDLE)
         .group_by(Capture.app_bundle_id)
         .all()
     )
@@ -486,11 +486,11 @@ def _expire() -> None:
 
 
 def _refresh_teaching() -> None:
-    """Dictation in Herga's window follows the newest open session's style."""
-    from .styles import teach_in_herga
+    """Dictation in Kass's window follows the newest open session's style."""
+    from .styles import teach_in_kass
 
     newest = max(_sessions.values(), key=lambda s: s.touched, default=None)
-    teach_in_herga(newest.style if newest else None, SESSION_TTL_SECONDS)
+    teach_in_kass(newest.style if newest else None, SESSION_TTL_SECONDS)
 
 
 def get(session_id: str) -> Session:
@@ -619,13 +619,13 @@ class Dictated:
 
 
 def dictated(db, since: datetime, used: set[str] = frozenset()) -> Dictated | None:
-    """What was said and shown in Herga's window since ``since``, joined in
+    """What was said and shown in Kass's window since ``since``, joined in
     order, leaving out captures already part of a reply."""
     from sqlalchemy import or_
 
     from ..database.models import Capture
     from .refinement import strip_stt_artifacts
-    from .styles import HERGA_BUNDLE
+    from .styles import KASS_BUNDLE
 
     rows = (
         db.query(Capture.id, Capture.transcript_raw, Capture.transcript_refined)
@@ -633,7 +633,7 @@ def dictated(db, since: datetime, used: set[str] = frozenset()) -> Dictated | No
             Capture.created_at >= since,
             Capture.source != "command",
             Capture.transcript_raw != "",
-            or_(Capture.app_bundle_id == HERGA_BUNDLE, Capture.app_bundle_id.is_(None)),
+            or_(Capture.app_bundle_id == KASS_BUNDLE, Capture.app_bundle_id.is_(None)),
         )
         .order_by(Capture.created_at)
         .all()
@@ -749,7 +749,7 @@ def _system(conversation: Conversation, trick: str, terms: list[str]) -> str:
         f"The user is practicing {kind.medium}.",
         f"Write {conversation.persona}'s next message: answer what the user just wrote, then keep the "
         "conversation going with a question or request the user needs to answer. Stay in character. "
-        "Never mention practice, Herga or AI. Match how people really write "
+        "Never mention practice, Kass or AI. Match how people really write "
         f"{kind.medium}: keep it short. Never repeat an earlier message: if the user left something "
         "unanswered, ask about just that part in new words.",
     ]

@@ -154,7 +154,7 @@ def patch_transformers_mistral_regex():
     variant. That call raises on ``HF_HUB_OFFLINE=1`` and on plain network
     failures, killing unrelated loads (Whisper, the Qwen LLM, etc.).
 
-    Herga never loads Mistral models, so the rewrite the function would
+    Kass never loads Mistral models, so the rewrite the function would
     apply is a no-op for us anyway. Wrap the method so any exception from the
     metadata lookup returns the tokenizer unchanged — matching the success-path
     behavior for non-Mistral repos (transformers 4.57.3,
@@ -236,6 +236,6 @@ def patch_huggingface_hub_offline():
         logger.exception("failed to patch huggingface_hub for offline mode")
 
 
-if os.environ.get("HERGA_OFFLINE_PATCH", "1") != "0":
+if os.environ.get("KASS_OFFLINE_PATCH", "1") != "0":
     patch_huggingface_hub_offline()
     patch_transformers_mistral_regex()

@@ -26,7 +26,7 @@ pub fn encode_frame(sequence: u32, sample_offset: u32, pcm: &[i16]) -> Vec<u8> {
 
 /// The JSON start object sent right after the socket opens. `provisional`
 /// asks for provisional cleaned text after release; `start_cue_ms`, when not
-/// zero, says the take's first milliseconds may hold Herga's own start
+/// zero, says the take's first milliseconds may hold Kass's own start
 /// cue, so a voice detected there alone doesn't make the take speech. Older
 /// servers ignore both. A `command` take's words are an instruction for
 /// selected text (docs/plans/COMMAND_MODE.md).

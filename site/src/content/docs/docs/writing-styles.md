@@ -1,13 +1,13 @@
 ---
 title: Writing styles
-description: Give each app its own style, teach Herga how you write, and switch styles by voice.
+description: Give each app its own style, teach Kass how you write, and switch styles by voice.
 ---
 
 You don't write a text to a friend the way you write a work email. Writing styles let each app sound right. Every style learns on its own from the corrections you make in the apps assigned to it.
 
 ## Styles and apps
 
-Herga starts with one style, **Personal**, which every app uses. You can have up to six styles. Each keeps its own cache in the cleanup model, which is why the number is limited.
+Kass starts with one style, **Personal**, which every app uses. You can have up to six styles. Each keeps its own cache in the cleanup model, which is why the number is limited.
 
 Open **Settings › Writing style** to manage them:
 
@@ -15,21 +15,21 @@ Open **Settings › Writing style** to manage them:
 - **Assign apps** by dragging them onto a style or picking one from the list. Apps you haven't dictated into before show up as **New**, with a suggested style based on similar apps.
 - **Set a default** for new apps.
 
-When you move an app to another style, Herga asks whether the app's past corrections should move with it.
+When you move an app to another style, Kass asks whether the app's past corrections should move with it.
 
 ## What a style controls
 
 | Setting | What it does |
 | --- | --- |
-| **Punctuation** | **Casual** puts commas where you pause, like speech. **Standard** writes regular prose and is the default. **Match my writing** copies your own punctuation habits, once you've taught Herga. |
+| **Punctuation** | **Casual** puts commas where you pause, like speech. **Standard** writes regular prose and is the default. **Match my writing** copies your own punctuation habits, once you've taught Kass. |
 | **Keep technical terms exact** | Leaves code names, commands and identifiers exactly as you said them. |
 | **How you write here** | A short description in your own words, up to 600 characters, like "short and lowercase, no sign-off". You can dictate it. |
 
 ## Teach it how you write
 
-The fastest way to teach a style is **Teach by replying**, a short chat that takes about three minutes. Herga shows you messages from different kinds of conversations, such as a teammate asking for feedback, an email or a code review comment, and you reply the way you normally would, by voice or by typing.
+The fastest way to teach a style is **Teach by replying**, a short chat that takes about three minutes. Kass shows you messages from different kinds of conversations, such as a teammate asking for feedback, an email or a code review comment, and you reply the way you normally would, by voice or by typing.
 
-Your replies become examples for that style. At the end you see a summary of the habits Herga picked up, and you can choose **Also match my punctuation** to turn on Match my writing.
+Your replies become examples for that style. At the end you see a summary of the habits Kass picked up, and you can choose **Also match my punctuation** to turn on Match my writing.
 
 Start it from the style's page, or from the command palette with <kbd>⌘</kbd> <kbd>K</kbd> › **Run style calibration…**.
 

@@ -1,5 +1,5 @@
-//! `herga://` links: open a screen in the main window from outside the
-//! app, e.g. `herga://captures?capture=<id>` from a review doc.
+//! `kass://` links: open a screen in the main window from outside the
+//! app, e.g. `kass://captures?capture=<id>` from a review doc.
 //!
 //! macOS delivers the link as `RunEvent::Opened` (the scheme is registered by
 //! `CFBundleURLTypes` in Info.plist, so only an installed build receives
@@ -11,7 +11,8 @@ use std::sync::Mutex;
 
 use tauri::{command, AppHandle, Emitter, Manager, State};
 
-pub const SCHEME: &str = "herga";
+/// `herga` is Kass's old name; links made before the rename still open.
+const SCHEMES: [&str; 2] = ["kass", "herga"];
 const EVENT: &str = "deep-link";
 const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -20,10 +21,12 @@ pub struct DeepLinkState {
     pending: Mutex<Option<String>>,
 }
 
-/// The in-app route for a `herga://` link: `herga://captures?capture=x`
+/// The in-app route for a `kass://` link: `kass://captures?capture=x`
 /// is `/captures?capture=x`. None for other schemes.
 pub fn route(url: &str) -> Option<String> {
-    let rest = url.strip_prefix(SCHEME)?.strip_prefix("://")?;
+    let rest = SCHEMES
+        .iter()
+        .find_map(|scheme| url.strip_prefix(scheme)?.strip_prefix("://"))?;
     Some(format!("/{}", rest.trim_start_matches('/')))
 }
 
@@ -54,12 +57,13 @@ mod tests {
     #[test]
     fn maps_a_link_to_its_route() {
         assert_eq!(
-            route("herga://captures?capture=abc").as_deref(),
+            route("kass://captures?capture=abc").as_deref(),
             Some("/captures?capture=abc")
         );
-        assert_eq!(route("herga:///settings/dictation").as_deref(), Some("/settings/dictation"));
-        assert_eq!(route("herga://").as_deref(), Some("/"));
+        assert_eq!(route("kass:///settings/dictation").as_deref(), Some("/settings/dictation"));
+        assert_eq!(route("kass://").as_deref(), Some("/"));
         assert_eq!(route("https://example.com"), None);
-        assert_eq!(route("hergax://captures"), None);
+        assert_eq!(route("kassx://captures"), None);
+        assert_eq!(route("herga://captures?capture=abc").as_deref(), Some("/captures?capture=abc"));
     }
 }

@@ -1,9 +1,9 @@
 ---
 title: Local API
-description: Use Herga's local server from your own scripts.
+description: Use Kass's local server from your own scripts.
 ---
 
-While Herga is running, its server listens on `http://127.0.0.1:17493`. It only accepts connections from your own Mac. Interactive API docs for every endpoint are at [`http://127.0.0.1:17493/docs`](http://127.0.0.1:17493/docs) while it's running.
+While Kass is running, its server listens on `http://127.0.0.1:17493`. It only accepts connections from your own Mac. Interactive API docs for every endpoint are at [`http://127.0.0.1:17493/docs`](http://127.0.0.1:17493/docs) while it's running.
 
 ## Examples
 

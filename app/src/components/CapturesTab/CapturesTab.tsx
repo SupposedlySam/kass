@@ -14,7 +14,7 @@ import { CaptureDetailHeader } from './CaptureDetailHeader';
 import { CaptureList } from './CaptureList';
 import { CaptureWeekCard } from './CaptureWeekCard';
 import { ALL_APPS, capturesKey, matchesAppFilter } from './captureApps';
-import { isInOverlay, isTypingTarget, matchesSearch, wentIntoHerga } from './captureFormat';
+import { isInOverlay, isTypingTarget, matchesSearch, wentIntoKass } from './captureFormat';
 import { EmptyDetail } from './EmptyDetail';
 import { useAppFilter } from './useAppFilter';
 import { useAppStyles } from './useAppStyles';
@@ -69,7 +69,7 @@ export function CapturesTab() {
     }
   }, [captures, selectedId]);
 
-  // `?capture=<id>` (from the command palette or a herga:// link) selects
+  // `?capture=<id>` (from the command palette or a kass:// link) selects
   // that capture once it is in the list, clears whatever would hide it, then
   // drops the parameter so the same link works again. A capture older than
   // the loaded page is fetched and added to the end of the list.
@@ -123,7 +123,7 @@ export function CapturesTab() {
   //
   // A capture dictated into a field on this screen (e.g. a correction on the
   // selected capture) leaves the selection put. It is recorded with
-  // Herga as its app; the focus check covers captures without one. A
+  // Kass as its app; the focus check covers captures without one. A
   // capture for another app than the one shown isn't selected either: it
   // isn't in the list.
   const appFilterRef = useRef(appFilter);
@@ -146,7 +146,7 @@ export function CapturesTab() {
             queryClient.setQueryData<CaptureListResponse>(capturesKey(filter), seed);
           }
           const typingHere = document.hasFocus() && isTypingTarget(document.activeElement);
-          if (shown && !wentIntoHerga(capture) && !typingHere) {
+          if (shown && !wentIntoKass(capture) && !typingHere) {
             setSelectedId(capture.id);
           }
         }

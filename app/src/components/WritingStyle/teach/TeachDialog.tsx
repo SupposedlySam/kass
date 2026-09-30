@@ -20,7 +20,7 @@ import { TeachSummary } from './TeachSummary';
 const T = 'writingStyle.teach';
 
 /**
- * Teach Herga how you write by replying to conversations
+ * Teach Kass how you write by replying to conversations
  * (docs/plans/TEACH_BY_REPLYING.md). It teaches `style`, or the default.
  * Closing with replies saves them, the same as Finish.
  */

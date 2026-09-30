@@ -93,7 +93,7 @@ def test_standard_habits_leave_text_alone():
     assert writing_style.apply_style("It works. Ship it.", habits) == "It works. Ship it."
 
 
-# Stand-ins for Herga's cleanup of dictated replies, written the way
+# Stand-ins for Kass's cleanup of dictated replies, written the way
 # Standard punctuates so what the user sent carries punctuation habits.
 CLEANED = [
     "Yeah, that works. I can get there at seven, but traffic is bad. Do you want food?",

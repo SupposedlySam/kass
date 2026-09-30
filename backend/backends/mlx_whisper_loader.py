@@ -13,7 +13,7 @@ imported about a hundred of them that recognition never touches:
   ``mlx_audio.stt.models`` package imports all eleven up front (one of them
   pulls in mlx-lm and transformers' generation code).
 - ``numba``, ``llvmlite`` and ``scipy.signal``, imported by mlx-audio's
-  word-timestamp module when Whisper is imported. Herga never asks for
+  word-timestamp module when Whisper is imported. Kass never asks for
   word timestamps.
 - transformers' ``WhisperProcessor``, whose base class imports the
   transformers model code and through it ``scipy.optimize``. mlx-audio only

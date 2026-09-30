@@ -1,6 +1,6 @@
-"""Column-level migrations for the herga SQLite database.
+"""Column-level migrations for the kass SQLite database.
 
-Why not Alembic?  herga is a single-user desktop app shipping as a
+Why not Alembic?  kass is a single-user desktop app shipping as a
 PyInstaller binary.  Every user has exactly one SQLite file.  Alembic's
 strengths -- migration tracking across environments, rollback, team
 coordination -- don't apply here and would add bundling complexity
@@ -110,11 +110,11 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "dictionary_entries", "group_id VARCHAR", "group_id")
 
 
-# Herga was Voicebox, with bundle id sh.voicebox.app and then, briefly,
-# com.mrgnhnt.voicebox. Data recorded against its own window keeps meaning
-# Herga under the new one.
-_OLD_BUNDLES = ("sh.voicebox.app", "com.mrgnhnt.voicebox")
-_BUNDLE = "com.mrgnhnt.herga"
+# Kass was Herga (com.mrgnhnt.herga), and before that Voicebox, with bundle
+# id sh.voicebox.app and then, briefly, com.mrgnhnt.voicebox. Data recorded
+# against its own window keeps meaning Kass under the new one.
+_OLD_BUNDLES = ("sh.voicebox.app", "com.mrgnhnt.voicebox", "com.mrgnhnt.herga")
+_BUNDLE = "com.mrgnhnt.kass"
 
 
 def _rename_own_bundle_id(engine, inspector, tables: set[str]) -> None:

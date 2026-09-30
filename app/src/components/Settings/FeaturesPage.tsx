@@ -19,7 +19,7 @@ const FEATURES = [
 ] as const;
 
 /**
- * Everything Herga does beyond hold-and-talk, each with a way to try it.
+ * Everything Kass does beyond hold-and-talk, each with a way to try it.
  * Onboarding's "Show me now" opens this page.
  */
 export function FeaturesPage() {

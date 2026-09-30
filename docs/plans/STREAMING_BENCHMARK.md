@@ -9,16 +9,16 @@ Use a backend Python environment with the project's inference dependencies insta
 Create a nonsensitive fixture with macOS's installed Samantha voice:
 
 ```sh
-mkdir -p /tmp/herga-stream-benchmark
-cat > /tmp/herga-stream-benchmark/reference.txt <<'TEXT'
+mkdir -p /tmp/kass-stream-benchmark
+cat > /tmp/kass-stream-benchmark/reference.txt <<'TEXT'
 Please move the planning meeting to Thursday afternoon. We need to review the project timeline and confirm the next release date. Add a reminder to check the documentation before sending the update to the team.
 TEXT
-say -v Samantha -r 165 -f /tmp/herga-stream-benchmark/reference.txt -o /tmp/herga-stream-benchmark/fixture.aiff
-afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/herga-stream-benchmark/fixture.aiff /tmp/herga-stream-benchmark/fixture.wav
+say -v Samantha -r 165 -f /tmp/kass-stream-benchmark/reference.txt -o /tmp/kass-stream-benchmark/fixture.aiff
+afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/kass-stream-benchmark/fixture.aiff /tmp/kass-stream-benchmark/fixture.wav
 backend/venv/bin/python scripts/benchmark-streaming-dictation.py \
-  /tmp/herga-stream-benchmark/fixture.wav \
-  /tmp/herga-stream-benchmark/reference.txt \
-  --runs 3 --output /tmp/herga-stream-benchmark/results.json
+  /tmp/kass-stream-benchmark/fixture.wav \
+  /tmp/kass-stream-benchmark/reference.txt \
+  --runs 3 --output /tmp/kass-stream-benchmark/results.json
 ```
 
 For a pause-rich fixture, synthesize each sentence separately, concatenate the PCM with one second of digital silence between sentences, and pass that WAV with the same complete reference. For forced-window coverage, use continuous speech lasting more than 20 seconds.
@@ -52,14 +52,14 @@ The continuous and paused long recordings use this exact text:
 
 > Please move the planning meeting to Thursday afternoon. We need to review the project timeline and confirm the next release date. Add a reminder to check the documentation before sending the update to the team. The new version should include a clear explanation of the recording settings and microphone selection. During the review, compare the original transcript with the final output and make sure that every sentence is preserved. We should also test a longer recording with several pauses and verify that the final words arrive promptly. After the meeting, send a short summary of the decisions and assign each remaining task to the person responsible for completing it.
 
-Save it as `/tmp/herga-stream-benchmark/long-reference.txt`. Use the same `say` and `afconvert` commands above for continuous speech. To reproduce the paused fixture exactly:
+Save it as `/tmp/kass-stream-benchmark/long-reference.txt`. Use the same `say` and `afconvert` commands above for continuous speech. To reproduce the paused fixture exactly:
 
 ```python
 from pathlib import Path
 import subprocess
 import wave
 
-root = Path('/tmp/herga-stream-benchmark')
+root = Path('/tmp/kass-stream-benchmark')
 parts = root.joinpath('long-reference.txt').read_text().strip().split('. ')
 frames = []
 for index, phrase in enumerate(parts):

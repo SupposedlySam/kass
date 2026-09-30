@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePlatform } from '@/platform/PlatformContext';
 
-/** How often to ask again while a permission Herga once held reads as missing. */
+/** How often to ask again while a permission Kass once held reads as missing. */
 const WATCH_INTERVAL_MS = 2_000;
 /** How long to keep asking before leaving it to window focus. */
 const WATCH_LIMIT_MS = 2 * 60_000;
@@ -12,7 +12,7 @@ const WATCH_LIMIT_MS = 2 * 60_000;
  * mount and on window focus (the user flipping the toggle in System Settings
  * and alt-tabbing back).
  *
- * Right after a reinstall macOS can report a permission Herga already held as
+ * Right after a reinstall macOS can report a permission Kass already held as
  * missing, and the window may stay hidden, so no focus arrives to check again.
  * When the permission was granted on an earlier launch, it's asked again every
  * few seconds for a couple of minutes so the global keys come back without

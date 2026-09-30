@@ -1,7 +1,8 @@
 //! Carries an install over from an earlier bundle identifier.
 //!
-//! Herga was Voicebox, first `sh.voicebox.app` and then, briefly,
-//! `com.mrgnhnt.voicebox`; it is now `com.mrgnhnt.herga`. macOS and Tauri
+//! Kass was Herga (`com.mrgnhnt.herga`), and before that Voicebox, first
+//! `sh.voicebox.app` and then, briefly, `com.mrgnhnt.voicebox`; it is now
+//! `com.mrgnhnt.kass`. macOS and Tauri
 //! name the app's folders after the identifier, so the first launch under
 //! the new one moves them: the data folder (database, captures, settings)
 //! and WebKit's folder (the webview's local storage). It runs before any
@@ -14,7 +15,7 @@
 use std::path::Path;
 
 /// Earlier identifiers, newest first.
-const OLD_IDENTIFIERS: [&str; 2] = ["com.mrgnhnt.voicebox", "sh.voicebox.app"];
+const OLD_IDENTIFIERS: [&str; 3] = ["com.mrgnhnt.herga", "com.mrgnhnt.voicebox", "sh.voicebox.app"];
 
 /// Files only this app writes to its data folder, never upstream Voicebox.
 const OWN_FILES: [&str; 4] = [
@@ -79,7 +80,7 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("herga-move-{}-{}", name, std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kass-move-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -89,10 +90,10 @@ mod tests {
     fn moves_the_old_folder_once_and_never_over_a_new_one() {
         let parent = scratch("once");
         std::fs::create_dir_all(parent.join("sh.voicebox.app")).unwrap();
-        std::fs::write(parent.join("sh.voicebox.app/herga.db"), "data").unwrap();
+        std::fs::write(parent.join("sh.voicebox.app/kass.db"), "data").unwrap();
 
         assert!(move_folder(&parent, "sh.voicebox.app", "com.example.new"));
-        assert_eq!(std::fs::read_to_string(parent.join("com.example.new/herga.db")).unwrap(), "data");
+        assert_eq!(std::fs::read_to_string(parent.join("com.example.new/kass.db")).unwrap(), "data");
         assert!(!parent.join("sh.voicebox.app").exists());
 
         std::fs::create_dir_all(parent.join("sh.voicebox.app")).unwrap();
@@ -106,10 +107,10 @@ mod tests {
     fn leaves_upstream_voicebox_data_alone() {
         let support = scratch("upstream");
         std::fs::create_dir_all(support.join("sh.voicebox.app/profiles")).unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.herga"), None);
+        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), None);
 
         std::fs::write(support.join("sh.voicebox.app/writing-style.json"), "{}").unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.herga"), Some("sh.voicebox.app"));
+        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("sh.voicebox.app"));
         std::fs::remove_dir_all(&support).unwrap();
     }
 
@@ -119,10 +120,13 @@ mod tests {
         std::fs::create_dir_all(support.join("com.mrgnhnt.voicebox")).unwrap();
         std::fs::create_dir_all(support.join("sh.voicebox.app")).unwrap();
         std::fs::write(support.join("sh.voicebox.app/writing-style.json"), "{}").unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.herga"), Some("com.mrgnhnt.voicebox"));
+        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("com.mrgnhnt.voicebox"));
 
         std::fs::create_dir_all(support.join("com.mrgnhnt.herga")).unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.herga"), None);
+        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("com.mrgnhnt.herga"));
+
+        std::fs::create_dir_all(support.join("com.mrgnhnt.kass")).unwrap();
+        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), None);
         std::fs::remove_dir_all(&support).unwrap();
     }
 }

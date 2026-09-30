@@ -7,10 +7,10 @@ Open Settings from the sidebar, or search for any setting from the command palet
 
 ## General
 
-- **Version**: the Herga version you have, with a button to get the new one when an update is out
+- **Version**: the Kass version you have, with a button to get the new one when an update is out
 - **Server status**, with **Restart** if something seems stuck
 - **Theme**
-- **Launch at login.** Herga starts hidden in the background. This only works for the copy in Applications.
+- **Launch at login.** Kass starts hidden in the background. This only works for the copy in Applications.
 - **Keep history**: how long [captures](/docs/captures/#keep-history) are kept
 - **Captures folder**: opens the folder where your data lives
 

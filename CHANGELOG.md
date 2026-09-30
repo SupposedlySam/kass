@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
+Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
 ## Unreleased
 
@@ -8,10 +8,14 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 
 - **Try new features early with beta updates.** Turn on **Beta updates** in Settings › General to get new features before they're public. Turn it off to go back to public releases; you stay on your beta until the next public one is newer.
 
+### Changed
+
+- **Herga is now Kass.** Your captures, dictionary, writing styles and settings come along on their own. Because macOS treats a renamed app as a new one, Kass asks again for Microphone, Accessibility and Input Monitoring the first time it opens. The website moved to [kass.mrgnhnt.com](https://kass.mrgnhnt.com).
+
 ### Fixed
 
-- **⌘H keeps Herga out of the way.** Dictating after hiding Herga with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Herga in the Dock or ⌘Tab to it.
-- **The global keys work right after reinstalling Herga.** They used to wait until you brought Herga's window to the front. Now Herga notices on its own when macOS confirms the permissions you'd already given it.
+- **⌘H keeps Kass out of the way.** Dictating after hiding Kass with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Kass in the Dock or ⌘Tab to it.
+- **The global keys work right after reinstalling Kass.** They used to wait until you brought Kass's window to the front. Now Kass notices on its own when macOS confirms the permissions you'd already given it.
 
 ## 0.6.2 — September 30, 2026
 

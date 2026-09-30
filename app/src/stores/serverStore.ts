@@ -16,7 +16,7 @@ export const useServerStore = create<ServerStore>()(
       setCustomModelsDir: (dir) => set({ customModelsDir: dir }),
     }),
     {
-      name: 'herga-server',
+      name: 'kass-server',
       partialize: (state) => ({ customModelsDir: state.customModelsDir }),
     },
   ),

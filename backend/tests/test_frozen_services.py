@@ -7,9 +7,9 @@ import pytest
 
 
 def test_frozen_server_contains_service_modules():
-    binary = os.environ.get("HERGA_TEST_BINARY")
+    binary = os.environ.get("KASS_TEST_BINARY")
     if not binary:
-        pytest.skip("Set HERGA_TEST_BINARY to a built herga-server")
+        pytest.skip("Set KASS_TEST_BINARY to a built kass-server")
 
     from PyInstaller.archive.readers import CArchiveReader
 

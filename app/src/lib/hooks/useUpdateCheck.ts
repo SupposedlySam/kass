@@ -6,7 +6,7 @@ import { usePlatform } from '@/platform/PlatformContext';
 import { version as builtVersion } from '../../../package.json';
 
 /**
- * Herga downloads a newer release in the background (tauri
+ * Kass downloads a newer release in the background (tauri
  * src-tauri/src/updater.rs); it installs on restart or the next quit.
  */
 export type UpdateStatus =
@@ -16,7 +16,7 @@ export type UpdateStatus =
 
 /**
  * The running version, where the background update is, and a restart into
- * it once it's ready. `restarting` is set from the click until Herga quits
+ * it once it's ready. `restarting` is set from the click until Kass quits
  * (stopping the server takes a moment).
  */
 export function useUpdateCheck(): {

@@ -48,7 +48,7 @@ The timing line gains `after_release_tail_words`. `after_release_*` now counts o
 
 **Runs**
 - Three runs, variants interleaved per take with alternating order.
-- Model training was not running (checked per take); the running Herga app was idle.
+- Model training was not running (checked per take); the running Kass app was idle.
 - Run 1: A, B, C. Run 2: A, A+, B+, C, D. Run 3: A, B+.
 
 ### Latency (release to final text; the part the user waits for)

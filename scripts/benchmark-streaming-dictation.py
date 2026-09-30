@@ -64,7 +64,7 @@ async def benchmark(args):
     reference = args.reference.read_text().strip()
     duration = len(pcm) / (rate * 2)
     rows = []
-    with tempfile.TemporaryDirectory(prefix="herga-benchmark-") as directory:
+    with tempfile.TemporaryDirectory(prefix="kass-benchmark-") as directory:
         config.set_data_dir(directory)
         for index in range(args.runs):
             stt = get_whisper_model()

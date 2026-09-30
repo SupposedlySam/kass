@@ -2,7 +2,7 @@
 Tests for CORS origin restrictions.
 
 Validates that the CORS middleware only allows known local origins
-and respects the HERGA_CORS_ORIGINS environment variable.
+and respects the KASS_CORS_ORIGINS environment variable.
 
 Uses a minimal FastAPI app that mirrors the exact CORS configuration
 from backend/main.py, so tests run without heavy ML dependencies.
@@ -121,7 +121,7 @@ class TestCORSDefaultOrigins:
 
 
 class TestCORSCustomOrigins:
-    """HERGA_CORS_ORIGINS env var should extend the allowlist."""
+    """KASS_CORS_ORIGINS env var should extend the allowlist."""
 
     def test_custom_origin_allowed(self, client_with_custom_origins):
         headers = _get_with_origin(client_with_custom_origins, "https://custom.example.com")
@@ -141,7 +141,7 @@ class TestCORSCustomOrigins:
 
 
 class TestCORSEnvVarParsing:
-    """Edge cases for HERGA_CORS_ORIGINS parsing."""
+    """Edge cases for KASS_CORS_ORIGINS parsing."""
 
     def test_empty_env_var(self):
         app = _build_app("")

@@ -4,13 +4,13 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>herga</title>
+    <title>kass</title>
     <script>
       (function () {
         try {
           var theme = 'system';
-          // Before the storage keys move (carryOverStorage.ts), the theme is under Voicebox's name.
-          var raw = localStorage.getItem('herga-ui') || localStorage.getItem('voicebox-ui');
+          // Before the storage keys move (carryOverStorage.ts), the theme is under an old name.
+          var raw = localStorage.getItem('kass-ui') || localStorage.getItem('herga-ui') || localStorage.getItem('voicebox-ui');
           if (raw) {
             var parsed = JSON.parse(raw);
             if (parsed && parsed.state && parsed.state.theme) theme = parsed.state.theme;

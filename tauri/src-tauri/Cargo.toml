@@ -1,5 +1,5 @@
 [package]
-name = "herga"
+name = "kass"
 version = "0.6.2"
 description = "Local dictation for macOS"
 authors = ["you"]

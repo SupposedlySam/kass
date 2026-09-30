@@ -2,7 +2,7 @@
 
 ## Problem
 
-"Teach Herga how you write" showed five spoken paragraphs already cleaned up by Herga and asked the user to fix them. About 80% of each paragraph was given, so the edits showed little of how the user actually writes. The redesign (canvas "Teach by Replying", merged board) has the user reply to messages instead: every word of a reply is theirs.
+"Teach Kass how you write" showed five spoken paragraphs already cleaned up by Kass and asked the user to fix them. About 80% of each paragraph was given, so the edits showed little of how the user actually writes. The redesign (canvas "Teach by Replying", merged board) has the user reply to messages instead: every word of a reply is theirs.
 
 ## The flow
 
@@ -27,9 +27,9 @@ Turns rotate through tricks, so a run covers more than tone:
 
 ## Where a reply comes from
 
-Dictating into Herga's own window already works: a shortcut take types into the focused field, and a take from the Dictate button lands in Captures. While a teach session is open, dictation in Herga's own window is cleaned up in the style being taught (`styles.teaching`), so the shown cleanup is the one the user corrects.
+Dictating into Kass's own window already works: a shortcut take types into the focused field, and a take from the Dictate button lands in Captures. While a teach session is open, dictation in Kass's own window is cleaned up in the style being taught (`styles.teaching`), so the shown cleanup is the one the user corrects.
 
-When the user sends a reply, the server takes the captures made in Herga's window since that turn was shown: their raw transcripts are what was said and their cleanups what was shown. For a Dictate-button take the dialog asks for the same captures' cleanup and puts it in the box. A typed reply has no captures; it still gets chips, but teaches no cleanup.
+When the user sends a reply, the server takes the captures made in Kass's window since that turn was shown: their raw transcripts are what was said and their cleanups what was shown. For a Dictate-button take the dialog asks for the same captures' cleanup and puts it in the box. A typed reply has no captures; it still gets chips, but teaches no cleanup.
 
 ## What is learned
 
@@ -54,6 +54,6 @@ Habits per kind ("in Slack you never greet") are counted for the chips only. Put
 
 ## Tests
 
-- `test_teach.py`: kinds for a style's apps; parsing `MESSAGE`/`TELL` and the fallback; replies linked to Herga-window captures since the turn; typed replies; reply chips; finish saving examples that `calibration_examples` and habits read; the teaching style override and its expiry.
+- `test_teach.py`: kinds for a style's apps; parsing `MESSAGE`/`TELL` and the fallback; replies linked to Kass-window captures since the turn; typed replies; reply chips; finish saving examples that `calibration_examples` and habits read; the teaching style override and its expiry.
 - `test_writing_style.py`: the description in the prompt; flags always on.
 - `app/tests`: chip overflow and kind grouping helpers.

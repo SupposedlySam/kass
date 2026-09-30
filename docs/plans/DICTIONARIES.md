@@ -2,7 +2,7 @@
 
 ## Problem
 
-Herga learns vocabulary only on its own: `known_names.py` guesses names from past dictations, and `correction_rules.py` learns a fix after the same correction shows up in at least two captures. The user can't just tell it "I say Kubernetes", "write my handle as mrgnhnt96", or "in Zed, 'voice box' means Herga". Whisper hears such words wrong every time until corrections pile up, and some never qualify: `candidate()` refuses digits, single-word context and dissimilar spellings.
+Kass learns vocabulary only on its own: `known_names.py` guesses names from past dictations, and `correction_rules.py` learns a fix after the same correction shows up in at least two captures. The user can't just tell it "I say Kubernetes", "write my handle as mrgnhnt96", or "in Zed, 'voice box' means Kass". Whisper hears such words wrong every time until corrections pile up, and some never qualify: `candidate()` refuses digits, single-word context and dissimilar spellings.
 
 ## Entries
 
@@ -11,7 +11,7 @@ An entry is one row: what to **write**, and optionally what is **said**.
 | Kind | Example | Effect |
 | --- | --- | --- |
 | Term (`spoken` empty) | `Kubernetes`, `mrgnhnt96`, `Zed` | Whisper is prompted with it, so it is heard right. A term that isn't a common word also has its capitals fixed after cleanup ("kubernetes" → "Kubernetes"). A capitalized term counts as a known name. |
-| Replacement | said `voice box` → written `Herga`; said `my work email` → `morgan@…` | After cleanup, the spoken phrase is swapped for the written text, matched case-insensitively on word boundaries. `written` is also a term. |
+| Replacement | said `voice box` → written `Kass`; said `my work email` → `morgan@…` | After cleanup, the spoken phrase is swapped for the written text, matched case-insensitively on word boundaries. `written` is also a term. |
 
 Capitals are fixed only for terms that aren't common words, using `phrase_seams._common_word`. That way the term `Mark` never capitalizes the verb "mark", and `mrgnhnt96` always gets fixed. This is one general rule, with no per-term exceptions.
 

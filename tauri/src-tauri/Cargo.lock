@@ -1471,31 +1471,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "herga"
-version = "0.6.2"
-dependencies = [
- "core-foundation-sys",
- "cpal",
- "futures-util",
- "hound",
- "keytap",
- "objc",
- "reqwest",
- "rtrb",
- "scopeguard",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tokio",
- "tokio-tungstenite",
-]
-
-[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1957,6 +1932,31 @@ checksum = "5dea2b27dd239b2556ed7a25ba842fe47fd602e7fc7433c2a8d6106d4d9edd70"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kass"
+version = "0.6.2"
+dependencies = [
+ "core-foundation-sys",
+ "cpal",
+ "futures-util",
+ "hound",
+ "keytap",
+ "objc",
+ "reqwest",
+ "rtrb",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

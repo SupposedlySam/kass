@@ -5,15 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time. [Troubleshooting](https://herga.mrgnhnt.com/docs/troubleshooting/) covers the most common problems.
+        Thanks for taking the time. [Troubleshooting](https://kass.mrgnhnt.com/docs/troubleshooting/) covers the most common problems.
   - type: textarea
     id: what
     attributes:
       label: What happened?
-      description: If the text came out wrong, include what you said and what Herga wrote. You can copy both from the Captures tab.
+      description: If the text came out wrong, include what you said and what Kass wrote. You can copy both from the Captures tab.
       placeholder: |
         I said: "…"
-        Herga wrote: "…"
+        Kass wrote: "…"
         I expected: "…"
     validations:
       required: true
@@ -25,7 +25,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Herga version
+      label: Kass version
       description: Shown in Settings › General › Version.
       placeholder: "0.6.0"
     validations:

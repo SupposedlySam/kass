@@ -35,8 +35,8 @@ function selectedText(): string {
 }
 
 /**
- * Receive dictation aimed at Herga's own window. When the shortcut fires
- * while a Herga field has focus (writing a correction, say), Rust can't
+ * Receive dictation aimed at Kass's own window. When the shortcut fires
+ * while a Kass field has focus (writing a correction, say), Rust can't
  * paste into its own webview, so it sends the text here and waits for the
  * reply to decide whether the pill shows an error. A Command Mode take aimed
  * here asks for the selection first (`dictation:selection-request`); its

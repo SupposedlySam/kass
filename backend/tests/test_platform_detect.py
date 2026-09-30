@@ -1,4 +1,4 @@
-"""Herga runs on Apple Silicon only and says so clearly anywhere else."""
+"""Kass runs on Apple Silicon only and says so clearly anywhere else."""
 
 from unittest.mock import patch
 

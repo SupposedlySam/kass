@@ -1,5 +1,5 @@
 #!/bin/bash
-# Print the SHA-1 of the code-signing identity to sign Herga with on this
+# Print the SHA-1 of the code-signing identity to sign Kass with on this
 # Mac, creating a local one the first time there is none.
 #
 # macOS keeps an app's privacy grants (Microphone, Accessibility, Input
@@ -7,33 +7,37 @@
 # same. Ad-hoc signing changes it on every build, so every update would lose
 # them. Signing every build with the same identity keeps them.
 #
-# The identity, in order: HERGA_SIGNING_IDENTITY; a Developer ID
+# The identity, in order: KASS_SIGNING_IDENTITY; a Developer ID
 # Application certificate (what releases are signed with, so a local build
 # and a downloaded one keep the same grants); the one the installed app is
 # signed with; the one used last time; an Apple Development
-# certificate; otherwise a self-signed "Herga Local Signing" certificate,
+# certificate; otherwise a self-signed "Kass Local Signing" certificate,
 # made once and kept in its own keychain.
 set -euo pipefail
 
-app=/Applications/Herga.app
-state="$HOME/Library/Application Support/Herga Installer"
-keychain="$HOME/Library/Keychains/herga-signing.keychain-db"
-local_name="Herga Local Signing"
-# Herga was Voicebox: keep using what an earlier install set up, so the
-# signature (and with it the app's privacy grants) stays the same.
-old_state="$HOME/Library/Application Support/Voicebox Installer"
-[ -d "$old_state" ] && [ ! -e "$state" ] && mv "$old_state" "$state"
-old_keychain="$HOME/Library/Keychains/voicebox-signing.keychain-db"
-if [ -f "$old_keychain" ] && [ ! -f "$keychain" ]; then
-  keychain="$old_keychain"
-  local_name="Voicebox Local Signing"
-fi
+app=/Applications/Kass.app
+state="$HOME/Library/Application Support/Kass Installer"
+keychain="$HOME/Library/Keychains/kass-signing.keychain-db"
+local_name="Kass Local Signing"
+# Kass was Herga, and before that Voicebox: keep using what an earlier
+# install set up, so the signature stays the same.
+[ -d "$app" ] || app=/Applications/Herga.app
+for old in Herga Voicebox; do
+  old_state="$HOME/Library/Application Support/$old Installer"
+  [ -d "$old_state" ] && [ ! -e "$state" ] && mv "$old_state" "$state"
+  old_keychain="$HOME/Library/Keychains/$(echo "$old" | tr '[:upper:]' '[:lower:]')-signing.keychain-db"
+  if [ -f "$old_keychain" ] && [ ! -f "$keychain" ]; then
+    keychain="$old_keychain"
+    local_name="$old Local Signing"
+    break
+  fi
+done
 mkdir -p "$state"
 
 log() { echo "$@" >&2; }
 
-if [ -n "${HERGA_SIGNING_IDENTITY:-}" ]; then
-  echo "$HERGA_SIGNING_IDENTITY"
+if [ -n "${KASS_SIGNING_IDENTITY:-}" ]; then
+  echo "$KASS_SIGNING_IDENTITY"
   exit 0
 fi
 
@@ -90,7 +94,7 @@ EOF
     /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 7300 -config "$tmp/cert.cnf" \
       -keyout "$tmp/key.pem" -out "$tmp/cert.pem" 2>/dev/null
     /usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
-      -name "$local_name" -out "$tmp/identity.p12" -passout pass:herga
+      -name "$local_name" -out "$tmp/identity.p12" -passout pass:kass
     if [ ! -f "$keychain" ]; then
       password=$(/usr/bin/openssl rand -hex 24)
       (umask 077 && echo "$password" >"$state/keychain-password")
@@ -100,7 +104,7 @@ EOF
     fi
     password=$(cat "$state/keychain-password")
     open_keychain
-    security import "$tmp/identity.p12" -k "$keychain" -P herga -T /usr/bin/codesign >/dev/null
+    security import "$tmp/identity.p12" -k "$keychain" -P kass -T /usr/bin/codesign >/dev/null
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
     cp "$tmp/cert.pem" "$state/local-signing.pem"
   fi
@@ -123,6 +127,6 @@ if [ -n "$apple" ] && pick "$apple"; then exit 0; fi
 create_local_identity
 if pick "$local_name"; then exit 0; fi
 log "Could not set up \"$local_name\" for code signing."
-log "Open Keychain Access, find it in the herga-signing keychain, and set"
+log "Open Keychain Access, find it in the kass-signing keychain, and set"
 log "Trust > Code Signing to Always Trust, then run the install again."
 exit 1

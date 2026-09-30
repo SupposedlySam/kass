@@ -37,7 +37,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(teach, "_sessions", {})
     teach._refresh_teaching()
     yield
-    styles.teach_in_herga(None, 0)
+    styles.teach_in_kass(None, 0)
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def api(monkeypatch):
     return TestClient(app), session, model
 
 
-def _dictate(session, raw, refined, after, app=styles.HERGA_BUNDLE):
+def _dictate(session, raw, refined, after, app=styles.KASS_BUNDLE):
     with session() as db:
         db.add(
             Capture(
@@ -109,7 +109,7 @@ def test_chips_describe_what_a_reply_shows():
     ]
     email = teach.reply_chips("Hi Priya,\n\nTuesday morning works.\n\nThanks!", None, "email", [])
     assert codes(email) == [("greeting", "Hi Priya,"), ("sign_off", "Thanks!")]
-    agent = teach.reply_chips("keep them\nclear capitalize_first too", None, "coding_agent", ["Herga"])
+    agent = teach.reply_chips("keep them\nclear capitalize_first too", None, "coding_agent", ["Kass"])
     assert ("kept_exact", "capitalize_first") in codes(agent)
     assert ("line_per_thought", None) in codes(agent)
 
@@ -122,7 +122,7 @@ def test_a_style_without_its_own_kinds_starts_with_chat_email_and_a_text():
     assert all(c.note for c in session.conversations)
 
 
-def test_herga_dictation_follows_the_taught_style_only_while_teaching(monkeypatch):
+def test_kass_dictation_follows_the_taught_style_only_while_teaching(monkeypatch):
     snapshot = styles.Snapshot(
         (
             styles.Style("personal", "Personal", 0, True, "standard", True),
@@ -130,10 +130,10 @@ def test_herga_dictation_follows_the_taught_style_only_while_teaching(monkeypatc
         )
     )
     session = teach.start("chat", [], [])
-    assert snapshot.for_app(styles.HERGA_BUNDLE).id == "chat"
+    assert snapshot.for_app(styles.KASS_BUNDLE).id == "chat"
     assert snapshot.for_app("com.tinyspeck.slackmacgap").id == "personal"
     teach.discard(session.id)
-    assert snapshot.for_app(styles.HERGA_BUNDLE).id == "personal"
+    assert snapshot.for_app(styles.KASS_BUNDLE).id == "personal"
 
 
 @pytest.mark.asyncio
@@ -167,7 +167,7 @@ def test_a_dictated_reply_teaches_and_a_typed_one_only_gets_chips(api):
     first, second = started["conversations"][0], started["conversations"][1]
     turn = teach.conversation(teach.get(started["session_id"]), first["id"]).turn_started_at
 
-    # Dictated in Herga's window this turn; another app's dictation doesn't count.
+    # Dictated in Kass's window this turn; another app's dictation doesn't count.
     _dictate(session, "yeah no wait yep still good for thursday", "Yeah, no wait, yep, still good for Thursday.", turn)
     _dictate(session, "unrelated", "Unrelated.", turn, app="com.apple.mail")
     base = f"/writing-style/teach/{started['session_id']}/conversations"

@@ -1,5 +1,5 @@
-//! Updates in the background: a newer release is downloaded while Herga
-//! runs, then installed when the user clicks Restart or the next time Herga
+//! Updates in the background: a newer release is downloaded while Kass
+//! runs, then installed when the user clicks Restart or the next time Kass
 //! quits. It is never installed while the app and its server are running
 //! from the bundle it replaces.
 //!

@@ -99,7 +99,7 @@ jobs:
       # installs of these builds.
       - name: Build app
         env:
-          HERGA_SIGNING_IDENTITY: "-"
+          KASS_SIGNING_IDENTITY: "-"
         run: ./scripts/build-local-app.sh
 
       # ditto keeps the symlinks and extended attributes the signature needs;
@@ -107,8 +107,8 @@ jobs:
       - name: Zip app
         id: zip
         run: |
-          name="Herga-${{ steps.version.outputs.version }}-${GITHUB_SHA::7}-macos-arm64"
-          ditto -c -k --keepParent tauri/src-tauri/target/release/bundle/macos/Herga.app "$name.zip"
+          name="Kass-${{ steps.version.outputs.version }}-${GITHUB_SHA::7}-macos-arm64"
+          ditto -c -k --keepParent tauri/src-tauri/target/release/bundle/macos/Kass.app "$name.zip"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
@@ -124,8 +124,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     env:
-      APP: Herga.app
-      SERVER: Herga.app/Contents/Resources/herga-server/herga-server
+      APP: Kass.app
+      SERVER: Kass.app/Contents/Resources/kass-server/kass-server
       VERSION: ${{ needs.build.outputs.version }}
 
     steps:
@@ -163,7 +163,7 @@ jobs:
           plist="$APP/Contents/Info.plist"
           [ "$(plutil -extract CFBundleShortVersionString raw "$plist")" = "$VERSION" ] ||
             { echo "::error::Info.plist version isn't $VERSION"; exit 1; }
-          [ "$(plutil -extract CFBundleIdentifier raw "$plist")" = com.mrgnhnt.herga ] ||
+          [ "$(plutil -extract CFBundleIdentifier raw "$plist")" = com.mrgnhnt.kass ] ||
             { echo "::error::Bundle identifier changed; installs would lose their data and grants"; exit 1; }
           plutil -extract NSMicrophoneUsageDescription raw "$plist" >/dev/null ||
             { echo "::error::Info.plist has no microphone usage description"; exit 1; }
@@ -172,7 +172,7 @@ jobs:
         run: |
           python3 -m venv /tmp/venv
           /tmp/venv/bin/pip install -q pyinstaller pytest
-          HERGA_TEST_BINARY="$SERVER" /tmp/venv/bin/python -m pytest backend/tests/test_frozen_services.py -q \
+          KASS_TEST_BINARY="$SERVER" /tmp/venv/bin/python -m pytest backend/tests/test_frozen_services.py -q \
             -p no:cacheprovider --noconftest
 
       - name: Server starts and answers /health
@@ -195,7 +195,7 @@ jobs:
       # bundle and the sidecar path all work.
       - name: App launches and starts its server
         run: |
-          "$APP/Contents/MacOS/herga" > app.log 2>&1 &
+          "$APP/Contents/MacOS/kass" > app.log 2>&1 &
           pid=$!
           for _ in $(seq 90); do
             health=$(curl -sf http://127.0.0.1:17493/health) && break
@@ -203,7 +203,7 @@ jobs:
             sleep 2
           done
           kill "$pid" || true
-          pkill -f herga-server || true
+          pkill -f kass-server || true
           [ -n "${health:-}" ] || { cat app.log; echo "::error::App never started its server"; exit 1; }
           [ "$(echo "$health" | jq -r .version)" = "$VERSION" ] || { echo "::error::App's server version isn't $VERSION"; exit 1; }
 

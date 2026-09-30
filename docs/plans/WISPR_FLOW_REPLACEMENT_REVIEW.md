@@ -1,10 +1,10 @@
-# Herga as a Wispr Flow replacement
+# Kass as a Wispr Flow replacement
 
 Reviewed September 16, 2026, against checkout `51f49de`.
 
 ## Recommendation
 
-Herga has a credible local desktop dictation foundation. Prioritize delivery reliability, recovery, and personal vocabulary before adding more model choices. Treat it as a candidate for a daily-driver trial, not yet a demonstrated drop-in replacement.
+Kass has a credible local desktop dictation foundation. Prioritize delivery reliability, recovery, and personal vocabulary before adding more model choices. Treat it as a candidate for a daily-driver trial, not yet a demonstrated drop-in replacement.
 
 This is a source review and research comparison with current official Wispr documentation. No microphone trial, app compatibility test, accuracy benchmark, or latency measurement was performed. Failure scenarios below follow from code; their frequency is unknown. Feature absences mean no implementation was found in the reviewed paths and repository searches.
 
@@ -76,7 +76,7 @@ Offer a dictation-focused onboarding path with a microphone test, permission che
 - Productivity: [snippets](https://docs.wisprflow.ai/articles/5784437944-create-and-use-snippets), dictionaries, [smart formatting and backtracking](https://docs.wisprflow.ai/articles/5373093536-how-do-i-use-smart-formatting-and-backtrack), and [custom transforms](https://docs.wisprflow.ai/articles/2719941210-how-to-configure-polish-shortcuts-and-custom-prompts).
 - Editing: paid [Command Mode](https://docs.wisprflow.ai/articles/4816967992-how-to-use-command-mode) supports desktop editing; it remains experimental and its documentation acknowledges silent failed edits. Do not treat Flow as a flawless baseline.
 - Tradeoffs: [Flow requires internet for transcription](https://docs.wisprflow.ai/articles/4048537120-what-to-expect-from-flow-accuracy-and-known-limitations?lang=nl). Its [data controls](https://wisprflow.ai/data-controls) distinguish cloud storage and model-improvement choices from processing. Privacy settings do not make it a local inference product.
-- Cost: [pricing](https://wisprflow.ai/pricing) lists Pro at $15/user/month monthly or $12/user/month billed annually. Herga removes that subscription dependency but consumes local compute and requires model setup and maintenance.
+- Cost: [pricing](https://wisprflow.ai/pricing) lists Pro at $15/user/month monthly or $12/user/month billed annually. Kass removes that subscription dependency but consumes local compute and requires model setup and maintenance.
 
 ## Implementation order and replacement acceptance test
 

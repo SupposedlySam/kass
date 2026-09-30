@@ -10,8 +10,8 @@ identity=$(./scripts/signing-identity.sh)
 # The server folder is copied into the app as-is, so sign its code first:
 # every library, then the executable with the app's hardened-runtime
 # entitlements. Tauri then seals the folder into the app signature.
-server=tauri/src-tauri/binaries/herga-server
-if [ ! -x "$server/herga-server" ]; then
+server=tauri/src-tauri/binaries/kass-server
+if [ ! -x "$server/kass-server" ]; then
   echo "Server not built at $server. Run scripts/build-server.sh first." >&2
   exit 1
 fi
@@ -22,9 +22,9 @@ timestamp=--timestamp=none
 find "$server/_internal" -type f -print0 | xargs -0 file | grep 'Mach-O' | cut -d: -f1 | tr '\n' '\0' |
   xargs -0 -n 32 -P 8 codesign --force "$timestamp" --options runtime --sign "$identity"
 codesign --force "$timestamp" --options runtime --entitlements tauri/src-tauri/Entitlements.plist \
-  --sign "$identity" "$server/herga-server"
+  --sign "$identity" "$server/kass-server"
 
-config=$(mktemp /tmp/herga-local-signing.XXXXXX)
+config=$(mktemp /tmp/kass-local-signing.XXXXXX)
 trap 'rm -f "$config"' EXIT
 # With the updater key set (release.yml), Tauri also packs the app as a signed
 # .app.tar.gz for the background updater.
@@ -41,4 +41,4 @@ else
   bun=(npx --yes bun@1.3.8)
 fi
 "${bun[@]}" run --cwd tauri tauri build --bundles app --config "$config"
-codesign --verify --deep --strict tauri/src-tauri/target/release/bundle/macos/Herga.app
+codesign --verify --deep --strict tauri/src-tauri/target/release/bundle/macos/Kass.app

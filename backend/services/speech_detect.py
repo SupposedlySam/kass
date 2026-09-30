@@ -74,7 +74,7 @@ class SpeechDetector:
         self.position = 0.0  # next 16 kHz sample, in source samples from carry[0]
         self.analyzed = 0  # 16 kHz samples run through the model
         self.voiced: list[int] = []  # 16 kHz offsets of voiced windows
-        self.ignored: list[tuple[float, float]] = []  # 16 kHz spans of Herga's own sounds
+        self.ignored: list[tuple[float, float]] = []  # 16 kHz spans of Kass's own sounds
 
     def feed(self, pcm: np.ndarray) -> None:
         if self.session is None:
@@ -90,7 +90,7 @@ class SpeechDetector:
 
     def ignore(self, start: int, end: int) -> None:
         """Don't take anything between two source sample offsets for a voice:
-        a sound Herga played there (the style cue) that the microphone may
+        a sound Kass played there (the style cue) that the microphone may
         have picked up. The span may reach past the audio fed so far."""
         low, high = start * RATE / self.rate, end * RATE / self.rate
         self.ignored.append((low, high))

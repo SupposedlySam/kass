@@ -19,7 +19,7 @@ Other candidates (#616, #848, #921, #943, #1037) are not included in this initia
 - `bun run ci`: app/web TypeScript checks and web production build passed.
 - `bun run --cwd tauri build`: desktop frontend production build passed.
 - `cargo check --locked --manifest-path tauri/src-tauri/Cargo.toml`: passed on Apple Silicon macOS.
-- `cargo test --locked --manifest-path tauri/src-tauri/Cargo.toml --bin herga`: compiled and linked successfully; the binary contains zero Rust unit tests.
+- `cargo test --locked --manifest-path tauri/src-tauri/Cargo.toml --bin kass`: compiled and linked successfully; the binary contains zero Rust unit tests.
 - `git diff --check`: passed.
 - Biome checks on the new helper, device enumeration and regression tests passed. Imported/existing frontend code still reports lint warnings; Rust emits macro/deprecation warnings; frontend builds report bundle-size warnings.
 

@@ -143,7 +143,7 @@ async def wrap_up(session_id: str, conversation_id: str):
 
 @router.get("/teach/{session_id}/conversations/{conversation_id}/dictated", response_model=models.TeachDictated)
 async def dictated(session_id: str, conversation_id: str, db: Session = Depends(get_db)):
-    """The cleanup of what was dictated in Herga's window this turn, for the reply box."""
+    """The cleanup of what was dictated in Kass's window this turn, for the reply box."""
     _conversation(session_id, conversation_id)
     found = teach.dictated_for(db, session_id, conversation_id)
     return {"text": found.shown if found else None}
@@ -204,7 +204,7 @@ async def _preview(db: Session, style: str, fallback: str | None) -> tuple[str |
         .filter(
             Capture.transcript_raw != "",
             Capture.source != "command",
-            or_(Capture.app_bundle_id.is_(None), Capture.app_bundle_id != styles.HERGA_BUNDLE),
+            or_(Capture.app_bundle_id.is_(None), Capture.app_bundle_id != styles.KASS_BUNDLE),
         )
         .order_by(Capture.created_at.desc())
         .limit(PREVIEW_CANDIDATES)

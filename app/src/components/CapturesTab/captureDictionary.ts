@@ -21,7 +21,7 @@ export function selectionPhrase(selected: string): string {
 }
 
 /**
- * A correction's change as a dictionary word: a word or short phrase Herga
+ * A correction's change as a dictionary word: a word or short phrase Kass
  * heard, and what the user wrote instead. Null for words only added or
  * removed, or a rewrite too long to be a word or phrase.
  */

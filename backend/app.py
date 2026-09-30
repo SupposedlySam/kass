@@ -77,7 +77,7 @@ def create_app() -> FastAPI:
             await _run_shutdown()
 
     application = FastAPI(
-        title="herga API",
+        title="kass API",
         description="Local dictation API: Whisper speech-to-text with LLM cleanup",
         version=__version__,
         lifespan=lifespan,
@@ -110,7 +110,7 @@ async def _run_startup(application: FastAPI) -> None:
     import platform
     import sys
 
-    logger.info("Herga v%s starting up", __version__)
+    logger.info("Kass v%s starting up", __version__)
     logger.info(
         "Python %s on %s %s (%s)",
         sys.version.split()[0],
@@ -154,7 +154,7 @@ async def _run_startup(application: FastAPI) -> None:
 
 async def _run_shutdown() -> None:
     """Unload models on lifespan exit."""
-    logger.info("Herga server shutting down...")
+    logger.info("Kass server shutting down...")
     try:
         await transcribe.unload_whisper_model()
     except Exception:

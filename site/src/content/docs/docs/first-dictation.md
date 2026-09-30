@@ -1,12 +1,12 @@
 ---
 title: Your first dictation
-description: Hold the chord, speak, let go, and see what Herga does with it.
+description: Hold the chord, speak, let go, and see what Kass does with it.
 ---
 
 1. Click into any text field: a message, an email, a note or a document.
 2. Hold <kbd>right ⌘</kbd> + <kbd>right ⌥</kbd>. A small pill appears on screen and a soft sound plays.
 3. Speak naturally. Don't worry about ums or restarts.
-4. Let go. The pill shows that Herga is working, and the cleaned-up text appears in the field.
+4. Let go. The pill shows that Kass is working, and the cleaned-up text appears in the field.
 
 Try saying something messy on purpose:
 
@@ -18,11 +18,11 @@ You should get:
 
 ## Hands-free
 
-For longer dictations, tap <kbd>Space</kbd> while you're holding the chord, then let go. Herga keeps listening without dropping anything you've said. To finish, press the hands-free chord, <kbd>right ⌘</kbd> + <kbd>right ⌥</kbd> + <kbd>Space</kbd>. You can also start hands-free with that same chord.
+For longer dictations, tap <kbd>Space</kbd> while you're holding the chord, then let go. Kass keeps listening without dropping anything you've said. To finish, press the hands-free chord, <kbd>right ⌘</kbd> + <kbd>right ⌥</kbd> + <kbd>Space</kbd>. You can also start hands-free with that same chord.
 
 ## Changed your mind?
 
-Press <kbd>Esc</kbd> to cancel. This works while you're speaking and while Herga is still working on the text, right up until the text starts going into your app.
+Press <kbd>Esc</kbd> to cancel. This works while you're speaking and while Kass is still working on the text, right up until the text starts going into your app.
 
 ## Where did my text go?
 

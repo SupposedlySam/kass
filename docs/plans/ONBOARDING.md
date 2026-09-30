@@ -7,11 +7,11 @@ on the onboarding designs canvas.
 
 ## Flow
 
-1. **Welcome.** One sentence on what Herga does. Everything stays on this Mac.
+1. **Welcome.** One sentence on what Kass does. Everything stays on this Mac.
 2. **Download the models.** Speech to text first, then cleanup. One button
    starts both. Downloads keep going through every later step, and restart by
    themselves after a relaunch (Input Monitoring forces one).
-3. **Input Monitoring.** Warns first that macOS will ask to quit Herga and
+3. **Input Monitoring.** Warns first that macOS will ask to quit Kass and
    that onboarding reopens on this step. Back from the relaunch, the step
    shows a green success card and a "Try it now" button that has the user hold
    the dictation keys (practice mode: nothing records).
@@ -31,8 +31,8 @@ on the onboarding designs canvas.
    (raw) next to what was sent (cleaned), with Say it again.
 9. **Your style.** A text from a friend (a teach-by-replying session's text
    conversation). The user dictates a reply in their own words, then sees
-   Herga's version with Looks right, Edit and Say it again. Edit makes it an
-   editable box, with what Herga wrote and what they changed; the final text is
+   Kass's version with Looks right, Edit and Say it again. Edit makes it an
+   editable box, with what Kass wrote and what they changed; the final text is
    sent as the reply, so the edits teach. The reveal shows what they said,
    standard cleanup and their way. "Try a work
    message" repeats it with a team chat. Next finishes the session (saving the
@@ -40,7 +40,7 @@ on the onboarding designs canvas.
 10. **Rewrite a selection.** A paragraph is selected in a text box. Hold the
    command keys (right ⌘ + right ⇧ by default) and say an instruction, or click
    one. The text changes in place, with Undo.
-11. **You're set.** "Go talk." The three shortcuts. "Start using Herga"
+11. **You're set.** "Go talk." The three shortcuts. "Start using Kass"
     closes onboarding and shows the main window; "Show me now" opens
     Settings › Features.
 
@@ -48,12 +48,12 @@ on the onboarding designs canvas.
 
 - **Speech needs both models.** Steps 7 to 9 are hard-locked until
   `canRecord`'s model gates are green (speech, and cleanup when auto-refine is
-  on). A locked step shows the progress and "Herga can't hear you until this
+  on). A locked step shows the progress and "Kass can't hear you until this
   finishes". The chord is armed as soon as Input Monitoring is granted; while
   the models are missing, a chord press shows "Still downloading" in the pill
   instead of recording (the dictation gate).
 - **Resume.** The current step and "downloads started" are kept in
-  localStorage (`herga.onboarding`). Onboarding reopens on that step after a
+  localStorage (`kass.onboarding`). Onboarding reopens on that step after a
   quit. Downloads that were started and aren't finished or running are started
   again on open.
 - **Download failures.** An errored download task is shown with its reason,
@@ -95,11 +95,11 @@ Chords:
   start a take shows the message in the pill instead (a notice) and records
   nothing.
 
-Dictation into Herga windows:
+Dictation into Kass windows:
 
-- `dictation:insert` goes to the focused Herga window (onboarding or
+- `dictation:insert` goes to the focused Kass window (onboarding or
   main), not always main.
-- A command take whose target is a Herga window asks that window for its
+- A command take whose target is a Kass window asks that window for its
   selection: `dictation:selection-request { take }` → reply
   `dictation:selection { take, text }` (1 s timeout, then "Select text to
   rewrite first"). The rewrite is delivered through `dictation:insert`, which

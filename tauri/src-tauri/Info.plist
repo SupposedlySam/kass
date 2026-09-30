@@ -3,21 +3,22 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>herga</string>
+	<string>kass</string>
 	<key>CFBundleIconName</key>
-	<string>herga</string>
+	<string>kass</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.mrgnhnt.herga</string>
+			<string>com.mrgnhnt.kass</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>kass</string>
 				<string>herga</string>
 			</array>
 		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Herga needs microphone access to transcribe your dictation.</string>
+	<string>Kass needs microphone access to transcribe your dictation.</string>
 </dict>
 </plist>

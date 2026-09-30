@@ -13,7 +13,7 @@ import type {
 export const WRITING_STYLE_KEY = ['writing-style'] as const;
 export const WRITING_STYLES_KEY = ['writing-styles'] as const;
 
-/** What Herga has learned about how the user punctuates in a style (the default when none). */
+/** What Kass has learned about how the user punctuates in a style (the default when none). */
 export function useWritingStyle(styleId?: string | null) {
   return useQuery({
     queryKey: [...WRITING_STYLE_KEY, styleId ?? 'default'],

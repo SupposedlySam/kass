@@ -33,7 +33,7 @@ _BETWEEN = r"[\s-]+"
 _SOUNDS = (("ph", "f"), ("ck", "k"), ("q", "k"), ("c", "k"), ("z", "s"), ("y", "i"))
 # How close one uncommon word must be to a term's letters to be that term
 # misheard ("Kubernetis"): one letter in six may differ, so a five-letter
-# name ("Helga") is not another ("Herga"). Below the shortest term that
+# name ("Helga") is not another ("Kass"). Below the shortest term that
 # counts, only a word that sounds the same does ("Sagar" for "Saggar").
 _HEARD_RATIO = 0.82
 _HEARD_MIN = 5

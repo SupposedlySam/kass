@@ -273,7 +273,7 @@ export function EditableTranscript({
 
 /**
  * Under an edited transcript: what changed, an optional note and Save. Shown
- * only once the text differs from what Herga wrote. A changed word can go
+ * only once the text differs from what Kass wrote. A changed word can go
  * straight into the dictionary, which saves the correction too, with the
  * word spelled the way it was added.
  */

@@ -473,7 +473,7 @@ class CaptureFeedbackCreate(BaseModel):
 
 
 class WritingStyleStatus(BaseModel):
-    """What Herga has learned about how the user punctuates."""
+    """What Kass has learned about how the user punctuates."""
 
     ready: bool
     runs: int

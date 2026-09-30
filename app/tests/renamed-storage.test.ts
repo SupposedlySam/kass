@@ -16,10 +16,10 @@ function memoryStorage(entries: Record<string, string>): Storage {
 }
 
 describe('renamed storage', () => {
-  test('voicebox keys move to their herga names', () => {
+  test('voicebox keys move to their kass names', () => {
     const storage = memoryStorage({ 'voicebox.onboarding': '{"step":"download"}', other: 'x' });
     carryOverRenamedStorage(storage);
-    expect(storage.getItem('herga.onboarding')).toBe('{"step":"download"}');
+    expect(storage.getItem('kass.onboarding')).toBe('{"step":"download"}');
     expect(storage.getItem('voicebox.onboarding')).toBeNull();
     expect(storage.getItem('other')).toBe('x');
   });
@@ -27,14 +27,32 @@ describe('renamed storage', () => {
   test('the UI store keeps its theme', () => {
     const storage = memoryStorage({ 'voicebox-ui': '{"state":{"theme":"dark"}}' });
     carryOverRenamedStorage(storage);
-    expect(storage.getItem('herga-ui')).toBe('{"state":{"theme":"dark"}}');
+    expect(storage.getItem('kass-ui')).toBe('{"state":{"theme":"dark"}}');
     expect(storage.length).toBe(1);
   });
 
   test('a value already under the new name wins', () => {
+    const storage = memoryStorage({ 'voicebox.setup.open': '1', 'kass.setup.open': '0' });
+    carryOverRenamedStorage(storage);
+    expect(storage.getItem('kass.setup.open')).toBe('0');
+    expect(storage.length).toBe(1);
+  });
+
+  test('herga keys move to their kass names', () => {
+    const storage = memoryStorage({
+      'herga.onboarding': '{"step":"style"}',
+      'herga-ui': '{"state":{"theme":"light"}}',
+    });
+    carryOverRenamedStorage(storage);
+    expect(storage.getItem('kass.onboarding')).toBe('{"step":"style"}');
+    expect(storage.getItem('kass-ui')).toBe('{"state":{"theme":"light"}}');
+    expect(storage.length).toBe(2);
+  });
+
+  test('a herga key wins over the same voicebox key', () => {
     const storage = memoryStorage({ 'voicebox.setup.open': '1', 'herga.setup.open': '0' });
     carryOverRenamedStorage(storage);
-    expect(storage.getItem('herga.setup.open')).toBe('0');
+    expect(storage.getItem('kass.setup.open')).toBe('0');
     expect(storage.length).toBe(1);
   });
 });

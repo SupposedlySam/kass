@@ -200,7 +200,7 @@ impl StreamClient {
     }
 
     /// A `cue` message: the audio from `delay_ms` past what was sent so far,
-    /// for `ms`, holds a sound Herga played, not the user's voice.
+    /// for `ms`, holds a sound Kass played, not the user's voice.
     fn cue_action(&self, delay_ms: u32, ms: u32) -> Option<Action> {
         let rate = self.sample_rate?;
         let samples = |ms: u32| (u64::from(rate) * u64::from(ms) / 1000) as u32;

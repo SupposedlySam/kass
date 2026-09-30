@@ -26,7 +26,7 @@ export function useAccessibilityPermission() {
   const platform = usePlatform();
   const { needsPermission, setNeedsPermission, checking, recheck } = useMacPermission(
     'check_accessibility_permission',
-    'herga.permission.accessibility.granted',
+    'kass.permission.accessibility.granted',
   );
 
   useEffect(() => {

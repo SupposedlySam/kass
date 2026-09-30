@@ -92,7 +92,7 @@ pub fn spawn(
     let (stop_tx, stop_rx) = std_mpsc::channel();
     let (done_tx, done_rx) = oneshot::channel();
     let spawned = thread::Builder::new()
-        .name("herga-dictation-capture".into())
+        .name("kass-dictation-capture".into())
         .spawn(move || {
             let recorded = run(device_id, keydown, audio_tx, stop_rx, hooks);
             let _ = done_tx.send(recorded);

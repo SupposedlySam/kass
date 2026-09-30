@@ -25,7 +25,7 @@ import tempfile
 
 # Runtime hook prints go nowhere when the server runs as a sidecar, so log
 # hook activity to a file. Safe no-op if the file can't be written.
-_DIAG_PATH = os.path.join(tempfile.gettempdir(), "herga_rt_hook.log")
+_DIAG_PATH = os.path.join(tempfile.gettempdir(), "kass_rt_hook.log")
 _TARGET = "scipy.stats._distn_infrastructure"
 
 

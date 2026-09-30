@@ -1,6 +1,6 @@
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import hergaLogo from '@/assets/herga-logo.png';
+import kassLogo from '@/assets/kass-logo.png';
 import { DictateWindow } from '@/components/DictateWindow/DictateWindow';
 import { OnboardingWindow } from '@/components/Onboarding/OnboardingWindow';
 import { useOnboardingLauncher } from '@/components/Onboarding/useOnboardingLauncher';
@@ -28,10 +28,10 @@ function currentView(): string | null {
 }
 
 /**
- * Validate that a health response has the expected Herga-specific shape.
+ * Validate that a health response has the expected Kass-specific shape.
  * Prevents misidentifying an unrelated service on the same port.
  */
-function isHergaHealthResponse(health: HealthResponse): boolean {
+function isKassHealthResponse(health: HealthResponse): boolean {
   return (
     health?.status === 'healthy' &&
     typeof health.model_loaded === 'boolean' &&
@@ -95,11 +95,11 @@ function MainApp() {
   // Replay the saved chord into the Rust hotkey listener every time
   // capture_settings resolves or the user edits the chord.
   useChordSync({ paused: onboardingOwnsChord });
-  // Dictation into Herga's own fields arrives here instead of as a paste.
+  // Dictation into Kass's own fields arrives here instead of as a paste.
   useInAppDictationInsert();
   // Rust plays the dictation chimes; it needs their saved settings.
   useSoundCueSync();
-  // herga:// links open their screen once the router is showing.
+  // kass:// links open their screen once the router is showing.
   useDeepLinks(serverReady);
 
   // Hooks above (the chord's settings among them) ask the server before it
@@ -145,7 +145,7 @@ function MainApp() {
       console.log('Dev mode: Skipping auto-start of server (run it separately)');
       setServerReady(true); // Mark as ready so UI doesn't show loading screen
       // Mark that server was not started by app (so we don't try to stop it on close)
-      window.__hergaServerStartedByApp = false;
+      window.__kassServerStartedByApp = false;
       return;
     }
 
@@ -164,12 +164,12 @@ function MainApp() {
         console.log('Server is ready at:', serverUrl);
         setServerReady(true);
         // Mark that we started the server (so we know to stop it on close)
-        window.__hergaServerStartedByApp = true;
+        window.__kassServerStartedByApp = true;
       })
       .catch((error) => {
         console.error('Failed to auto-start server:', error);
         serverStartingRef.current = false;
-        window.__hergaServerStartedByApp = false;
+        window.__kassServerStartedByApp = false;
 
         // Only fall back to health-check polling when the error indicates the
         // port is occupied (likely an external server). For real failures
@@ -183,17 +183,17 @@ function MainApp() {
 
         // Fall back to polling: a local server may already be running on the
         // port (e.g. started by hand via python/uvicorn). Poll the health endpoint
-        // until it responds with a valid Herga payload, then transition to
+        // until it responds with a valid Kass payload, then transition to
         // the main UI.
         console.log('Falling back to health-check polling...');
         const pollInterval = setInterval(async () => {
           try {
             const health = await apiClient.getHealth();
-            if (!isHergaHealthResponse(health)) {
-              console.log('Health response is not from a Herga server, keep polling...');
+            if (!isKassHealthResponse(health)) {
+              console.log('Health response is not from a Kass server, keep polling...');
               return;
             }
-            console.log('Running local Herga server detected via health check');
+            console.log('Running local Kass server detected via health check');
             clearInterval(pollInterval);
             setServerReady(true);
           } catch {
@@ -206,7 +206,7 @@ function MainApp() {
           clearInterval(pollInterval);
           serverStartingRef.current = false;
           setStartupError(
-            'Could not connect to a Herga server within 2 minutes. ' +
+            'Could not connect to a Kass server within 2 minutes. ' +
               'Please check that the server is running and try again.',
           );
         }, 120_000);
@@ -249,8 +249,8 @@ function MainApp() {
               <div className="w-48 h-48 rounded-full bg-accent/20 blur-3xl" />
             </div>
             <img
-              src={hergaLogo}
-              alt="Herga"
+              src={kassLogo}
+              alt="Kass"
               className="w-48 h-48 object-contain animate-fade-in-scale relative z-10"
             />
           </div>

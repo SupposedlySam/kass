@@ -4,9 +4,9 @@ import DictationDemo from '../components/DictationDemo.astro';
 import StarButton from '../components/StarButton.astro';
 import { DOWNLOAD, ISSUES, NEW_ISSUE, REPO } from '../site';
 
-const title = 'Herga — Private dictation for your Mac';
+const title = 'Kass — Private dictation for your Mac';
 const description =
-  'Hold a key, speak, and let go. Herga turns what you said into clean, ready-to-send text in any app. Everything runs on your Mac.';
+  'Hold a key, speak, and let go. Kass turns what you said into clean, ready-to-send text in any app. Everything runs on your Mac.';
 
 const examples = [
   {
@@ -62,7 +62,7 @@ const features = [
   },
   {
     title: 'It learns from your fixes',
-    body: 'When a result isn’t what you meant, fix it. Herga learns from the fix right away, and later folds your fixes into rules, keeping them only if they hold up against your past corrections.',
+    body: 'When a result isn’t what you meant, fix it. Kass learns from the fix right away, and later folds your fixes into rules, keeping them only if they hold up against your past corrections.',
     tag: 'Correction learning',
     href: '/docs/captures/',
   },
@@ -83,11 +83,11 @@ const features = [
 const faqs = [
   {
     q: 'Does anything I say leave my Mac?',
-    a: 'No. Recording, transcription, cleanup and learning all run locally. Your audio and text never leave your Mac. Herga only goes online to download its speech and language models from Hugging Face, and to check GitHub for new versions.',
+    a: 'No. Recording, transcription, cleanup and learning all run locally. Your audio and text never leave your Mac. Kass only goes online to download its speech and language models from Hugging Face, and to check GitHub for new versions.',
   },
   {
     q: 'How is this different from macOS dictation?',
-    a: 'Built-in dictation types what it hears. Herga cleans it up the way you’d have typed it: filler words and false starts go, spoken corrections are applied, and punctuation follows your habits. It also learns your vocabulary and the fixes you make.',
+    a: 'Built-in dictation types what it hears. Kass cleans it up the way you’d have typed it: filler words and false starts go, spoken corrections are applied, and punctuation follows your habits. It also learns your vocabulary and the fixes you make.',
   },
   {
     q: 'Will it rewrite what I meant?',
@@ -99,7 +99,7 @@ const faqs = [
   },
   {
     q: 'Does it work in every app?',
-    a: 'It works in any app with a text field: chat, email, docs, browsers, editors and terminals. Herga writes into the field you were in when you started. When it has to paste, it puts your clipboard back afterward.',
+    a: 'It works in any app with a text field: chat, email, docs, browsers, editors and terminals. Kass writes into the field you were in when you started. When it has to paste, it puts your clipboard back afterward.',
   },
   {
     q: 'What languages does it understand?',
@@ -107,7 +107,7 @@ const faqs = [
   },
   {
     q: 'What does it cost?',
-    a: 'Nothing. Herga is free and open source under the MIT license. There’s no account and no subscription.',
+    a: 'Nothing. Kass is free and open source under the MIT license. There’s no account and no subscription.',
   },
 ];
 ---
@@ -123,7 +123,7 @@ const faqs = [
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<meta property="og:title" content={title} />
 		<meta property="og:description" content={description} />
-		<meta property="og:image" content="https://herga.mrgnhnt.com/icon.png" />
+		<meta property="og:image" content="https://kass.mrgnhnt.com/icon.png" />
 		<meta name="theme-color" content="#0c0d10" />
 	</head>
 	<body>
@@ -131,7 +131,7 @@ const faqs = [
 			<div class="wrap nav-inner">
 				<a class="brand" href="/">
 					<img src="/icon.png" alt="" width="30" height="30" />
-					<span>Herga</span>
+					<span>Kass</span>
 				</a>
 				<nav class="links">
 					<a href="#how">How it works</a>
@@ -153,7 +153,7 @@ const faqs = [
 						<p class="eyebrow">Dictation for Apple Silicon Macs</p>
 						<h1>Say it messy.<br /><span class="green">Send it clean.</span></h1>
 						<p class="lede">
-							Hold a key and talk the way you think. When you let go, Herga drops the ums, applies your
+							Hold a key and talk the way you think. When you let go, Kass drops the ums, applies your
 							“no, actually”s and puts clean, ready-to-send text into whatever app you’re in. None of it leaves
 							your Mac.
 						</p>
@@ -191,7 +191,7 @@ const faqs = [
 								{Array.from({ length: 24 }, (_, i) => <i style={`--i:${i}`}></i>)}
 							</div>
 							<h3>Talk like you think</h3>
-							<p>Ramble, restart, change your mind. Herga transcribes while you’re still speaking, so there’s little to wait for.</p>
+							<p>Ramble, restart, change your mind. Kass transcribes while you’re still speaking, so there’s little to wait for.</p>
 						</li>
 						<li>
 							<span class="num">3</span>
@@ -208,7 +208,7 @@ const faqs = [
 					<p class="eyebrow">What you say → what you get</p>
 					<h2>It knows what you meant.</h2>
 					<p class="lede section-lede">
-						Speech is faster than typing, but it comes out full of detours. Herga cleans them up without
+						Speech is faster than typing, but it comes out full of detours. Kass cleans them up without
 						summarizing or putting words in your mouth.
 					</p>
 					<div class="ex-grid">
@@ -231,7 +231,7 @@ const faqs = [
 						<p class="eyebrow">Private by design</p>
 						<h2>Your voice never leaves the room.</h2>
 						<p class="lede">
-							There is no Herga server to send your audio to. Speech recognition, cleanup and everything learned
+							There is no Kass server to send your audio to. Speech recognition, cleanup and everything learned
 							from your corrections run on your Mac’s own chip and stay in a folder you can open.
 						</p>
 						<ul class="checks">
@@ -300,7 +300,7 @@ const faqs = [
 						<p class="eyebrow">Open source</p>
 						<h2>Built in the open.</h2>
 						<p class="lede">
-							Herga is free, MIT licensed and developed on GitHub. Star the repository to follow along, and
+							Kass is free, MIT licensed and developed on GitHub. Star the repository to follow along, and
 							tell us when something doesn’t work the way you expect. Every report makes dictation better.
 						</p>
 					</div>
@@ -308,7 +308,7 @@ const faqs = [
 						<a class="open-card" href={REPO}>
 							<span class="open-icon">★</span>
 							<b>Star on GitHub</b>
-							<span>Follow releases and help other people find Herga.</span>
+							<span>Follow releases and help other people find Kass.</span>
 						</a>
 						<a class="open-card" href={NEW_ISSUE}>
 							<span class="open-icon">!</span>
@@ -361,7 +361,7 @@ const faqs = [
 			<div class="wrap foot-inner">
 				<div class="brand">
 					<img src="/icon.png" alt="" width="24" height="24" />
-					<span>Herga</span>
+					<span>Kass</span>
 				</div>
 				<nav>
 					<a href="/docs/">Docs</a>
@@ -370,7 +370,7 @@ const faqs = [
 					<a href={REPO}>GitHub</a>
 					<a href={NEW_ISSUE}>Report an issue</a>
 				</nav>
-				<p>From <em>jerga</em>, Spanish for slang. MIT licensed. Based on <a href="https://github.com/jamiepine/voicebox">Voicebox</a> by Jamie Pine.</p>
+				<p>Named for the bard who carries songs from place to place. MIT licensed. Based on <a href="https://github.com/jamiepine/voicebox">Voicebox</a> by Jamie Pine.</p>
 			</div>
 		</footer>
 	</body>

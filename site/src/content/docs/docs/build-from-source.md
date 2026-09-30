@@ -1,9 +1,9 @@
 ---
 title: Build from source
-description: Build and install Herga yourself, and keep permissions across updates.
+description: Build and install Kass yourself, and keep permissions across updates.
 ---
 
-Building Herga yourself is for working on it. To just use Herga, [download the DMG](/docs/install/).
+Building Kass yourself is for working on it. To just use Kass, [download the DMG](/docs/install/).
 
 ## Requirements
 
@@ -15,14 +15,14 @@ Building Herga yourself is for working on it. To just use Herga, [download the D
 ## Build and install
 
 ```bash
-git clone https://github.com/mrgnhnt96/herga.git
-cd herga
+git clone https://github.com/mrgnhnt96/kass.git
+cd kass
 ./scripts/install.sh
 ```
 
-The script checks for everything the build needs and prints how to install anything missing. It then builds the app and installs it to `/Applications/Herga.app`. Run it again to pull the latest code and update. A first build needs about 15 GB of free space.
+The script checks for everything the build needs and prints how to install anything missing. It then builds the app and installs it to `/Applications/Kass.app`. Run it again to pull the latest code and update. A first build needs about 15 GB of free space.
 
-Every build is signed with the same identity, so updates keep your Microphone, Accessibility and Input Monitoring permissions. That identity is your Apple Development certificate if you have one. Otherwise the first install creates a self-signed "Herga Local Signing" certificate, and macOS asks for your password once to trust it.
+Every build is signed with the same identity, so updates keep your Microphone, Accessibility and Input Monitoring permissions. That identity is your Apple Development certificate if you have one. Otherwise the first install creates a self-signed "Kass Local Signing" certificate, and macOS asks for your password once to trust it.
 
 ## Develop
 

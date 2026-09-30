@@ -62,7 +62,7 @@ export interface SavedProgress {
   downloadsStarted: boolean;
 }
 
-export const STORAGE_KEY = 'herga.onboarding';
+export const STORAGE_KEY = 'kass.onboarding';
 
 const START: SavedProgress = { step: 'welcome', downloadsStarted: false };
 

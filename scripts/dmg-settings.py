@@ -1,8 +1,8 @@
-# dmgbuild settings for Herga's DMG. scripts/build-dmg.sh passes the app
+# dmgbuild settings for Kass's DMG. scripts/build-dmg.sh passes the app
 # and the repo root in with -D.
 #
 # The icon positions match tauri/assets/dmg/background.html, which draws
-# the glow behind Herga and the wave between the two icons.
+# the glow behind Kass and the wave between the two icons.
 import os.path
 
 app = defines["app"]  # noqa: F821 (dmgbuild provides defines)

@@ -18,7 +18,7 @@ import { useMacPermission } from '@/lib/hooks/useMacPermission';
 export function useInputMonitoringPermission() {
   const { needsPermission, checking, recheck } = useMacPermission(
     'check_input_monitoring_permission',
-    'herga.permission.inputMonitoring.granted',
+    'kass.permission.inputMonitoring.granted',
   );
 
   const openSettings = useCallback(async () => {

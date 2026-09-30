@@ -1,10 +1,10 @@
-//! ⌘H hides Herga's windows, not Herga.
+//! ⌘H hides Kass's windows, not Kass.
 //!
 //! macOS unhides a hidden app, every window of it, as soon as it orders any
 //! window front, so the dictation pill brought the main window back with it.
-//! Instead, when Herga is hidden, the windows it showed are taken off screen
+//! Instead, when Kass is hidden, the windows it showed are taken off screen
 //! and the app is unhidden without activating: the pill then shows alone.
-//! They come back when Herga is next activated (Dock click, ⌘Tab), as they
+//! They come back when Kass is next activated (Dock click, ⌘Tab), as they
 //! would from a real unhide.
 
 pub fn init() {
@@ -34,7 +34,7 @@ mod macos {
     const DID_HIDE: &str = "NSApplicationDidHideNotification";
     const DID_BECOME_ACTIVE: &str = "NSApplicationDidBecomeActiveNotification";
 
-    /// Windows Herga showed when it was hidden, retained until they're back.
+    /// Windows Kass showed when it was hidden, retained until they're back.
     /// Touched only on the main thread, where AppKit posts these.
     static HIDDEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
@@ -76,7 +76,7 @@ mod macos {
         }
     }
 
-    /// Herga's visible windows, other than panels (the pill stays as it was).
+    /// Kass's visible windows, other than panels (the pill stays as it was).
     fn visible_windows() -> Vec<Id> {
         unsafe {
             let app: Id = msg_send![class!(NSApplication), sharedApplication];

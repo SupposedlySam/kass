@@ -1,6 +1,6 @@
 """The user's own "when I say this, I mean this" examples.
 
-Two sources feed it: corrections to refined output (Teach Herga) and
+Two sources feed it: corrections to refined output (Teach Kass) and
 calibration rewrites the user edited. Cleanup shows the model the same
 recent examples on every dictation, so a correction counts on the very next
 dictation, and the model's prompt cache keeps the wait short. Examples too old

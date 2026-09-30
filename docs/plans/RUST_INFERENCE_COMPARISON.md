@@ -95,7 +95,7 @@ The current logged total is about 0.65–0.8 s: Whisper 0.31–0.35 s, cleanup
   - 4 synthetic `say` fixtures from `make_fixtures.py`: `short` 2.1 s, `six`
     6.3 s, `fifteen` 13.9 s and `tech` 12.5 s.
 - **Cleanup prompts:** `build_prompts.py` runs the real `refine_transcript`
-  with a capturing backend, on a read-only scratch copy of `herga.db`,
+  with a capturing backend, on a read-only scratch copy of `kass.db`,
   `writing-style.json` and `correction-learning.json`.
   - Settings used: "learned" punctuation, with smart cleanup, self-correction
     and technical-term preservation all on. Personal examples and notes were
@@ -303,7 +303,7 @@ overhead.
   - Models download separately either way, at 1.6 GB + 2.5 GB in GGUF
     against 1.5 GB + 2.1 GB in MLX.
 
-## Integration cost if Herga ever moves inference into Rust
+## Integration cost if Kass ever moves inference into Rust
 
 1. **One ggml, not two.** `whisper-rs-sys` and `llama-cpp-sys-2` each
    statically link their own ggml. Linked together, that gives 343
@@ -367,8 +367,8 @@ directory; copy it first.
 
 ```sh
 S=/path/to/scratch; PY=backend/venv/bin/python
-D="$HOME/Library/Application Support/com.mrgnhnt.herga"
-mkdir -p $S/data $S/caps && cp "$D"/{herga.db,writing-style.json,correction-learning.json} $S/data/ && cp "$D"/captures/*.wav $S/caps/
+D="$HOME/Library/Application Support/com.mrgnhnt.kass"
+mkdir -p $S/data $S/caps && cp "$D"/{kass.db,writing-style.json,correction-learning.json} $S/data/ && cp "$D"/captures/*.wav $S/caps/
 $PY scripts/benchmark-rust-inference/make_real_fixtures.py $S/caps $S/fx
 $PY scripts/benchmark-stt-engines/make_fixtures.py $S/fx && rm $S/fx/paused40.*
 $PY scripts/benchmark-rust-inference/build_prompts.py "$PWD" $S/data 12 $S/prompts.json

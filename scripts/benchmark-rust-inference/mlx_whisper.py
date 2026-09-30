@@ -1,4 +1,4 @@
-"""Current Herga Whisper path, in memory: MLXSTTBackend.transcribe_array (mlx-audio Whisper turbo).
+"""Current Kass Whisper path, in memory: MLXSTTBackend.transcribe_array (mlx-audio Whisper turbo).
 
 usage: mlx_whisper.py <repo_root> <scratch_data_dir> <runs> <wav16k>...   -> JSON lines on stdout
 Same output shape as wrbench, so summarize.py reads both.

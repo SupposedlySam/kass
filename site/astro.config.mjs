@@ -4,17 +4,17 @@ import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://herga.mrgnhnt.com',
+  site: 'https://kass.mrgnhnt.com',
   integrations: [
     starlight({
-      title: 'Herga',
+      title: 'Kass',
       description: 'Private, local dictation for Apple Silicon Macs.',
       logo: { src: './src/assets/icon.png', alt: '' },
       favicon: '/favicon.svg',
       head: [{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } }],
       customCss: ['./src/styles/docs.css'],
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mrgnhnt96/herga' }],
-      editLink: { baseUrl: 'https://github.com/mrgnhnt96/herga/edit/main/site/' },
+      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mrgnhnt96/kass' }],
+      editLink: { baseUrl: 'https://github.com/mrgnhnt96/kass/edit/main/site/' },
       sidebar: [
         {
           label: 'Start here',
@@ -25,7 +25,7 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Using Herga',
+          label: 'Using Kass',
           items: [
             { label: 'Hotkeys', slug: 'docs/hotkeys' },
             { label: 'Spoken commands', slug: 'docs/spoken-commands' },
@@ -52,7 +52,7 @@ export default defineConfig({
             { label: 'Changelog', link: '/changelog/' },
             {
               label: 'Report an issue',
-              link: 'https://github.com/mrgnhnt96/herga/issues/new/choose',
+              link: 'https://github.com/mrgnhnt96/kass/issues/new/choose',
               attrs: { target: '_blank' },
             },
           ],

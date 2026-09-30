@@ -9,18 +9,18 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Download Herga</title>
-    <meta name="description" content="Download Herga, private dictation for Apple Silicon Macs." />
+    <title>Download Kass</title>
+    <meta name="description" content="Download Kass, private dictation for Apple Silicon Macs." />
     <link rel="icon" href="/icon.png" />
     <meta name="theme-color" content="#0c0d10" />
   </head>
   <body>
     <main class="wrap page" data-api={REPO_API} data-releases={RELEASES}>
-      <a class="home" href="/"><img src="/icon.png" alt="" width="28" height="28" /> Herga</a>
+      <a class="home" href="/"><img src="/icon.png" alt="" width="28" height="28" /> Kass</a>
 
       <img class="icon" src="/icon.png" alt="" width="104" height="104" />
 
-      <h1 data-title>Getting the latest Herga…</h1>
+      <h1 data-title>Getting the latest Kass…</h1>
       <p class="lede" data-status>
         Your download starts in a moment.
         <noscript
@@ -34,12 +34,12 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
 
       <ol class="steps">
         <li class="star-step">
-          <span><b>Star Herga on GitHub.</b> It’s free and open source, and a star helps other people find it.</span>
+          <span><b>Star Kass on GitHub.</b> It’s free and open source, and a star helps other people find it.</span>
           <StarButton label="Star" size="sm" />
         </li>
         <li data-install><b>Open the DMG</b> from your Downloads folder.</li>
-        <li data-install><b>Drag Herga into Applications.</b> It needs to live there to keep its permissions.</li>
-        <li data-install><b>Open Herga</b> and follow setup.</li>
+        <li data-install><b>Drag Kass into Applications.</b> It needs to live there to keep its permissions.</li>
+        <li data-install><b>Open Kass</b> and follow setup.</li>
       </ol>
 
       <p class="help">Stuck? The <a href="/docs/install/">install guide</a> walks through every step.</p>
@@ -174,7 +174,7 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
     .then(async (response) => {
       if (response.status === 404) {
         fail(
-          'Herga isn’t out yet',
+          'Kass isn’t out yet',
           'The first release is on its way. Star the repository to hear when it lands.',
         );
         return;
@@ -185,7 +185,7 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
       if (!dmg) throw new Error('No DMG in the release');
 
       const version = release.tag_name.replace(/^v/, '');
-      $('title').textContent = `Downloading Herga ${version}`;
+      $('title').textContent = `Downloading Kass ${version}`;
       $('status').textContent = 'For Macs with Apple Silicon. Your download should start right away.';
       $('direct').setAttribute('href', dmg.browser_download_url);
       $('fallback').hidden = false;
@@ -193,7 +193,7 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
     })
     .catch(() => {
       fail(
-        'Download Herga',
+        'Download Kass',
         `We couldn’t reach GitHub to find the newest version. <a href="${releases}">Download it from the Releases page</a> instead.`,
       );
     });

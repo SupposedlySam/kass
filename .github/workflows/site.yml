@@ -1,7 +1,7 @@
 name: Deploy website
 
 # Builds site/ (landing page, docs and changelog) and publishes it to GitHub
-# Pages at herga.mrgnhnt.com.
+# Pages at kass.mrgnhnt.com.
 on:
   push:
     branches: [main]

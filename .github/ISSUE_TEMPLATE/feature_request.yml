@@ -1,5 +1,5 @@
 name: Suggest an idea
-description: Something Herga could do better, or doesn't do yet.
+description: Something Kass could do better, or doesn't do yet.
 labels: [enhancement]
 body:
   - type: textarea

@@ -6,11 +6,11 @@ import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { usePlatform } from '@/platform/PlatformContext';
 
 /**
- * Set while setup is the open screen. macOS makes the user quit Herga for
+ * Set while setup is the open screen. macOS makes the user quit Kass for
  * some permissions to take effect, and after that relaunch dictation may
  * already be able to record, so readiness alone would never bring them back.
  */
-const SETUP_OPEN_KEY = 'herga.setup.open';
+const SETUP_OPEN_KEY = 'kass.setup.open';
 
 function readSetupOpen(): boolean {
   try {

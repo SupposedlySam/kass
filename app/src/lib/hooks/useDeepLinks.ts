@@ -5,8 +5,8 @@ import { usePlatform } from '@/platform/PlatformContext';
 import { router } from '@/router';
 
 /**
- * Open `herga://` links (`deep_link.rs`) in the router, e.g.
- * `herga://captures?capture=<id>` opens that capture.
+ * Open `kass://` links (`deep_link.rs`) in the router, e.g.
+ * `kass://captures?capture=<id>` opens that capture.
  *
  * Rust keeps the latest link until it is taken, so a link that launched the
  * app waits until the router is on screen (`ready`). The event is only a

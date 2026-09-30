@@ -417,7 +417,7 @@ class StreamingCapture:
             await self.use_style(style)
 
     def ignore_cue(self, start, end) -> None:
-        """A sound Herga played during the take (the style cue), between
+        """A sound Kass played during the take (the style cue), between
         two sample offsets: the microphone may have picked it up, and a chime
         reads as a voice. Only voice detection skips it; Whisper hears the
         audio as it was."""
