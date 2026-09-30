@@ -24,6 +24,12 @@ from backend.services.spoken_cleanup import apply_spoken_cleanup
             "okay so the bug is, it only happens when you, when the user logs out",
             "okay so the bug is, it only happens when the user logs out",
         ),
+        (
+            "I just want to say, I just want a dialogue to show up and ask for the correct spelling.",
+            "I just want a dialogue to show up and ask for the correct spelling.",
+        ),
+        ("and so I was going to ask, I was going to see if it works", "and so I was going to see if it works"),
+        ("we should look at the, we should fix the login page", "we should fix the login page"),
         # Stuttered clause
         ("it loads, it's loading everything", "it loads everything"),
         ("but it's looking, it looks good so far", "but it looks good so far"),
@@ -101,6 +107,10 @@ def test_rule_cleans_its_shape(raw, expected):
         "yes we can, yes we can",
         "it's cold, it's really cold",
         "the build fails, it fails on CI",
+        "that's what I wanted to say, I think",
+        "we need to test, we need to ship it today",
+        "I told you to ask, I told her to wait",
+        "I want to say, I want a word with you, not a lecture",
         # Left to the explicit-correction pass
         "Alright, my favorite candy is Bubblegum. No, no, no, it's Reese's Pieces.",
         "",

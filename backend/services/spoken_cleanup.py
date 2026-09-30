@@ -26,6 +26,8 @@ _STUTTER = _word_set(
 # Words a finished phrase cannot end on, so a fragment ending on one was abandoned.
 # Not "a": in "item A, item B" it is a label, not an article.
 _DANGLING = _word_set("the my your our their his her its and but or because")
+# Verbs that need what is said or asked after them: "I just want to say," was abandoned.
+_NEEDS_OBJECT = _word_set("say ask tell mention add explain")
 _SUBORDINATORS = _word_set("when if because while where since until once unless whether")
 _PRONOUNS = _word_set("i you we they he she it")
 _AUX = _word_set("am is are was were will would can could did does do has have had 's 're 'm 've 'll 'd")
@@ -103,6 +105,16 @@ def _repeated_restart(text: str, tokens: list[re.Match]) -> str | None:
             if abandoned and fragment != after[: len(fragment)]:
                 return _drop(text, tokens[j].start(), tokens[i + 1].start())
             break
+        # A longer start, abandoned and begun again with the same words:
+        # "I just want to say, I just want a dialogue" -> "I just want a dialogue".
+        # "say" can end a phrase ("I told you to ask"), so it needs more words in common.
+        shared = 2 if before[-1] in _DANGLING else 3 if before[-1] in _NEEDS_OBJECT else 0
+        if not shared or len(after) <= shared:
+            continue
+        for j in range(i - 2, max(start, i - 6) - 1, -1):
+            fragment = before[j - start :]
+            if fragment[:shared] == after[:shared] and fragment != after[: len(fragment)]:
+                return _drop(text, tokens[j].start(), tokens[i + 1].start())
     return None
 
 
