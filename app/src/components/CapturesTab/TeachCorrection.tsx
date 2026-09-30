@@ -78,6 +78,9 @@ export function useTeachCorrection(
 
   // Exact, so adding or removing a line break at either end counts as a fix.
   const changed = draft !== null && draft !== original;
+  const submit = (text: string) => {
+    if (text !== original && !save.isPending) save.mutate({ expected_text: text, notes });
+  };
 
   return {
     target,
@@ -102,8 +105,13 @@ export function useTeachCorrection(
       if (!changed && !notes) setDraft(null);
     },
     save: () => {
-      if (changed && draft !== null && !save.isPending)
-        save.mutate({ expected_text: draft, notes });
+      if (draft !== null) submit(draft);
+    },
+    /** Saves `text` as the fix, showing it in the edit box while it saves. */
+    saveText: (text: string) => {
+      if (text === original) return;
+      setDraft(text);
+      submit(text);
     },
     undo: () => learned && undo.mutate(learned),
   };
@@ -266,8 +274,8 @@ export function EditableTranscript({
 /**
  * Under an edited transcript: what changed, an optional note and Save. Shown
  * only once the text differs from what Herga wrote. A changed word can go
- * straight into the dictionary, without saving the correction first; spelled
- * differently there, the correction takes the new spelling too.
+ * straight into the dictionary, which saves the correction too, with the
+ * word spelled the way it was added.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
@@ -289,10 +297,8 @@ export function TeachActions({ teach }: { teach: TeachState }) {
       <AddToDictionaryDialog
         word={word}
         onAdded={(written) => {
-          if (!word || written === word.written) return;
-          teach.setDraft(
-            (draft) => draft && respellChange(teach.original, draft, word.written, written),
-          );
+          if (!word || teach.draft === null) return;
+          teach.saveText(respellChange(teach.original, teach.draft, word.written, written));
         }}
         onClose={() => setWord(null)}
       />
@@ -328,7 +334,7 @@ export function TeachActions({ teach }: { teach: TeachState }) {
           className="font-semibold"
           disabled={teach.saving}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={teach.save}
+          onClick={() => teach.save()}
         >
           {t('captures.teach.save')}
           <Kbd className="border-0 px-0 text-accent-foreground">⏎</Kbd>

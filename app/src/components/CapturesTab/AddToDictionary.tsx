@@ -139,8 +139,8 @@ function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
 /**
  * Selecting a word or phrase in a capture's text, or while correcting it,
  * offers to add it to the dictionary: the user types how it should be
- * spelled, and may narrow where it applies. Picked while correcting, a
- * new spelling is written into the correction too.
+ * spelled, and may narrow where it applies. Picked while correcting, the
+ * correction is saved too, with the word spelled the way it was added.
  */
 export function SelectionToDictionary({
   children,
@@ -167,15 +167,16 @@ export function SelectionToDictionary({
   };
 
   const respell = (written: string) => {
-    if (!teach || !field || written === word?.written) return;
+    if (!teach || !field) return;
     // The edit box closes when the dialog takes focus if nothing was changed
-    // yet; the respelled word then starts the correction.
-    teach.setDraft((draft) => {
-      const current = draft ?? teach.original;
-      return current === field.text
-        ? respellSelection(current, field.start, field.end, written)
-        : draft;
-    });
+    // yet, so the text picked from may be the capture's own.
+    const current = teach.draft ?? teach.original;
+    if (current !== field.text) return;
+    teach.saveText(
+      written === word?.written
+        ? current
+        : respellSelection(current, field.start, field.end, written),
+    );
   };
 
   return (
