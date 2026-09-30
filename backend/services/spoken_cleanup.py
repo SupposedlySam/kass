@@ -194,15 +194,17 @@ _VALUE_KINDS = (
     ("name", re.compile(r"[A-Z][a-z]+\b")),
 )
 _NOT_NAMES = frozenset({"I", *(w.title() for w in f"{_WEEKDAYS}|{_MONTHS}".split("|"))})
+# The cue may follow a sentence break too: speech-to-text often hears
+# "noon? No, actually, one" rather than "noon, no actually one".
 _ANSWER_CUE = re.compile(
-    r",\s*(?:or\s+(?:was|is)\s+it|(?:no|sorry)(?:\s*,?\s*(?:actually|wait|I\s+mean))?|actually|I\s+mean)\s*,?\s*",
+    r"[,.?!]\s*(?:or\s+(?:was|is)\s+it|(?:no|sorry)(?:\s*,?\s*(?:actually|wait|I\s+mean))?|actually|I\s+mean)\s*,?\s*",
     re.I,
 )
 # A value followed by a verb starts a new clause ("5 is too many"), not an answer.
 _AUX_AFTER = re.compile(r"\s+(?:is|are|was|were|has|have|had|will|would|can|could|should|does|did)\b", re.I)
 # Names take any verb ("Sarah knows"); a number is followed by plural nouns ("4.5 seconds").
 _VERB_AFTER_NAME = re.compile(_AUX_AFTER.pattern + r"|\s+\w+(?:ed|s)\b", re.I)
-_TAIL = re.compile(r"(?:\s+[a-z]+){0,3}?(?=,)")
+_TAIL = re.compile(r"(?:\s+[a-z]+){0,3}?(?=[,.?!])")
 
 
 def _value_at(text: str, pos: int) -> tuple[str, re.Match] | None:
@@ -233,7 +235,7 @@ def _changed_answer(text: str) -> str | None:
             answer = _value_at(text, cue.end())
             if answer is None or answer[0] != kind:
                 break
-            if cue.group().strip(" ,").lower() == "no" and answer[1].group().lower().startswith("one"):
+            if cue.group().strip(" ,.?!").lower() == "no" and answer[1].group().lower().startswith("one"):
                 break  # "no one"
             answers.append(answer[1])
             pos = answer[1].end()

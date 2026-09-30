@@ -41,6 +41,16 @@ from backend.services.spoken_cleanup import apply_spoken_cleanup
         ("call Bob, no Bill", "call Bill"),
         ("Saturday afternoon, no actually Saturday evening is better", "Saturday evening is better"),
         ("meet at seven, sorry eight", "meet at eight"),
+        # Changed answer after a sentence break
+        (
+            "Can we move lunch to noon? No, actually, 1 at the usual place.",
+            "Can we move lunch to 1 at the usual place.",
+        ),
+        (
+            "So the report is done on Tuesday. No wait, Wednesday. I'll send it then.",
+            "So the report is done on Wednesday. I'll send it then.",
+        ),
+        ("meet at seven. Sorry, eight.", "meet at eight."),
         # Refined answer
         ("we should ship Thursday, well Thursday morning probably", "we should ship Thursday morning"),
         ("ship it Thursday, well probably Thursday morning", "ship it Thursday morning"),
@@ -56,6 +66,8 @@ def test_rule_cleans_its_shape(raw, expected):
         # Not in scope: things said late, "no" as an answer, "well" as an opener.
         "so first pull the latest changes, oh wait, before that, make sure you're on main",
         "did it work? no, it crashed",
+        "is it at 5? No one knows.",
+        "we need 5. Actually 5 is too many.",
         "well, I think so",
         "yes, well I think so",
         # Genuine repetition
