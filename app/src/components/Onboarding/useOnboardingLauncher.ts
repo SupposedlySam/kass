@@ -28,7 +28,9 @@ export function useOnboardingLauncher(serverReady: boolean): boolean {
     if (!platform.metadata.isTauri || !serverReady || !settings || opened.current) return;
     if (settings.onboarding_completed) return;
     opened.current = true;
-    openOnboarding();
+    // An unfinished onboarding carries on where it was, such as after the
+    // quit Input Monitoring needs.
+    openOnboarding({ resume: true });
   }, [platform.metadata.isTauri, serverReady, settings]);
 
   useEffect(() => {

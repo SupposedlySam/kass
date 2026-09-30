@@ -56,7 +56,7 @@ export function FeaturesPage() {
             title={t('settings.features.onboarding.title')}
             description={t('settings.features.onboarding.description')}
             action={
-              <Button size="sm" variant="outline" onClick={openOnboarding}>
+              <Button size="sm" variant="outline" onClick={() => openOnboarding()}>
                 {t('settings.features.onboarding.action')}
               </Button>
             }

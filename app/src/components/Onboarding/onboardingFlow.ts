@@ -93,6 +93,11 @@ export function saveProgress(progress: SavedProgress) {
   }
 }
 
+/** Back to the first step, keeping whether downloads were started. */
+export function restartProgress() {
+  saveProgress({ ...loadProgress(), step: START.step });
+}
+
 export function clearProgress() {
   try {
     localStorage.removeItem(STORAGE_KEY);
