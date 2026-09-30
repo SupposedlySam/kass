@@ -228,6 +228,16 @@ def _symbol(text: str, match: re.Match) -> str | None:
     return symbol
 
 
+def _ends_sentence(text: str, match: re.Match) -> bool:
+    """Whether the mark is the last word of a sentence with words before it.
+
+    Such a mark opens nothing ("can we infer quotes?"); one said as its own
+    sentence ("He said. Quote. I'm tired.") is Whisper's pause after it.
+    """
+    before = text[: match.start()].rstrip(" \t,")
+    return bool(before) and before[-1] not in ".!?:;\n" and re.match(r"[ \t]*(?:[.!?]|$)", text[match.end() :]) is not None
+
+
 def _mark_roles(text: str, matches: list[re.Match]) -> dict[int, str]:
     """What each command match becomes, by index: "open", "close" or a symbol.
 
@@ -250,6 +260,8 @@ def _mark_roles(text: str, matches: list[re.Match]) -> dict[int, str]:
             continue
         explicit_close = match.group("close") or match.group("unquote")
         if match.group("open") or not (explicit_close or opened[kind]):
+            if not match.group("open") and _ends_sentence(text, match):
+                continue
             roles[index] = "open"
             opened[kind].append(index)
             if not match.group("open"):

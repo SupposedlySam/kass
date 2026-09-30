@@ -150,6 +150,9 @@ def test_spoken_marks(raw, expected):
         "he's quote unquote busy",
         "at the end quote the price",
         "Get quotes from both vendors",
+        # A mark that ends its sentence opens nothing, even with another later.
+        "Can we infer quotes? I'd say hello, and expect hello wrapped in quotes.",
+        "Is it in parentheses? Yes, parentheses.",
         "The brackets are loose",
         "I ate a carrot",
         "carrot cake is good",
