@@ -3,14 +3,14 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 :root {
-  --bg: #0d0d0c;
-  --bg-raised: #161614;
-  --bg-card: #1b1a17;
-  --line: #2c2a25;
-  --line-strong: #3d3a32;
-  --ink: #f3efe6;
-  --ink-soft: #b9b3a6;
-  --ink-faint: #7d776b;
+  --bg: #0c0d10;
+  --bg-raised: #14161a;
+  --bg-card: #1a1c21;
+  --line: #2a2d34;
+  --line-strong: #3a3e47;
+  --ink: #f4f2ec;
+  --ink-soft: #b3b7c0;
+  --ink-faint: #767b86;
   --green: #5cf2b0;
   --green-bright: #9af7cf;
   --green-deep: #1f9d6a;
