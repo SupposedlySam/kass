@@ -77,6 +77,22 @@ class Sample:
 
 
 SAMPLES: tuple[Sample, ...] = (
+    # A word talked about as a word is quoted; the prompt has no rule for it
+    # (one was tried and made "type git status" lose its quotes), so these
+    # catch a prompt change that loses it.
+    Sample(
+        name="named-word-quoted",
+        category="smart-cleanup",
+        must_contain_substrings=('"their"',),
+        raw="it keeps writing the word their instead of there",
+    ),
+    Sample(
+        name="named-word-in-question-quoted",
+        category="smart-cleanup",
+        keep_question_mark=True,
+        must_contain_substrings=('"necessary"',),
+        raw="how do you spell the word necessary",
+    ),
     Sample(
         name="heavy-fillers",
         category="smart-cleanup",
