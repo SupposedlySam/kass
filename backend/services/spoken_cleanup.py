@@ -118,6 +118,40 @@ def _repeated_restart(text: str, tokens: list[re.Match]) -> str | None:
     return None
 
 
+_DETERMINERS = _word_set("the a an this these those my your our their his her its some any")
+_PREPOSITIONS = _word_set("for to of in on at with from by about into")
+
+
+def _plural(word: str) -> bool:
+    return len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is"))
+
+
+def _unpaused_restart(text: str, tokens: list[re.Match]) -> str | None:
+    """Drop a restart with no pause: "the tasks for tasks that" -> "the tasks that".
+
+    "X for X" idioms ("word for word", "one on one", "end to end") repeat a singular
+    noun, so only a plural one is taken as a restart.
+    """
+    words = [_norm(t.group()) for t in tokens]
+    for i in range(1, len(tokens) - 2):
+        noun = words[i]
+        if (
+            words[i - 1] not in _DETERMINERS
+            or words[i + 1] not in _PREPOSITIONS
+            or words[i + 2] != noun
+            or noun in _STUTTER
+            or not _plural(noun)
+            or _gap(text, tokens, i - 1)
+            or _gap(text, tokens, i)
+            or _gap(text, tokens, i + 1) not in ("", ",")
+            or i + 3 >= len(tokens)
+            or _gap(text, tokens, i + 2)
+        ):
+            continue
+        return _drop(text, tokens[i].start(), tokens[i + 2].start())
+    return None
+
+
 def _subject(token: str) -> tuple[str, str] | None:
     """("it", "'s") for "it's", ("it", "") for "it"; None when not a pronoun subject."""
     base, _, clitic = _norm(token).partition("'")
@@ -296,6 +330,7 @@ def apply_spoken_cleanup(text: str) -> str:
         cleaned = (
             _immediate_repeat(text, tokens)
             or _repeated_restart(text, tokens)
+            or _unpaused_restart(text, tokens)
             or _stuttered_clause(text, tokens)
             or _changed_answer(text)
             or _refined_answer(text, tokens)

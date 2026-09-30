@@ -57,6 +57,7 @@ Each rule is conservative: it fires on a tight shape or not at all.
 | --- | --- | --- |
 | Immediate repeat | "look at the, the budget" | "look at the budget" |
 | Repeated restart | "I can, I can probably get there" | "I can probably get there" |
+| Unpaused restart | "the tasks for tasks that we found" | "the tasks that we found" |
 | Stuttered clause | "it loads, it's loading everything" | "it's loading everything" |
 | Changed answer | "said Wednesday, or was it Tuesday, no Wednesday" | "said Wednesday" |
 | Refined answer | "ship Thursday, well Thursday morning" | "ship Thursday morning" |
@@ -67,6 +68,11 @@ Details worth pinning down in the implementation:
   comma. Keep genuine repetition: "very, very good", "no, no, no", "had had".
 - **Repeated restart**: a run of 2 or more words repeated straight after itself,
   where the second run continues ("I can, I can probably"). Keep the second run.
+- **Unpaused restart**: a restart with no comma, which transcripts often lack:
+  determiner, noun, preposition, the same noun again, then more of the clause.
+  Keep the second noun. Only a plural noun counts: the "X for X" idioms ("word
+  for word", "one on one", "end to end") repeat a singular one, so a singular
+  repeat is left to the model.
 - **Stuttered clause**: two clauses separated by a comma that start with the
   same subject and a different form of the same verb ("it loads, it's
   loading"). Keep the second. Requires the shared subject; do not guess.

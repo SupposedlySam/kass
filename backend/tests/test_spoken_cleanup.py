@@ -30,6 +30,12 @@ from backend.services.spoken_cleanup import apply_spoken_cleanup
         ),
         ("and so I was going to ask, I was going to see if it works", "and so I was going to see if it works"),
         ("we should look at the, we should fix the login page", "we should fix the login page"),
+        # Restart with no pause
+        (
+            "let's get started working on the tasks for tasks that we just discovered",
+            "let's get started working on the tasks that we just discovered",
+        ),
+        ("look at the files in, files that changed", "look at the files that changed"),
         # Stuttered clause
         ("it loads, it's loading everything", "it loads everything"),
         ("but it's looking, it looks good so far", "but it looks good so far"),
@@ -111,6 +117,13 @@ def test_rule_cleans_its_shape(raw, expected):
         "we need to test, we need to ship it today",
         "I told you to ask, I told her to wait",
         "I want to say, I want a word with you, not a lecture",
+        # Repeated-noun idioms
+        "we translated it word for word today",
+        "I had the one on one that we planned",
+        "the end to end tests pass",
+        "we ran the tests for tests",
+        "trade tasks for tasks that matter",
+        "the class for class that we teach",
         # Left to the explicit-correction pass
         "Alright, my favorite candy is Bubblegum. No, no, no, it's Reese's Pieces.",
         "",
