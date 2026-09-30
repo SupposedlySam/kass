@@ -13,6 +13,7 @@ import { HistoryRetentionRow } from './HistoryRetentionRow';
 import { LaunchAtLoginRow } from './LaunchAtLoginRow';
 import { SettingRow, SettingSection } from './SettingRow';
 import { ThemeSelect } from './ThemeSelect';
+import { VersionRow } from './VersionRow';
 
 export function GeneralPage() {
   const { t } = useTranslation();
@@ -24,6 +25,8 @@ export function GeneralPage() {
   return (
     <>
       <SettingSection title={t('settings.general.sectionApp')}>
+        <VersionRow />
+
         <SettingRow
           title={t('settings.general.server.title')}
           description={t('settings.general.server.description')}

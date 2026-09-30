@@ -1,5 +1,6 @@
 import { Link, useMatchRoute } from '@tanstack/react-router';
 import {
+  ArrowUpCircle,
   Box,
   Captions,
   ChartColumn,
@@ -11,7 +12,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import hergaLogo from '@/assets/herga-logo.png';
 import { type ModelAlerts, useModelAlerts } from '@/lib/hooks/useModelAlerts';
+import { useUpdateCheck } from '@/lib/hooks/useUpdateCheck';
 import { cn } from '@/lib/utils/cn';
+import type { Release } from '@/lib/utils/releases';
+import { usePlatform } from '@/platform/PlatformContext';
 import { version } from '../../package.json';
 
 const tabs: Array<{ id: string; path: string; icon: LucideIcon; labelKey: string }> = [
@@ -21,11 +25,12 @@ const tabs: Array<{ id: string; path: string; icon: LucideIcon; labelKey: string
   { id: 'settings', path: '/settings', icon: SlidersHorizontal, labelKey: 'nav.settings' },
 ];
 
-/** The app's left rail: logo, labeled icons, version. */
+/** The app's left rail: logo, labeled icons, version (or the update waiting). */
 export function Sidebar() {
   const { t } = useTranslation();
   const matchRoute = useMatchRoute();
   const modelAlerts = useModelAlerts();
+  const update = useUpdateCheck();
 
   return (
     <nav
@@ -57,8 +62,32 @@ export function Sidebar() {
         );
       })}
 
-      <span className="mt-auto font-mono text-[10px] text-muted-foreground/60">v{version}</span>
+      {update ? (
+        <UpdateButton update={update} />
+      ) : (
+        <span className="mt-auto font-mono text-[10px] text-muted-foreground/60">v{version}</span>
+      )}
     </nav>
+  );
+}
+
+/** Takes the place of the version when a newer release is out; opens its download page. */
+function UpdateButton({ update }: { update: Release }) {
+  const { t } = useTranslation();
+  const platform = usePlatform();
+  const tip = t('nav.update.tip', { latest: update.version, current: version });
+  return (
+    <button
+      type="button"
+      title={tip}
+      aria-label={tip}
+      onClick={() => platform.filesystem.openPath(update.url)}
+      className="mt-auto flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] text-accent hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <ArrowUpCircle className="h-[18px] w-[18px]" strokeWidth={1.7} />
+      {t('nav.update.label')}
+      <span className="font-mono text-[9px] opacity-80">v{update.version}</span>
+    </button>
   );
 }
 

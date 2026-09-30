@@ -15,6 +15,10 @@
     "insights": "Insights",
     "models": "Models",
     "settings": "Settings",
+    "update": {
+      "label": "Update",
+      "tip": "Herga {{latest}} is out (you have {{current}}). Click to download it."
+    },
     "alerts": {
       "missing": "{{role}} model {{name}} isn't downloaded. Dictation can't start without it.",
       "downloadFailed": "Downloading {{name}} failed."
@@ -577,6 +581,12 @@
       "sectionApp": "App",
       "server": {
         "title": "Local server",
+      "version": {
+        "title": "Version",
+        "current": "Herga {{version}}",
+        "available": "Herga {{current}}. Version {{latest}} is out.",
+        "download": "Get {{latest}}"
+      },
         "description": "Runs Whisper and Qwen3 on this Mac. Nothing leaves your machine."
       },
       "connection": {

@@ -20,6 +20,7 @@ mod keyboard_layout;
 mod keystroke_insert;
 mod login_item;
 mod server_process;
+mod server_version;
 mod sound_cues;
 mod synthetic_keys;
 mod text_insert;
@@ -375,7 +376,10 @@ async fn start_server(
     }
 
     // Check if a herga server is already running on our port (e.g. one left
-    // over from a previous session, or started by hand via `python`/`uvicorn`)
+    // over from a previous session, or started by hand via `python`/`uvicorn`).
+    // It's reused only when it's this version's; after an update, a server
+    // left over from the old version is stopped and a new one started.
+    let app_version = app.package_info().version.to_string();
     {
         use std::process::Command;
         if let Ok(output) = Command::new("lsof")
@@ -472,6 +476,19 @@ async fn start_server(
                 eprintln!("DEV MODE: No server found on port {}", SERVER_PORT);
                 eprintln!("");
                 eprintln!("Start the Python server in a separate terminal:");
+                            let running = server_version::running(SERVER_PORT);
+                            if !server_version::is_current(running.as_deref(), &app_version) {
+                                println!(
+                                    "Found herga-server {} on port {} (PID: {}), but this is {}; replacing it",
+                                    running.as_deref().unwrap_or("of unknown version"),
+                                    SERVER_PORT,
+                                    pid,
+                                    app_version
+                                );
+                                server_process::stop(pid)?;
+                                wait_for_server_exit().await?;
+                                break;
+                            }
                 eprintln!("  bun run dev:server");
                 eprintln!("=================================================================");
                 eprintln!("");
@@ -485,6 +502,25 @@ async fn start_server(
 
     // Build common args
     let data_dir_str = data_dir
+                            let running = server_version::running(SERVER_PORT);
+                            // A release build replaces an old server, such as
+                            // one still named voicebox-server. A dev build keeps
+                            // the server started by hand, whatever its version.
+                            if !cfg!(debug_assertions)
+                                && !server_version::is_current(running.as_deref(), &app_version)
+                            {
+                                if let Ok(pid) = pid_str.parse::<u32>() {
+                                    println!(
+                                        "Server on port {} is {}, but this is {}; replacing it",
+                                        SERVER_PORT,
+                                        running.as_deref().unwrap_or("of unknown version"),
+                                        app_version
+                                    );
+                                    server_process::stop(pid)?;
+                                    wait_for_server_exit().await?;
+                                    break;
+                                }
+                            }
         .to_str()
         .ok_or_else(|| "Invalid data dir path".to_string())?
         .to_string();
