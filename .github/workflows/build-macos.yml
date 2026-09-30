@@ -1,8 +1,13 @@
 name: Build macOS app
 
-# Manual runs only, and only by the repo owner (see the job's `if`).
+# Manual runs only, and only by the repo owner (see each job's `if`).
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a GitHub release (tag v<version> from tauri.conf.json; bump the version first)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,15 +17,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  app-tests:
     # Anyone with write access can press "Run workflow"; skip unless it's the repo owner.
+    if: github.triggering_actor == 'mrgnhnt96' && github.actor == 'mrgnhnt96'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun run test:dictation
+
+  build:
     if: github.triggering_actor == 'mrgnhnt96' && github.actor == 'mrgnhnt96'
     # Apple Silicon runner: the server runs on MLX, which is arm64-only.
     runs-on: macos-15
     timeout-minutes: 60
+    outputs:
+      name: ${{ steps.zip.outputs.name }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
+
+      # Every version string has to agree, and a release needs a version
+      # that hasn't been tagged yet; fail now rather than after the build.
+      - name: Check version
+        id: version
+        run: |
+          version=$(jq -r .version tauri/src-tauri/tauri.conf.json)
+          for other in \
+            "$(jq -r .version package.json)" \
+            "$(jq -r .version tauri/package.json)" \
+            "$(sed -n 's/^version *= *"\(.*\)"/\1/p' tauri/src-tauri/Cargo.toml | head -n 1)" \
+            "$(sed -n 's/^__version__ *= *"\(.*\)"/\1/p' backend/__init__.py)"; do
+            if [ "$other" != "$version" ]; then
+              echo "::error::Versions disagree: tauri.conf.json has $version, another file has $other"
+              exit 1
+            fi
+          done
+          if [ "${{ inputs.release }}" = true ] && git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "::error::Tag v$version already exists. Bump the version to release."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -46,6 +96,13 @@ jobs:
       - name: Install Python dependencies
         run: ./scripts/setup-python.sh
 
+      # test_hf_progress_tracker fails on its own (its tqdm patch captures
+      # nothing) and has since before this workflow existed.
+      - name: Backend tests
+        run: >-
+          backend/venv/bin/python -m pytest backend/tests -q
+          --deselect backend/tests/test_progress.py::test_hf_progress_tracker
+
       - name: Build Python server
         run: ./scripts/build-server.sh
 
@@ -62,8 +119,7 @@ jobs:
       - name: Zip app
         id: zip
         run: |
-          version=$(jq -r .version tauri/src-tauri/tauri.conf.json)
-          name="Voicebox-${version}-${GITHUB_SHA::7}-macos-arm64"
+          name="Voicebox-${{ steps.version.outputs.version }}-${GITHUB_SHA::7}-macos-arm64"
           ditto -c -k --keepParent tauri/src-tauri/target/release/bundle/macos/Voicebox.app "$name.zip"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -73,3 +129,137 @@ jobs:
           path: ${{ steps.zip.outputs.name }}.zip
           compression-level: 0
           retention-days: 30
+
+  # Checks the downloaded app itself, on a fresh machine, the way a user gets it.
+  smoke-test:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      APP: Voicebox.app
+      SERVER: Voicebox.app/Contents/Resources/voicebox-server/voicebox-server
+      VERSION: ${{ needs.build.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.name }}
+
+      - name: Unzip
+        run: ditto -x -k "${{ needs.build.outputs.name }}.zip" .
+
+      - name: Signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          for binary in "$APP" "$SERVER"; do
+            flags=$(codesign -dv "$binary" 2>&1 | sed -n 's/.*flags=[^(]*(\(.*\)).*/\1/p')
+            echo "$binary: $flags"
+            [[ "$flags" == *runtime* ]] || { echo "::error::$binary is not signed with the hardened runtime"; exit 1; }
+          done
+
+      # Without these the hardened runtime blocks the microphone and MLX's JIT.
+      - name: Entitlements
+        run: |
+          for binary in "$APP" "$SERVER"; do
+            entitlements=$(codesign -d --entitlements :- "$binary" 2>/dev/null)
+            for key in com.apple.security.device.audio-input com.apple.security.cs.allow-jit \
+              com.apple.security.cs.disable-library-validation; do
+              [[ "$entitlements" == *"$key"* ]] || { echo "::error::$binary is missing $key"; exit 1; }
+            done
+          done
+
+      - name: Info.plist
+        run: |
+          plist="$APP/Contents/Info.plist"
+          [ "$(plutil -extract CFBundleShortVersionString raw "$plist")" = "$VERSION" ] ||
+            { echo "::error::Info.plist version isn't $VERSION"; exit 1; }
+          [ "$(plutil -extract CFBundleIdentifier raw "$plist")" = sh.voicebox.app ] ||
+            { echo "::error::Bundle identifier changed; installs would lose their data and grants"; exit 1; }
+          plutil -extract NSMicrophoneUsageDescription raw "$plist" >/dev/null ||
+            { echo "::error::Info.plist has no microphone usage description"; exit 1; }
+
+      - name: Server bundles every service module
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q pyinstaller pytest
+          VOICEBOX_TEST_BINARY="$SERVER" /tmp/venv/bin/python -m pytest backend/tests/test_frozen_services.py -q \
+            -p no:cacheprovider --noconftest
+
+      - name: Server starts and answers /health
+        run: |
+          "$SERVER" --data-dir "$RUNNER_TEMP/server-data" --port 17555 > server.log 2>&1 &
+          pid=$!
+          for _ in $(seq 90); do
+            health=$(curl -sf http://127.0.0.1:17555/health) && break
+            kill -0 "$pid" 2>/dev/null || { cat server.log; echo "::error::Server exited"; exit 1; }
+            sleep 2
+          done
+          kill "$pid" || true
+          [ -n "${health:-}" ] || { cat server.log; echo "::error::Server never answered /health"; exit 1; }
+          echo "$health" | jq .
+          [ "$(echo "$health" | jq -r .status)" = healthy ] || { echo "::error::Server isn't healthy"; exit 1; }
+          [ "$(echo "$health" | jq -r .version)" = "$VERSION" ] || { echo "::error::Server version isn't $VERSION"; exit 1; }
+
+      # The app's page asks Tauri to start the bundled server on launch, so a
+      # server answering on the app's port means the window, the frontend
+      # bundle and the sidecar path all work.
+      - name: App launches and starts its server
+        run: |
+          "$APP/Contents/MacOS/voicebox" > app.log 2>&1 &
+          pid=$!
+          for _ in $(seq 90); do
+            health=$(curl -sf http://127.0.0.1:17493/health) && break
+            kill -0 "$pid" 2>/dev/null || { cat app.log; echo "::error::App exited"; exit 1; }
+            sleep 2
+          done
+          kill "$pid" || true
+          pkill -f voicebox-server || true
+          [ -n "${health:-}" ] || { cat app.log; echo "::error::App never started its server"; exit 1; }
+          [ "$(echo "$health" | jq -r .version)" = "$VERSION" ] || { echo "::error::App's server version isn't $VERSION"; exit 1; }
+
+  release:
+    if: inputs.release
+    needs: [app-tests, build, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v${{ needs.build.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.name }}
+
+      # The app's update check reads releases/latest and only counts a plain
+      # vX.Y.Z tag as newer, so publish a full release under that tag.
+      - name: Publish release
+        run: |
+          asset="Voicebox-${{ needs.build.outputs.version }}-macos-arm64.zip"
+          mv "${{ needs.build.outputs.name }}.zip" "$asset"
+          previous=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          {
+            if [ -n "$previous" ]; then
+              echo "## Changes since $previous"
+              git log --no-merges --pretty='- %s' "$previous..$GITHUB_SHA"
+            else
+              echo "Built from ${GITHUB_SHA::7} on \`$GITHUB_REF_NAME\`."
+            fi
+            echo
+            echo "## Install"
+            echo "Unzip, move Voicebox.app to /Applications, then run:"
+            echo
+            echo '```'
+            echo 'xattr -dr com.apple.quarantine /Applications/Voicebox.app'
+            echo '```'
+          } > notes.md
+          gh release create "$TAG" "$asset" --target "$GITHUB_SHA" \
+            --title "Voicebox ${{ needs.build.outputs.version }}" --notes-file notes.md
