@@ -11,8 +11,8 @@ description: Download Herga, move it to Applications and give it the permissions
 
 ## Download and install
 
-1. Download the latest `.dmg` from the [Releases page](https://github.com/mrgnhnt96/herga/releases/latest).
-2. Open it and drag **Herga** into **Applications**.
+1. Go to the [download page](/download/). The newest `.dmg` starts downloading from GitHub on its own. If it doesn't, use the link on that page or grab it from the [Releases page](https://github.com/mrgnhnt96/herga/releases/latest).
+2. Open the `.dmg` from your Downloads folder and drag **Herga** into **Applications**.
 3. Open Herga from Applications.
 
 :::caution[Keep it in Applications]
@@ -37,7 +37,7 @@ Any permission step can be skipped and granted later. You can run onboarding aga
 
 ## Updating
 
-Herga tells you when a new version is out. Download the newest `.dmg` from Releases and replace the copy in Applications. Your captures, dictionary, styles and models are kept.
+Herga tells you when a new version is out. Get the newest `.dmg` from the [download page](/download/) and replace the copy in Applications. Your captures, dictionary, styles and models are kept.
 
 Updates are signed with the same Developer ID, so Herga keeps its Microphone, Accessibility and Input Monitoring permissions.
 
