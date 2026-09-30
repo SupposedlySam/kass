@@ -1,13 +1,10 @@
 name: Build macOS app
 
 # Manual runs only, and only by the repo owner (see each job's `if`).
+# Builds and tests the app without publishing it; releases come from
+# pushing a version tag (scripts/release.sh, release.yml).
 on:
   workflow_dispatch:
-    inputs:
-      release:
-        description: Publish a GitHub release (tag v<version> from tauri.conf.json; bump the version first)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -50,8 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Every version string has to agree, and a release needs a version
-      # that hasn't been tagged yet; fail now rather than after the build.
+      # Every version string has to agree; fail now rather than after the build.
       - name: Check version
         id: version
         run: |
@@ -66,10 +62,6 @@ jobs:
               exit 1
             fi
           done
-          if [ "${{ inputs.release }}" = true ] && git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
-            echo "::error::Tag v$version already exists. Bump the version to release."
-            exit 1
-          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python
@@ -225,47 +217,3 @@ jobs:
           [ -n "${health:-}" ] || { cat app.log; echo "::error::App never started its server"; exit 1; }
           [ "$(echo "$health" | jq -r .version)" = "$VERSION" ] || { echo "::error::App's server version isn't $VERSION"; exit 1; }
 
-  release:
-    if: inputs.release
-    needs: [app-tests, build, smoke-test]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: v${{ needs.build.outputs.version }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.name }}
-
-      # The app's update check reads releases/latest and only counts a plain
-      # vX.Y.Z tag as newer, so publish a full release under that tag.
-      - name: Publish release
-        run: |
-          asset="Voicebox-${{ needs.build.outputs.version }}-macos-arm64.zip"
-          mv "${{ needs.build.outputs.name }}.zip" "$asset"
-          previous=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
-          {
-            if [ -n "$previous" ]; then
-              echo "## Changes since $previous"
-              git log --no-merges --pretty='- %s' "$previous..$GITHUB_SHA"
-            else
-              echo "Built from ${GITHUB_SHA::7} on \`$GITHUB_REF_NAME\`."
-            fi
-            echo
-            echo "## Install"
-            echo "Unzip, move Voicebox.app to /Applications, then run:"
-            echo
-            echo '```'
-            echo 'xattr -dr com.apple.quarantine /Applications/Voicebox.app'
-            echo '```'
-          } > notes.md
-          gh release create "$TAG" "$asset" --target "$GITHUB_SHA" \
-            --title "Voicebox ${{ needs.build.outputs.version }}" --notes-file notes.md
