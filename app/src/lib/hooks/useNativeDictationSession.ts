@@ -55,6 +55,9 @@ export function useNativeDictationSession(): NativeDictationSession {
   // one it remembered from the last launch.
   const deviceKnown = settings !== undefined;
   const liveText = settings?.live_text ?? false;
+  // Unknown until settings load, so Rust keeps its default. Rust also needs
+  // the beta channel on (docs/plans/VOICE_EDITS.md).
+  const voiceEdits = settings?.voice_edits;
 
   const [pillState, setPillState] = useState<CapturePillState>('hidden');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -86,8 +89,9 @@ export function useNativeDictationSession(): NativeDictationSession {
       inputDeviceId,
       deviceKnown,
       liveText,
+      voiceEdits,
     }).catch((err) => console.warn('[dictate] dictation_configure failed:', err));
-  }, [inputDeviceId, deviceKnown, liveText]);
+  }, [inputDeviceId, deviceKnown, liveText, voiceEdits]);
 
   useEffect(() => {
     const apply = (event: NativeDictationEvent) => {

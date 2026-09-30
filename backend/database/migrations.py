@@ -209,6 +209,13 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "live_text BOOLEAN NOT NULL DEFAULT 0",
             "live_text",
         )
+    if "voice_edits" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            "voice_edits BOOLEAN NOT NULL DEFAULT 1",
+            "voice_edits",
+        )
     if "sound_cues" not in columns:
         _add_column(
             engine,

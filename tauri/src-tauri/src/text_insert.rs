@@ -612,22 +612,63 @@ fn common_prefix(a: &str, b: &str) -> usize {
         .unwrap_or_else(|| a.len().min(b.len()))
 }
 
+/// Byte length of the longest common suffix, on a char boundary.
+fn common_suffix(a: &str, b: &str) -> usize {
+    a.chars()
+        .rev()
+        .zip(b.chars().rev())
+        .take_while(|(x, y)| x == y)
+        .map(|(x, _)| x.len_utf8())
+        .sum()
+}
+
+/// Whether byte `at` of `text` falls between two letters or digits.
+fn mid_word(text: &str, at: usize) -> bool {
+    let around = (text[..at].chars().next_back(), text[at..].chars().next());
+    matches!(around, (Some(a), Some(b)) if a.is_alphanumeric() && b.is_alphanumeric())
+}
+
 /// Make the owned text read `text`, rewriting only the part after what the
-/// two share. `before` is the [`intact`] state of the field.
+/// two share, and with `keep_tail` also leaving the end they share in place
+/// (a voice edit changes one word), then putting the caret back after it.
+/// `before` is the [`intact`] state of the field.
 fn rewrite<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     before: Observation,
     text: &str,
+    keep_tail: bool,
     mut sleep: impl FnMut(Duration),
 ) -> Result<Owned, LiveError> {
-    let keep = common_prefix(&owned.text, text);
+    let mut keep = common_prefix(&owned.text, text);
+    let mut tail = 0;
+    if keep_tail {
+        // Whole words, as the app's undo and autocorrect expect of an edit.
+        if mid_word(&owned.text, keep) || mid_word(text, keep) {
+            keep = owned.text[..keep]
+                .char_indices()
+                .rev()
+                .find(|(_, c)| !c.is_alphanumeric())
+                .map_or(0, |(i, c)| i + c.len_utf8());
+        }
+        tail = common_suffix(&owned.text[keep..], &text[keep..]);
+        if mid_word(&owned.text, owned.text.len() - tail) || mid_word(text, text.len() - tail) {
+            let shared = &owned.text[owned.text.len() - tail..];
+            tail -= shared
+                .find(|c: char| !c.is_alphanumeric())
+                .unwrap_or(shared.len());
+        }
+    }
     let kept16 = utf16_len(&owned.text[..keep]);
+    let tail16 = utf16_len(&owned.text[owned.text.len() - tail..]);
+    let new_part = &text[keep..text.len() - tail];
     let replaced = TextRange {
         location: owned.start + kept16,
-        length: utf16_len(&owned.text) - kept16,
+        length: utf16_len(&owned.text) - kept16 - tail16,
     };
-    if replaced.length > 0 && target.set_selection(replaced).is_err() {
+    // A write at the caret needs no selection first.
+    let selects = replaced.length > 0 || tail > 0;
+    if selects && target.set_selection(replaced).is_err() {
         return match intact(target, owned) {
             Some(_) => Err(LiveError::NotApplied),
             None => Err(LiveError::Uncertain(
@@ -635,28 +676,26 @@ fn rewrite<T: AxTextTarget>(
             )),
         };
     }
-    let set_ok = target.set_selected_text(&text[keep..]).is_ok();
+    let set_ok = target.set_selected_text(new_part).is_ok();
     let count0 = before.char_count.unwrap_or_default();
     let written = Owned {
         start: owned.start,
         text: text.to_string(),
         join: owned.join.clone(),
     };
+    let caret = |location| TextRange {
+        location,
+        length: 0,
+    };
     let expected = Observation {
-        selection: Some(TextRange {
-            location: written.end(),
-            length: 0,
-        }),
+        selection: Some(caret(replaced.location + utf16_len(new_part))),
         char_count: Some(count0 - utf16_len(&owned.text) + utf16_len(text)),
     };
     let untouched = Observation {
-        selection: Some(if replaced.length > 0 {
+        selection: Some(if selects {
             replaced
         } else {
-            TextRange {
-                location: owned.end(),
-                length: 0,
-            }
+            caret(owned.end())
         }),
         char_count: Some(count0),
     };
@@ -664,6 +703,10 @@ fn rewrite<T: AxTextTarget>(
     loop {
         let after = target.observe();
         if after == expected && text_in(target, written.range()).as_deref() == Some(text) {
+            if tail > 0 {
+                // Where the take left it, so the take still reads as intact.
+                let _ = target.set_selection(caret(written.end()));
+            }
             return Ok(written);
         }
         if after != untouched {
@@ -672,11 +715,8 @@ fn rewrite<T: AxTextTarget>(
             ));
         }
         if !set_ok || polls_left == 0 {
-            if replaced.length > 0 {
-                let _ = target.set_selection(TextRange {
-                    location: owned.end(),
-                    length: 0,
-                });
+            if selects {
+                let _ = target.set_selection(caret(owned.end()));
             }
             return Err(LiveError::NotApplied);
         }
@@ -741,19 +781,20 @@ pub fn extend_live<T: AxTextTarget>(
     if text.len() == owned.text.len() {
         return Ok(owned.clone());
     }
-    rewrite(target, owned, before, text, sleep)
+    rewrite(target, owned, before, text, false, sleep)
 }
 
 /// Make the owned text exactly `final_text`, fitted to the text around it
 /// and without a repeat of the words after it (empty removes it), unless
-/// the user has touched the field since.
+/// the user has touched the field since. Returns the text as it now stands
+/// in the field.
 pub fn finish_live<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     final_text: &str,
     drop_repeat: bool,
     sleep: impl FnMut(Duration),
-) -> Result<(), LiveError> {
+) -> Result<Owned, LiveError> {
     let state = intact(target, owned);
     // The field's own text resumes where the owned text ends.
     let count = state.and_then(|s| s.char_count);
@@ -766,10 +807,10 @@ pub fn finish_live<T: AxTextTarget>(
         drop_repeat,
     );
     if *final_text == owned.text {
-        return Ok(());
+        return Ok(owned.clone());
     }
     let before = state.ok_or(LiveError::Edited)?;
-    rewrite(target, owned, before, final_text, sleep).map(|_| ())
+    rewrite(target, owned, before, final_text, false, sleep)
 }
 
 /// [`begin_live`] on the focused element of the app with `pid`. Blocking.
@@ -793,7 +834,7 @@ pub fn extend_live_focused(pid: i32, owned: &Owned, text: &str) -> Result<Owned,
 }
 
 /// [`finish_live`] on the focused element of the app with `pid`. Blocking.
-pub fn finish_live_focused(pid: i32, owned: &Owned, final_text: &str) -> Result<(), LiveError> {
+pub fn finish_live_focused(pid: i32, owned: &Owned, final_text: &str) -> Result<Owned, LiveError> {
     match macos::FocusedElement::of_app(pid) {
         Some(element) => finish_live(
             &element,
@@ -803,6 +844,94 @@ pub fn finish_live_focused(pid: i32, owned: &Owned, final_text: &str) -> Result<
             std::thread::sleep,
         ),
         None => Err(LiveError::Edited),
+    }
+}
+
+// ========================================================================
+// Voice edits: changing the last take after it went in
+// (docs/plans/VOICE_EDITS.md)
+// ========================================================================
+
+/// `text` as owned text, when the field shows it right before a bare caret:
+/// how a take that was just written leaves it. `None` where it can't be read
+/// back (secure fields, terminals, fields that don't expose their text).
+pub fn owned_before_caret<T: AxTextTarget>(
+    target: &T,
+    bundle_id: Option<&str>,
+    text: &str,
+) -> Option<Owned> {
+    if text.is_empty() || !context_readable(target, bundle_id) {
+        return None;
+    }
+    let sel = target.observe().selection.filter(|s| s.length == 0)?;
+    let owned = Owned {
+        start: sel.location - utf16_len(text),
+        text: text.to_string(),
+        join: join::Context::default(),
+    };
+    (owned.start >= 0 && text_in(target, owned.range()).as_deref() == Some(text)).then_some(owned)
+}
+
+/// [`owned_before_caret`] in `pid`'s focused element. Blocking.
+pub fn owned_before_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Option<Owned> {
+    let element = macos::FocusedElement::of_app(pid)?;
+    owned_before_caret(&element, bundle_id, text)
+}
+
+/// Why a voice edit changed nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditError {
+    /// The field no longer shows the take as it was left (the user typed,
+    /// moved the caret, or focus moved), or the edit was for other text.
+    Changed,
+    /// The app did not apply the write; the field is as it was.
+    NotApplied,
+    /// The app writes Accessibility text away from the caret (Gecko).
+    Unsupported,
+    /// The field no longer matches what was written, for an unknown reason.
+    Uncertain(String),
+}
+
+/// Make the owned take end in `after` instead of `before` (the part the
+/// server saw), changing only what differs. Nothing is written unless the
+/// field still shows the take with the caret after it, and a write the app
+/// ignores leaves the field as it was.
+pub fn edit_owned<T: AxTextTarget>(
+    target: &T,
+    owned: &Owned,
+    before: &str,
+    after: &str,
+    writes_at_caret: bool,
+    sleep: impl FnMut(Duration),
+) -> Result<Owned, EditError> {
+    if !writes_at_caret {
+        return Err(EditError::Unsupported);
+    }
+    let head = owned.text.strip_suffix(before).ok_or(EditError::Changed)?;
+    let text = format!("{head}{after}");
+    let now = intact(target, owned).ok_or(EditError::Changed)?;
+    if text == owned.text {
+        return Ok(owned.clone());
+    }
+    rewrite(target, owned, now, &text, true, sleep).map_err(|error| match error {
+        LiveError::Edited => EditError::Changed,
+        LiveError::NotApplied => EditError::NotApplied,
+        LiveError::Uncertain(message) => EditError::Uncertain(message),
+    })
+}
+
+/// [`edit_owned`] in the focused element of the app with `pid`. Blocking.
+/// Focus having moved to another element reads as a change.
+pub fn edit_focused(
+    pid: i32,
+    owned: &Owned,
+    before: &str,
+    after: &str,
+) -> Result<Owned, EditError> {
+    let writes = writes_at_caret(pid);
+    match macos::FocusedElement::of_app(pid) {
+        Some(element) => edit_owned(&element, owned, before, after, writes, std::thread::sleep),
+        None => Err(EditError::Changed),
     }
 }
 
@@ -1577,6 +1706,8 @@ mod tests {
         set_calls: Cell<u32>,
         /// AXStringForRange is unsupported.
         ranges_unreadable: bool,
+        /// Every text written with `set_selected_text`.
+        written: RefCell<Vec<String>>,
     }
 
     impl FakeField {
@@ -1594,6 +1725,7 @@ mod tests {
                 blind_after_set: false,
                 set_calls: Cell::new(0),
                 ranges_unreadable: false,
+                written: RefCell::new(Vec::new()),
             }
         }
 
@@ -1650,6 +1782,7 @@ mod tests {
         }
         fn set_selected_text(&self, text: &str) -> Result<(), i32> {
             self.set_calls.set(self.set_calls.get() + 1);
+            self.written.borrow_mut().push(text.to_string());
             if self.applies {
                 if self.apply_delay_reads.get() == 0 {
                     self.apply(text);
@@ -2274,5 +2407,136 @@ mod tests {
         ignored.attempt(7, || Outcome::Uncertain("?".into()));
         let again = ignored.attempt(7, || Outcome::Inserted { exact: true });
         assert_eq!(again, Attempt::Inserted { verified: true });
+    }
+
+    // ---- voice edits ----
+
+    const TAKE: &str = "Hi Megan, see you Tuesday.";
+
+    /// A field where a take was just written after "Note: ", caret after it.
+    fn after_a_take() -> (FakeField, Owned) {
+        let text = format!("Note: {TAKE}");
+        let field = FakeField::new(&text, range(utf16_len(&text), 0));
+        let owned = owned_before_caret(&field, Some("com.apple.TextEdit"), TAKE).unwrap();
+        (field, owned)
+    }
+
+    fn edit(
+        field: &FakeField,
+        owned: &Owned,
+        before: &str,
+        after: &str,
+    ) -> Result<Owned, EditError> {
+        edit_owned(field, owned, before, after, true, |_| {})
+    }
+
+    #[test]
+    fn a_take_just_written_is_owned_where_it_reads_back() {
+        let (_, owned) = after_a_take();
+        assert_eq!((owned.start, owned.text.as_str()), (6, TAKE));
+        // A selection, other text, a terminal: not a take Herga can find.
+        let field = FakeField::new("Hi Megan", range(0, 2));
+        assert_eq!(owned_before_caret(&field, None, "Hi Megan"), None);
+        let field = FakeField::new("Hi Meg", range(6, 0));
+        assert_eq!(owned_before_caret(&field, None, "Hi Megan"), None);
+        let field = FakeField::new("ls -la", range(6, 0));
+        assert_eq!(
+            owned_before_caret(&field, Some("com.apple.Terminal"), "ls -la"),
+            None
+        );
+    }
+
+    #[test]
+    fn an_edit_changes_only_the_word_and_leaves_the_caret_after_the_take() {
+        let (field, owned) = after_a_take();
+        let fixed = TAKE.replace("Megan", "Morgan");
+        let owned = edit(&field, &owned, TAKE, &fixed).unwrap();
+        assert_eq!(field.contents(), format!("Note: {fixed}"));
+        assert_eq!(*field.written.borrow(), vec!["Morgan".to_string()]);
+        assert_eq!(field.sel.get(), range(utf16_len(&field.contents()), 0));
+        // The take is still owned as it now reads: a second edit works on it.
+        assert_eq!(owned.text, fixed);
+        let again = fixed.replace("Tuesday", "Thursday");
+        edit(&field, &owned, &fixed, &again).unwrap();
+        assert_eq!(field.contents(), format!("Note: {again}"));
+    }
+
+    #[test]
+    fn an_edit_may_see_only_the_end_of_a_long_take() {
+        let (field, owned) = after_a_take();
+        edit(&field, &owned, "see you Tuesday.", "see you Thursday.").unwrap();
+        assert_eq!(field.contents(), "Note: Hi Megan, see you Thursday.");
+    }
+
+    #[test]
+    fn a_deleted_word_goes_with_its_space() {
+        let (field, owned) = after_a_take();
+        edit(&field, &owned, TAKE, "Hi Megan, see Tuesday.").unwrap();
+        assert_eq!(field.contents(), "Note: Hi Megan, see Tuesday.");
+        assert_eq!(field.sel.get(), range(28, 0));
+    }
+
+    #[test]
+    fn a_take_the_user_changed_since_is_never_edited() {
+        let (field, owned) = after_a_take();
+        field.user_types(32, " Bye.");
+        assert_eq!(
+            edit(&field, &owned, TAKE, &TAKE.replace("Megan", "Morgan")),
+            Err(EditError::Changed)
+        );
+        assert_eq!(field.contents(), format!("Note: {TAKE} Bye."));
+        // Or moved the caret, or the edit was planned on other text.
+        let (field, owned) = after_a_take();
+        field.sel.set(range(0, 0));
+        assert_eq!(edit(&field, &owned, TAKE, "x"), Err(EditError::Changed));
+        let (field, owned) = after_a_take();
+        assert_eq!(
+            edit(&field, &owned, "Hello.", "Bye."),
+            Err(EditError::Changed)
+        );
+        assert_eq!(field.set_calls.get(), 0);
+    }
+
+    #[test]
+    fn a_write_the_app_ignores_changes_nothing() {
+        let (mut field, owned) = after_a_take();
+        // Safari's web fields: the set succeeds, the text never changes.
+        field.applies = false;
+        assert_eq!(
+            edit(&field, &owned, TAKE, &TAKE.replace("Megan", "Morgan")),
+            Err(EditError::NotApplied)
+        );
+        assert_eq!(field.contents(), format!("Note: {TAKE}"));
+        assert_eq!(field.sel.get(), range(utf16_len(&field.contents()), 0));
+    }
+
+    #[test]
+    fn a_write_that_lands_differently_is_reported_not_trusted() {
+        let (mut field, owned) = after_a_take();
+        field.blind_after_set = true;
+        assert!(matches!(
+            edit(&field, &owned, TAKE, &TAKE.replace("Megan", "Morgan")),
+            Err(EditError::Uncertain(_))
+        ));
+    }
+
+    #[test]
+    fn apps_that_write_away_from_the_caret_are_never_edited() {
+        let (field, owned) = after_a_take();
+        assert_eq!(
+            edit_owned(&field, &owned, TAKE, "Hi Morgan.", false, |_| {}),
+            Err(EditError::Unsupported)
+        );
+        assert_eq!(field.set_calls.get(), 0);
+    }
+
+    #[test]
+    fn finished_live_text_is_owned_as_it_ends() {
+        let field = FakeField::new("", range(0, 0));
+        let owned = started(live(&field, "Hi Megan"));
+        let owned = finish_live(&field, &owned, "Hi Megan, see you.", true, |_| {}).unwrap();
+        assert_eq!(owned.text, "Hi Megan, see you.");
+        edit(&field, &owned, &owned.text, "Hi Morgan, see you.").unwrap();
+        assert_eq!(field.contents(), "Hi Morgan, see you.");
     }
 }

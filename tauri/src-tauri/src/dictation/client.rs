@@ -39,6 +39,9 @@ pub enum Outcome {
     Declined(String),
 }
 
+/// The last take's text and capture, once the take's target is known.
+type LastTakeSource = Box<dyn Fn() -> Option<(String, Option<String>)> + Send>;
+
 pub struct StreamClient {
     sample_rate: Option<u32>,
     opened: bool,
@@ -61,6 +64,11 @@ pub struct StreamClient {
     app_sent: bool,
     field_before: Option<Box<dyn Fn() -> Option<String> + Send>>,
     context_sent: bool,
+    last_take: Option<LastTakeSource>,
+    last_take_sent: bool,
+    on_edit: Option<Box<dyn Fn() -> bool + Send>>,
+    edit_cue_delay_ms: u32,
+    edit_cue_ms: u32,
     start_cue_ms: u32,
     /// A command take (docs/plans/COMMAND_MODE.md): `finish` waits for the
     /// selection, which follows `start`.
@@ -101,6 +109,11 @@ impl StreamClient {
             app_sent: false,
             field_before: None,
             context_sent: false,
+            last_take: None,
+            last_take_sent: false,
+            on_edit: None,
+            edit_cue_delay_ms: 0,
+            edit_cue_ms: 0,
             start_cue_ms: 0,
             command: false,
             selection: Selection::Unknown,
@@ -140,11 +153,13 @@ impl StreamClient {
         }
     }
 
-    /// Everything that goes out before audio: the app, context and selection.
+    /// Everything that goes out before audio: the app, context, last take
+    /// and selection.
     fn preamble(&mut self) -> Vec<Action> {
         self.app_action()
             .into_iter()
             .chain(self.context_action())
+            .chain(self.last_take_action())
             .chain(self.selection_action())
             .collect()
     }
@@ -245,6 +260,45 @@ impl StreamClient {
         let before = self.field_before.as_ref().and_then(|f| f())?;
         self.context_sent = true;
         Some(Action::Text(protocol::context_message(&before)))
+    }
+
+    /// Send the end of the take Herga typed last, and its capture, once
+    /// known (it must be the app this take goes to), so the take can be a
+    /// voice edit of it (docs/plans/VOICE_EDITS.md).
+    pub fn with_last_take(
+        mut self,
+        last_take: impl Fn() -> Option<(String, Option<String>)> + Send + 'static,
+    ) -> Self {
+        self.last_take = Some(Box::new(last_take));
+        self
+    }
+
+    fn last_take_action(&mut self) -> Option<Action> {
+        if self.last_take_sent || !self.ready {
+            return None;
+        }
+        let (text, capture_id) = self.last_take.as_ref().and_then(|f| f())?;
+        self.last_take_sent = true;
+        Some(Action::Text(protocol::last_take_message(
+            &text,
+            capture_id.as_deref(),
+        )))
+    }
+
+    /// Hear when the take opens as a voice edit, while the user still
+    /// speaks. `on_edit` returns whether it scheduled a cue, which plays
+    /// `delay_ms` later and may reach the microphone for `cue_ms`, as with
+    /// [`Self::with_style`].
+    pub fn with_edit(
+        mut self,
+        delay_ms: u32,
+        cue_ms: u32,
+        on_edit: impl Fn() -> bool + Send + 'static,
+    ) -> Self {
+        self.edit_cue_delay_ms = delay_ms;
+        self.edit_cue_ms = cue_ms;
+        self.on_edit = Some(Box::new(on_edit));
+        self
     }
 
     fn finish_message(&self) -> String {
@@ -384,6 +438,17 @@ impl StreamClient {
                 // After finish the server has all the audio; nothing to mark.
                 if played && !self.finish_sent {
                     self.cue_action(self.style_cue_delay_ms, self.style_cue_ms)
+                        .into_iter()
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            ServerEvent::Edit { session_id } => {
+                let ours = session_id.is_none() || session_id == self.session_id;
+                let played = ours && self.on_edit.as_ref().is_some_and(|sink| sink());
+                if played && !self.finish_sent {
+                    self.cue_action(self.edit_cue_delay_ms, self.edit_cue_ms)
                         .into_iter()
                         .collect()
                 } else {
@@ -806,6 +871,50 @@ mod tests {
         quiet.on_open();
         ready(&mut quiet);
         assert!(quiet.on_text(event).is_empty());
+    }
+
+    #[test]
+    fn the_last_take_goes_out_once_its_target_is_known() {
+        let known = std::sync::Arc::new(std::sync::Mutex::new(false));
+        let read = known.clone();
+        let mut client = StreamClient::new(1 << 20).with_last_take(move || {
+            (*read.lock().unwrap()).then(|| ("Hi Megan.".to_string(), Some("c1".to_string())))
+        });
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        assert!(texts(&client.push_audio(&[1])).is_empty());
+        *known.lock().unwrap() = true;
+        assert_eq!(
+            texts(&client.push_audio(&[2])),
+            vec![serde_json::json!({"type": "last_take", "text": "Hi Megan.", "capture_id": "c1"})]
+        );
+        assert!(texts(&client.push_audio(&[3])).is_empty());
+    }
+
+    #[test]
+    fn an_edit_cue_marks_the_audio_it_may_reach() {
+        let mut client = StreamClient::new(1 << 20).with_edit(0, 350, || true);
+        client.set_format(48_000);
+        client.on_open();
+        ready(&mut client);
+        client.push_audio(&vec![0i16; 4800]);
+        let event = r#"{"type":"edit","session_id":"s1"}"#;
+        assert_eq!(
+            texts(&client.on_text(event)),
+            vec![
+                serde_json::json!({"type": "cue", "start_samples": 4800, "end_samples": 4800 + 16_800})
+            ]
+        );
+        // Another session's, or without a sink: nothing.
+        assert!(client
+            .on_text(r#"{"type":"edit","session_id":"other"}"#)
+            .is_empty());
+        let mut plain = StreamClient::new(1 << 20);
+        plain.set_format(48_000);
+        plain.on_open();
+        ready(&mut plain);
+        assert!(plain.on_text(event).is_empty());
     }
 
     #[test]

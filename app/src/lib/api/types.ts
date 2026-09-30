@@ -438,6 +438,8 @@ export interface CaptureSettings {
   allow_auto_paste: boolean;
   /** Type cleaned text into the app while cleanup is still writing it. */
   live_text: boolean;
+  /** Fix the last dictation by voice ("fix that, Morgan not Megan"). A beta feature. */
+  voice_edits: boolean;
   /** Chime when dictation starts, stops or fails. */
   sound_cues: boolean;
   /** Chime volume, 0 to 1. */

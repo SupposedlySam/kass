@@ -103,6 +103,14 @@ pub trait TakeEnv {
     fn accessibility_missing(&self);
     /// Paste into the target focused at chord start.
     fn paste(&self, text: String) -> impl Future<Output = Result<bool, String>> + Send;
+    /// Change the last take in the target focused at chord start so it ends
+    /// in `after` instead of `before` (a voice edit). `Err` says why nothing
+    /// changed.
+    fn edit(
+        &self,
+        before: String,
+        after: String,
+    ) -> impl Future<Output = Result<(), String>> + Send;
     fn fetch_result(&self, session_id: String) -> impl Future<Output = Recovery> + Send;
     /// `POST /captures` with a WAV file; returns the create response.
     fn upload(&self, wav: Vec<u8>) -> impl Future<Output = Result<Value, String>> + Send;
@@ -219,6 +227,10 @@ async fn deliver<E: TakeEnv>(env: &E, plan: Delivery, capture_id: Option<String>
                 env.emit(PillEvent::error(message));
             }
         },
+        Delivery::Edit { before, after } => match env.edit(before, after).await {
+            Ok(()) => env.emit(PillEvent::Done),
+            Err(message) => env.emit(PillEvent::error(message)),
+        },
         Delivery::Nothing => env.emit(PillEvent::Done),
         Delivery::Error(message) => env.emit(PillEvent::error(message)),
     }
@@ -289,6 +301,8 @@ mod tests {
         created: Mutex<Vec<Value>>,
         updated: Mutex<Vec<String>>,
         pasted: Mutex<Vec<String>>,
+        edits: Mutex<Vec<(String, String)>>,
+        edit_result: Mutex<Option<Result<(), String>>>,
         accessibility: Mutex<u32>,
         paste_result: Mutex<Option<Result<bool, String>>>,
         recoveries: Mutex<VecDeque<Recovery>>,
@@ -323,6 +337,15 @@ mod tests {
                 .unwrap()
                 .clone()
                 .unwrap_or(Ok(true));
+            async move { result }
+        }
+        fn edit(
+            &self,
+            before: String,
+            after: String,
+        ) -> impl Future<Output = Result<(), String>> + Send {
+            self.edits.lock().unwrap().push((before, after));
+            let result = self.edit_result.lock().unwrap().clone().unwrap_or(Ok(()));
             async move { result }
         }
         fn fetch_result(&self, _session_id: String) -> impl Future<Output = Recovery> + Send {
@@ -398,6 +421,43 @@ mod tests {
             pcm: vec![1; (16_000.0 * seconds) as usize],
             sample_rate: 16_000,
         }
+    }
+
+    fn edit_event(edit: Value) -> Value {
+        let mut event = final_event("Hi Morgan.");
+        event["edit"] = edit;
+        event
+    }
+
+    #[tokio::test]
+    async fn a_voice_edit_changes_the_last_take_and_pastes_nothing() {
+        let env = FakeEnv::default();
+        let event = edit_event(json!({"before": "Hi Megan.", "after": "Hi Morgan."}));
+        settle(&env, Outcome::Final(event), async { None }).await;
+        assert!(env.pasted().is_empty());
+        assert_eq!(
+            *env.edits.lock().unwrap(),
+            vec![("Hi Megan.".to_string(), "Hi Morgan.".to_string())]
+        );
+        assert_eq!(env.events(), vec![PillEvent::Done]);
+        // The capture still shows in Captures.
+        assert_eq!(env.created.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_voice_edit_that_changes_nothing_plays_the_error_cue() {
+        let env = FakeEnv::default();
+        *env.edit_result.lock().unwrap() = Some(Err("The text changed".into()));
+        let event = edit_event(json!({"before": "Hi Megan.", "after": "Hi Morgan."}));
+        settle(&env, Outcome::Final(event), async { None }).await;
+        assert_eq!(env.events(), vec![PillEvent::error("The text changed")]);
+        assert_eq!(env.events()[0].cue(), Some(Cue::Error));
+
+        let env = FakeEnv::default();
+        let event = edit_event(json!({"declined": "Nothing to fix"}));
+        settle(&env, Outcome::Final(event), async { None }).await;
+        assert!(env.pasted().is_empty() && env.edits.lock().unwrap().is_empty());
+        assert_eq!(env.events(), vec![PillEvent::error("Nothing to fix")]);
     }
 
     #[tokio::test]

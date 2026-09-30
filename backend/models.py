@@ -266,6 +266,7 @@ class CaptureSettingsResponse(BaseModel):
     punctuation_style: str = Field(default="standard", pattern="^(standard|casual|learned)$")
     allow_auto_paste: bool = True
     live_text: bool = False
+    voice_edits: bool = True
     sound_cues: bool = True
     sound_cue_volume: float = Field(default=0.5, ge=0, le=1)
     input_device_id: Optional[str] = Field(
@@ -303,6 +304,7 @@ class CaptureSettingsUpdate(BaseModel):
     punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
     allow_auto_paste: Optional[bool] = None
     live_text: Optional[bool] = None
+    voice_edits: Optional[bool] = None
     sound_cues: Optional[bool] = None
     sound_cue_volume: Optional[float] = Field(default=None, ge=0, le=1)
     input_device_id: Optional[str] = Field(

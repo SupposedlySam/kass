@@ -27,6 +27,12 @@ any phrase is cleaned, and picks the writing style the session cleans up in
 for a style by name ("use formal mode", "make this more personal") is written
 in that style instead; the words themselves are dropped.
 
+A dictation that opens with "fix that", "edit" or "Herga" and says what to
+change is a voice edit of the take Herga typed last, which the client sends
+in a ``last_take`` message (docs/plans/VOICE_EDITS.md). Its words are never
+cleaned up; at finish they become the take's text before and after the
+edit, which the client applies.
+
 A ``command`` session (docs/plans/COMMAND_MODE.md) records a spoken
 instruction for text selected in another app. It is recognized like a
 dictation but never cleaned up; the client sends the selection while the user
@@ -47,10 +53,10 @@ import wave
 
 import numpy as np
 
-from .. import config, models
+from .. import beta, config, models
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
-from . import dictionary as dictionaries
+from . import dictionary as dictionaries, voice_edits
 from .captures import _to_response
 from .commands import (
     MAX_SELECTION_CHARS,
@@ -93,6 +99,8 @@ PHRASE_CONTEXT_CHARS = 600
 # The field's text kept from before the caret: enough for a sentence and the
 # names in it.
 FIELD_CONTEXT_CHARS = 600
+# The end of the last take a voice edit may change (docs/plans/VOICE_EDITS.md).
+LAST_TAKE_CHARS = 1000
 # The opening words are checked for a style request ("make this formal") before
 # the first phrase ends, which may be many seconds away: at the first short
 # pause after this much speech, or once this much was said without one.
@@ -181,6 +189,15 @@ class StreamingCapture:
         # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
         self.field_before = ""
         self.continues = False
+        # The end of the take Herga typed last, still in the field, and its
+        # capture, from the last_take command. Never saved but in an edit's.
+        self.last_take = None
+        self.last_take_capture_id = None
+        # A voice edit: the take opened with one, and whether the client was
+        # told while the user speaks. At finish, what it changes.
+        self.editing = False
+        self.edit_announced = False
+        self.edit = None
         # Words the user capitalizes mid-sentence, loaded when the run starts.
         self.names = frozenset()
         # The user's dictionary (docs/plans/DICTIONARIES.md): the global and
@@ -196,6 +213,9 @@ class StreamingCapture:
         self.prefilling = None
         self.command = None
         self.settings = settings
+        # Whether a dictation may be a voice edit: the Voice edits setting, a
+        # beta feature. Fixed for the take, like the rest of its settings.
+        self.edits_on = not self.is_command and settings.voice_edits and beta.enabled("voice_edits")
         self.language = start.get("language", settings.language)
         if self.language is not None and (
             not isinstance(self.language, str) or not re.fullmatch(r"[A-Za-z-]{2,32}", self.language)
@@ -384,9 +404,18 @@ class StreamingCapture:
         )
 
     def style_peek_due(self) -> bool:
-        """Whether to look at the opening words for a style request now: the
-        first phrase hasn't been recognized, and there is enough speech."""
-        if self.raw or self.spoken or self.is_command or self.finished or self.cuts or self.style_peeks >= 2:
+        """Whether to look at the opening words for a style request or a voice
+        edit now: the first phrase hasn't been recognized, and there is enough
+        speech."""
+        if (
+            self.raw
+            or self.spoken
+            or self.edit_announced
+            or self.is_command
+            or self.finished
+            or self.cuts
+            or self.style_peeks >= 2
+        ):
             return False
         start = self.speech.first_voice()
         if start is None:
@@ -403,15 +432,19 @@ class StreamingCapture:
 
     async def peek_style(self) -> None:
         """Recognize the audio so far only to find a style request, so the
-        style (and the pill's chip) changes as soon as it is said. The text
-        still comes from the phrase, which confirms or undoes the change."""
+        style (and the pill's chip) changes as soon as it is said, or a voice
+        edit, so its cue plays while the user still speaks. The text still
+        comes from the phrase, which confirms or undoes a style change."""
         start = self.speech.first_voice() or 0
         self.style_peeks += 1
         self.style_peeked_at = self.samples - start
-        if len(styles_snapshot().styles) < 2:
+        if len(styles_snapshot().styles) < 2 and not self.edit_possible:
             self.style_peeks = 2
             return
         text = await self.recognize(bytes(self.pending))
+        if self.edit_possible and voice_edits.starts_edit(text) and not self.raw:
+            await self.announce_edit()
+            return
         style, _ = spoken_style(text, styles_snapshot())
         if style is not None and not self.raw and not self.finished:
             await self.use_style(style)
@@ -433,6 +466,73 @@ class StreamingCapture:
             raise ValueError("Context must be text")
         self.field_before = before[-FIELD_CONTEXT_CHARS:]
         self.continues = continues_sentence(self.field_before)
+
+    def set_last_take(self, text, capture_id=None) -> None:
+        """The end of the take Herga typed last, still in the field, which a
+        voice edit may change; known shortly after the take starts."""
+        if not isinstance(text, str) or len(text) > LAST_TAKE_CHARS:
+            raise ValueError(f"The last take must be text of at most {LAST_TAKE_CHARS} characters")
+        if capture_id is not None and not isinstance(capture_id, str):
+            raise ValueError("Invalid capture id")
+        self.last_take, self.last_take_capture_id = text, capture_id
+
+    @property
+    def edit_possible(self) -> bool:
+        """Whether there is a take a voice edit could change."""
+        return self.edits_on and bool(self.last_take)
+
+    @property
+    def vocabulary(self) -> tuple[str, ...]:
+        """Whisper's prompt terms: the app's own command words while voice
+        edits are on, then the dictionary's."""
+        terms = self.dictionary.terms
+        if not self.edits_on:
+            return terms
+        return (*voice_edits.COMMAND_TERMS, *(term for term in terms if term not in voice_edits.COMMAND_TERMS))
+
+    async def take_edit(self, text: str) -> None:
+        """Hold the take as a voice edit when it opens like one ("fix that,
+        ..."): from here its words are never cleaned up, which could reorder
+        or drop them. Finish decides what it changes, or cleans it up as a
+        dictation after all."""
+        if self.edits_on and voice_edits.starts_edit(text):
+            self.editing = True
+            await self.announce_edit()
+
+    async def announce_edit(self) -> None:
+        """Tell the client, once and while the user speaks, that the take is
+        an edit of its last one, so it can play the edit cue."""
+        if self.edit_announced or self.finished or not self.edit_possible:
+            return
+        self.edit_announced = True
+        await self.emit("edit")
+
+    async def finish_edit(self) -> None:
+        """Plan the edit the take said. A take that opened like one but says
+        no edit is a dictation, cleaned up whole."""
+        planned = voice_edits.plan(self.raw, self.last_take if self.edit_possible else None)
+        if planned is not None:
+            self.edit = planned
+            return
+        self.editing = False
+        self.raw = mark_commands(self.raw)
+        if self.settings.auto_refine:
+            await self.reconcile_refinement()
+
+    def edit_result(self) -> dict | None:
+        """For the final event: the last take's text before and after the
+        edit, which the client applies, or why it was declined."""
+        if isinstance(self.edit, voice_edits.Planned):
+            return dict(before=self.edit.before, after=self.edit.after)
+        if isinstance(self.edit, voice_edits.Declined):
+            return dict(declined=self.edit.message)
+        return None
+
+    def learn_from_edit(self) -> None:
+        """What the edit teaches (a report on the take it fixed, a spelled
+        word). Blocking: run after the final event is sent."""
+        if isinstance(self.edit, voice_edits.Planned):
+            voice_edits.learn_from(self.edit, self.last_take_capture_id, self.app_bundle_id)
 
     @property
     def is_command(self) -> bool:
@@ -535,7 +635,7 @@ class StreamingCapture:
                     self.stt_model,
                     previous_text=previous_text,
                     check_speech=False,
-                    vocabulary=self.dictionary.terms,
+                    vocabulary=self.vocabulary,
                 )
             ).strip()
         finally:
@@ -581,6 +681,7 @@ class StreamingCapture:
             and not self.backlogged
             and not self.needs_final_refinement
             and not self.refinement_error
+            and not self.editing
         )
 
     async def show(self, text: str, holdback: int) -> None:
@@ -667,8 +768,17 @@ class StreamingCapture:
             # Dropped from the context too: the phrase after a lone "use
             # formal mode." starts the dictation.
             text = await self.take_spoken_style(text)
+            # Read before any cleanup (docs/plans/VOICE_EDITS.md).
+            await self.take_edit(text)
         earlier = self.heard
         self.heard = self.join(self.heard, text, text)
+        if self.editing:
+            # An edit's words are its instruction, read whole at finish.
+            if text:
+                self.raw = join_overlap(self.raw, text) if self.overlap else f"{self.raw} {text}".strip()
+                self.paused = paused
+            await self.emit("transcript", accepted_text=self.raw, provisional_text="", text=self.raw, final=False)
+            return
         if text:
             if not self.overlap:
                 # The pause, not the speaker, ended the phrase before this one
@@ -878,6 +988,8 @@ class StreamingCapture:
                     await self.reconcile_full_audio()
                 elif self.is_command:
                     await self.finish_command()
+                elif self.editing:
+                    await self.finish_edit()
                 elif self.needs_final_refinement:
                     await self.reconcile_refinement()
                 elif self.settings.auto_refine:
@@ -898,19 +1010,26 @@ class StreamingCapture:
                     self.stt_model,
                     previous_text=before,
                     check_speech=False,
-                    vocabulary=self.dictionary.terms,
+                    vocabulary=self.vocabulary,
                 )
             ).strip()
             self.raw = await self.take_spoken_style(self.raw)
-            if self.continues:
-                self.raw = continue_phrase(self.raw, self.field_before, self.names)
-            self.raw = mark_commands(self.raw)
+            # Heard again, whole: it may open as an edit now, or no longer.
+            self.editing = False
+            await self.take_edit(self.raw)
+            if not self.editing:
+                if self.continues:
+                    self.raw = continue_phrase(self.raw, self.field_before, self.names)
+                self.raw = mark_commands(self.raw)
         else:
             self.raw = ""
         if self.abort:
             return
         self.covered = self.samples
         await self.emit("transcript", accepted_text=self.raw, provisional_text="", text=self.raw, final=False)
+        if self.editing:
+            await self.finish_edit()
+            return
         await self.reconcile_refinement()
 
     async def reconcile_refinement(self):
@@ -962,6 +1081,8 @@ class StreamingCapture:
         self.archive.close()
         if self.is_command:
             return self.persist_command(db)
+        if self.edit is not None:
+            return self.persist_edit(db)
         row = Capture(
             id=self.id,
             audio_path=config.to_storage_path(self.path),
@@ -1024,6 +1145,41 @@ class StreamingCapture:
         self.persisted = True
         db.refresh(row)
         # A command replaces its selection whatever the paste setting says.
+        return models.CaptureCreateResponse(**_to_response(row).model_dump(), auto_refine=True, allow_auto_paste=True)
+
+    def persist_edit(self, db):
+        """A voice edit is saved like a command on the take it changed: the
+        take before, what was said, and the take after (docs/plans/VOICE_EDITS.md)."""
+        row = Capture(
+            id=self.id,
+            audio_path=config.to_storage_path(self.path),
+            source="command",
+            language=self.language,
+            duration_ms=round(self.samples / self.rate * 1000),
+            transcript_raw=self.raw,
+            stt_model=self.stt_model,
+            app_bundle_id=self.app_bundle_id,
+            app_name=self.app_name,
+            app_category=self.app_category,
+            command_selection=self.last_take,
+            command_transform=voice_edits.TRANSFORM_NAME,
+        )
+        if isinstance(self.edit, voice_edits.Planned):
+            record_command(
+                row,
+                selection=self.edit.before,
+                instruction=self.edit.instruction,
+                transform={"name": voice_edits.TRANSFORM_NAME},
+                text=self.edit.after,
+                model=None,
+            )
+        else:
+            row.command_instruction = self.edit.message
+        db.add(row)
+        db.commit()
+        self.persisted = True
+        db.refresh(row)
+        # Like a command, an edit changes the field whatever the paste setting says.
         return models.CaptureCreateResponse(**_to_response(row).model_dump(), auto_refine=True, allow_auto_paste=True)
 
     def close(self):
