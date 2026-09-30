@@ -750,7 +750,8 @@ def _system(conversation: Conversation, trick: str, terms: list[str]) -> str:
         f"Write {conversation.persona}'s next message: answer what the user just wrote, then keep the "
         "conversation going with a question or request the user needs to answer. Stay in character. "
         "Never mention practice, Herga or AI. Match how people really write "
-        f"{kind.medium}: keep it short.",
+        f"{kind.medium}: keep it short. Never repeat an earlier message: if the user left something "
+        "unanswered, ask about just that part in new words.",
     ]
     if trick == "terms" and terms:
         lines.append(f"Mention {random.choice(terms)} naturally.")
@@ -804,6 +805,16 @@ def parse_turn(output: str) -> tuple[str, dict] | None:
     return message, {"facts": None if answers else facts, "answers": answers[:4], "trick": None, "example": None}
 
 
+def _normalized(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", "", text.casefold()).split())
+
+
+def repeats_earlier(conversation: Conversation, message: str) -> bool:
+    """Whether ``message`` is one the other side already sent (small models copy their last one)."""
+    said = _normalized(message)
+    return any(not from_you and _normalized(text) == said for from_you, text in conversation.messages)
+
+
 def _fallback(session: Session, found: Conversation) -> tuple[str, dict]:
     """A hand-written opener of the same kind, as a new topic in the same conversation."""
     used = _used(session)
@@ -832,14 +843,20 @@ async def next_turn(session_id: str, conversation_id: str, model_size: str, gene
             generate = llm_service.get_llm_model().generate
         from ..backends.qwen_llm_backend import prompt_cache_key
 
-        key = prompt_cache_key.set(PROMPT_CACHE_KEY)
-        try:
-            output = await generate(
-                prompt=prompt, system=system, max_tokens=320, temperature=0.7, model_size=model_size
-            )
-        finally:
-            prompt_cache_key.reset(key)
-        parsed = parse_turn(output)
+        # A repeat of an earlier message gets one more try before a written opener.
+        for _ in range(2):
+            key = prompt_cache_key.set(PROMPT_CACHE_KEY)
+            try:
+                output = await generate(
+                    prompt=prompt, system=system, max_tokens=320, temperature=0.7, model_size=model_size
+                )
+            finally:
+                prompt_cache_key.reset(key)
+            parsed = parse_turn(output)
+            if parsed is None or not repeats_earlier(found, parsed[0]):
+                break
+            logger.info("The next teaching turn repeated an earlier message; asking again")
+            parsed = None
     except Exception:
         logger.warning("Could not write the next teaching turn; using a written one", exc_info=True)
     with _lock:

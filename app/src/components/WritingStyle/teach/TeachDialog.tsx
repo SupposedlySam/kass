@@ -187,11 +187,14 @@ export function TeachDialog({
               suggestedKinds={session.suggested_kinds}
               sending={reply.isPending}
               switching={add.isPending || newTheme.isPending || wrap.isPending}
-              onSend={async (written) => {
-                await reply
+              onSend={(written) =>
+                reply
                   .mutateAsync({ sessionId: session.session_id, id: conversation.id, written })
-                  .catch(() => undefined);
-              }}
+                  .then(
+                    () => true,
+                    () => false,
+                  )
+              }
               onPickKind={(kind) => add.mutate({ sessionId: session.session_id, kind })}
               onNewTheme={() =>
                 newTheme.mutate({ sessionId: session.session_id, id: conversation.id })

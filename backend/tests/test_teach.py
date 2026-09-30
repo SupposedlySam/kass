@@ -147,6 +147,19 @@ async def test_an_unusable_turn_falls_back_to_a_written_opener():
     assert conversation.note
 
 
+@pytest.mark.asyncio
+async def test_a_turn_that_repeats_the_other_side_is_asked_again_then_replaced():
+    session = teach.start("personal", ["team_chat"], [])
+    conversation = session.conversations[0]
+    opener = conversation.messages[0][1]
+    teach.record_reply(session.id, conversation.id, "sounds good", None)
+    model = _Model(f"MESSAGE: {opener.upper()}\nTELL: Fine.")
+    await teach.next_turn(session.id, conversation.id, "0.6B", generate=model.generate)
+    assert len(model.calls) == 2
+    assert conversation.messages[-1][1] != opener
+    assert conversation.messages[-1][1] in {s.message for s in teach.seeds_of("team_chat")}
+
+
 def test_a_dictated_reply_teaches_and_a_typed_one_only_gets_chips(api):
     client, session, model = api
     started = client.post("/writing-style/teach").json()

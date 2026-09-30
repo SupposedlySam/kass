@@ -37,7 +37,8 @@ export function TeachConversation({
   /** The reply is being saved and the other side is writing back. */
   sending: boolean;
   switching: boolean;
-  onSend: (written: string) => Promise<void>;
+  /** Resolves to whether the reply was saved. */
+  onSend: (written: string) => Promise<boolean>;
   onPickKind: (kind: TeachKind) => void;
   onNewTheme: () => void;
   onWrapUp: () => void;
@@ -46,6 +47,9 @@ export function TeachConversation({
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState('');
+  // The reply just sent, shown in the thread until the other side's answer
+  // arrives with it; ``turn`` tells it apart from once it's part of the thread.
+  const [sent, setSent] = useState<{ text: string; turn: number } | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const Icon = KIND_ICONS[conversation.kind];
@@ -69,11 +73,19 @@ export function TeachConversation({
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when the thread grows
   useEffect(() => {
     thread.current?.scrollTo({ top: thread.current.scrollHeight });
-  }, [turn, sending, conversation.id]);
+  }, [turn, sending, sent, conversation.id]);
 
+  const pending = sending && sent?.turn === turn ? sent.text : null;
   const canSend = !!draft.trim() && !sending && dictation.state.phase === 'idle';
   const send = () => {
-    if (canSend) void onSend(draft.trim());
+    if (!canSend) return;
+    const text = draft.trim();
+    setSent({ text, turn });
+    setDraft('');
+    void onSend(text).then((saved) => {
+      // Not saved: put it back to try again.
+      if (!saved) setDraft(text);
+    });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && event.metaKey) {
@@ -145,7 +157,10 @@ export function TeachConversation({
 
       <div ref={thread} className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-5">
         <div className="flex-1" />
-        {conversation.messages.map((message, index) => (
+        {[
+          ...conversation.messages,
+          ...(pending === null ? [] : [{ from_you: true, text: pending }]),
+        ].map((message, index) => (
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: the thread only grows
             key={index}
