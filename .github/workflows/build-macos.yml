@@ -1,0 +1,75 @@
+name: Build macOS app
+
+# Manual runs only, and only by the repo owner (see the job's `if`).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Anyone with write access can press "Run workflow"; skip unless it's the repo owner.
+    if: github.triggering_actor == 'mrgnhnt96' && github.actor == 'mrgnhnt96'
+    # Apple Silicon runner: the server runs on MLX, which is arm64-only.
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./tauri/src-tauri -> target"
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Python dependencies
+        run: ./scripts/setup-python.sh
+
+      - name: Build Python server
+        run: ./scripts/build-server.sh
+
+      # CI has no stable signing identity, so sign ad-hoc. macOS treats each
+      # ad-hoc build as a new app, so privacy grants don't carry across
+      # installs of these builds.
+      - name: Build app
+        env:
+          VOICEBOX_SIGNING_IDENTITY: "-"
+        run: ./scripts/build-local-app.sh
+
+      # ditto keeps the symlinks and extended attributes the signature needs;
+      # upload-artifact's own zip would drop them.
+      - name: Zip app
+        id: zip
+        run: |
+          version=$(jq -r .version tauri/src-tauri/tauri.conf.json)
+          name="Voicebox-${version}-${GITHUB_SHA::7}-macos-arm64"
+          ditto -c -k --keepParent tauri/src-tauri/target/release/bundle/macos/Voicebox.app "$name.zip"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: ${{ steps.zip.outputs.name }}.zip
+          compression-level: 0
+          retention-days: 30
