@@ -195,16 +195,19 @@ _VALUE_KINDS = (
 )
 _NOT_NAMES = frozenset({"I", *(w.title() for w in f"{_WEEKDAYS}|{_MONTHS}".split("|"))})
 # The cue may follow a sentence break too: speech-to-text often hears
-# "noon? No, actually, one" rather than "noon, no actually one".
+# "noon? No, actually, one" rather than "noon, no actually one". Where the
+# speaker paused there, the mark is gone (``phrase_seams.continue_after_seam``)
+# and only the capital it gave the cue is left: "noon No, actually one".
+_PAUSED_CUE = r"\s+(?=(?-i:(?:Or|No|Sorry|Actually)\b))"
 _ANSWER_CUE = re.compile(
-    r"[,.?!]\s*(?:or\s+(?:was|is)\s+it|(?:no|sorry)(?:\s*,?\s*(?:actually|wait|I\s+mean))?|actually|I\s+mean)\s*,?\s*",
+    rf"(?:[,.?!]\s*|{_PAUSED_CUE})(?:or\s+(?:was|is)\s+it|(?:no|sorry)(?:\s*,?\s*(?:actually|wait|I\s+mean))?|actually|I\s+mean)\s*,?\s*",
     re.I,
 )
 # A value followed by a verb starts a new clause ("5 is too many"), not an answer.
 _AUX_AFTER = re.compile(r"\s+(?:is|are|was|were|has|have|had|will|would|can|could|should|does|did)\b", re.I)
 # Names take any verb ("Sarah knows"); a number is followed by plural nouns ("4.5 seconds").
 _VERB_AFTER_NAME = re.compile(_AUX_AFTER.pattern + r"|\s+\w+(?:ed|s)\b", re.I)
-_TAIL = re.compile(r"(?:\s+[a-z]+){0,3}?(?=[,.?!])")
+_TAIL = re.compile(rf"(?:\s+[a-z]+){{0,3}}?(?=[,.?!]|{_PAUSED_CUE})")
 
 
 def _value_at(text: str, pos: int) -> tuple[str, re.Match] | None:

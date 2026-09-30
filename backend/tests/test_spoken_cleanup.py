@@ -51,6 +51,12 @@ from backend.services.spoken_cleanup import apply_spoken_cleanup
             "So the report is done on Wednesday. I'll send it then.",
         ),
         ("meet at seven. Sorry, eight.", "meet at eight."),
+        # ...or after a pause, where only the cue's capital is left of the break
+        (
+            "Uh, can we move lunch to noon No, actually one at the usual place.",
+            "Uh, can we move lunch to one at the usual place.",
+        ),
+        ("the report is done on Tuesday No wait, Wednesday", "the report is done on Wednesday"),
         # Refined answer
         ("we should ship Thursday, well Thursday morning probably", "we should ship Thursday morning"),
         ("ship it Thursday, well probably Thursday morning", "ship it Thursday morning"),
@@ -67,6 +73,8 @@ def test_rule_cleans_its_shape(raw, expected):
         "so first pull the latest changes, oh wait, before that, make sure you're on main",
         "did it work? no, it crashed",
         "is it at 5? No one knows.",
+        "is it at 5 No one knows",
+        "meet at seven no eight people came",
         "we need 5. Actually 5 is too many.",
         "well, I think so",
         "yes, well I think so",
