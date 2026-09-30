@@ -12,7 +12,7 @@ import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
 import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
 import { AddToDictionaryDialog, type DictionaryWord } from './AddToDictionary';
-import { dictionaryWord } from './captureDictionary';
+import { dictionaryWord, respellChange } from './captureDictionary';
 import { type DiffHunk, diffWords } from './wordDiff';
 
 export type TeachTarget = 'raw' | 'refined';
@@ -266,7 +266,8 @@ export function EditableTranscript({
 /**
  * Under an edited transcript: what changed, an optional note and Save. Shown
  * only once the text differs from what Herga wrote. A changed word can go
- * straight into the dictionary, without saving the correction first.
+ * straight into the dictionary, without saving the correction first; spelled
+ * differently there, the correction takes the new spelling too.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
@@ -285,7 +286,16 @@ export function TeachActions({ teach }: { teach: TeachState }) {
   return (
     <div className="flex flex-col gap-3.5">
       {hunks.length > 0 && <HunkList hunks={hunks} className="space-y-0.5" onAdd={setWord} />}
-      <AddToDictionaryDialog word={word} onClose={() => setWord(null)} />
+      <AddToDictionaryDialog
+        word={word}
+        onAdded={(written) => {
+          if (!word || written === word.written) return;
+          teach.setDraft(
+            (draft) => draft && respellChange(teach.original, draft, word.written, written),
+          );
+        }}
+        onClose={() => setWord(null)}
+      />
       <div className="flex flex-col gap-1.5">
         <label htmlFor={notesId} className="text-xs text-muted-foreground">
           {t('captures.feedback.notes')}

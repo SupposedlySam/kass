@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   dictionaryWord,
+  respellChange,
+  respellSelection,
   selectionPhrase,
   spellingEntry,
 } from '../src/components/CapturesTab/captureDictionary';
@@ -52,5 +54,36 @@ describe('spellingEntry', () => {
 
   test('spelled as it was written, it only teaches the spelling', () => {
     expect(spellingEntry('Tailscale', ' Tailscale').spoken).toBeNull();
+  });
+});
+
+describe('respellChange', () => {
+  test('the changed word takes the dictionary spelling, keeping its punctuation', () => {
+    expect(
+      respellChange(
+        'we use post grass, mostly',
+        'we use Postgres, mostly',
+        'Postgres',
+        'PostgreSQL',
+      ),
+    ).toBe('we use PostgreSQL, mostly');
+  });
+
+  test('every place the same change was made is respelled', () => {
+    expect(respellChange('sagar and sagar.', 'Saggar and Saggar.', 'Saggar', 'saggar')).toBe(
+      'saggar and saggar.',
+    );
+  });
+
+  test('other changes and the spacing around them stay as they were', () => {
+    expect(
+      respellChange('um so post grass\nis  up', 'So Postgres\nis  down', 'Postgres', 'PostgreSQL'),
+    ).toBe('So PostgreSQL\nis  down');
+  });
+});
+
+describe('respellSelection', () => {
+  test('the selected word takes the new spelling inside the punctuation it picked up', () => {
+    expect(respellSelection('ask sagar, then', 4, 11, 'Saggar')).toBe('ask Saggar, then');
   });
 });

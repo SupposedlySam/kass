@@ -39,7 +39,10 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
     <div className="flex-1 min-h-0 flex">
       {/* The card gives up height to what's opened below it, down to half the
           pane; past that, the opened rows scroll instead. */}
-      <SelectionToDictionary className="flex-1 min-w-0 flex flex-col gap-3 px-6 pt-6 pb-3">
+      <SelectionToDictionary
+        teach={teach}
+        className="flex-1 min-w-0 flex flex-col gap-3 px-6 pt-6 pb-3"
+      >
         {capture.refinement_review && (
           <div className="shrink-0">
             <RefinementReviewNotice review={capture.refinement_review} />

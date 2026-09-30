@@ -21,13 +21,16 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { useAddDictionaryEntry, useDictionary } from '@/lib/hooks/useDictionary';
 import { useWritingStyles } from '@/lib/hooks/useWritingStyle';
-import { selectionPhrase, spellingEntry } from './captureDictionary';
+import { respellSelection, selectionPhrase, spellingEntry } from './captureDictionary';
+import type { TeachState } from './TeachCorrection';
 
 const P = 'captures.dictionary';
 
 interface Picked {
   text: string;
   rect: DOMRect;
+  /** Where it was picked in the correction's edit box, when it was. */
+  field?: { text: string; start: number; end: number };
 }
 
 /**
@@ -95,7 +98,15 @@ function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
       if (root && active instanceof HTMLTextAreaElement && root.contains(active)) {
         const { selectionStart: start, selectionEnd: end } = active;
         const text = start === end ? '' : selectionPhrase(active.value.slice(start, end));
-        setPicked(text ? { text, rect: textareaRect(active, start, end) } : null);
+        setPicked(
+          text
+            ? {
+                text,
+                rect: textareaRect(active, start, end),
+                field: { text: active.value, start, end },
+              }
+            : null,
+        );
         return;
       }
       const selection = window.getSelection();
@@ -128,26 +139,43 @@ function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
 /**
  * Selecting a word or phrase in a capture's text, or while correcting it,
  * offers to add it to the dictionary: the user types how it should be
- * spelled, and may narrow where it applies.
+ * spelled, and may narrow where it applies. Picked while correcting, a
+ * new spelling is written into the correction too.
  */
 export function SelectionToDictionary({
   children,
   className,
+  teach,
 }: {
   children: ReactNode;
   className?: string;
+  teach?: TeachState;
 }) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const picked = useSelectedPhrase(container);
   const [word, setWord] = useState<DictionaryWord | null>(null);
+  const [field, setField] = useState<Picked['field']>();
 
   const open = () => {
     if (!picked) return;
     setWord({ said: picked.text, written: picked.text });
+    setField(picked.field);
     if (!(document.activeElement instanceof HTMLTextAreaElement)) {
       window.getSelection()?.removeAllRanges();
     }
+  };
+
+  const respell = (written: string) => {
+    if (!teach || !field || written === word?.written) return;
+    // The edit box closes when the dialog takes focus if nothing was changed
+    // yet; the respelled word then starts the correction.
+    teach.setDraft((draft) => {
+      const current = draft ?? teach.original;
+      return current === field.text
+        ? respellSelection(current, field.start, field.end, written)
+        : draft;
+    });
   };
 
   return (
@@ -170,7 +198,7 @@ export function SelectionToDictionary({
           {t(`${P}.add`)}
         </Button>
       )}
-      <AddToDictionaryDialog word={word} onClose={() => setWord(null)} />
+      <AddToDictionaryDialog word={word} onAdded={respell} onClose={() => setWord(null)} />
     </div>
   );
 }
@@ -181,22 +209,35 @@ export interface DictionaryWord {
   written: string;
 }
 
-/** Asks how `word` is spelled, and where, and adds it to the dictionary; closed while `word` is null. */
+/**
+ * Asks how `word` is spelled, and where, and adds it to the dictionary;
+ * closed while `word` is null. `onAdded` gets the spelling that was added.
+ */
 export function AddToDictionaryDialog({
   word,
+  onAdded,
   onClose,
 }: {
   word: DictionaryWord | null;
+  onAdded?: (written: string) => void;
   onClose: () => void;
 }) {
   return (
     <Dialog open={word !== null} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      {word !== null && <SpellingDialog word={word} onDone={onClose} />}
+      {word !== null && <SpellingDialog word={word} onAdded={onAdded} onDone={onClose} />}
     </Dialog>
   );
 }
 
-function SpellingDialog({ word, onDone }: { word: DictionaryWord; onDone: () => void }) {
+function SpellingDialog({
+  word,
+  onAdded,
+  onDone,
+}: {
+  word: DictionaryWord;
+  onAdded?: (written: string) => void;
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const add = useAddDictionaryEntry();
@@ -213,6 +254,7 @@ function SpellingDialog({ word, onDone }: { word: DictionaryWord; onDone: () => 
     add.mutate(body, {
       onSuccess: () => {
         toast({ title: t(`${P}.added`, { written: body.written }) });
+        onAdded?.(body.written);
         onDone();
       },
     });
