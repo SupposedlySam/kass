@@ -2,7 +2,7 @@
 
 Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
 
-## Unreleased
+## 0.6.1 — September 30, 2026
 
 ### Improved
 
