@@ -20,6 +20,7 @@ mod key_codes;
 mod keyboard_layout;
 mod keystroke_insert;
 mod login_item;
+mod overlap;
 mod server_process;
 mod server_version;
 mod sound_cues;
@@ -1289,6 +1290,7 @@ fn run_insert_chain(
         bring_front: &bring_front,
     };
     // Every method inserts the same text, fitted to what is around the caret
+    // and without a repeat of the words after it
     // (docs/plans/MID_SENTENCE_DICTATION.md).
     let text = &text_insert::fit_to_focused(pid, bundle_id, text);
     let keys = keystroke_insert::Keystrokes::new();

@@ -8,6 +8,10 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 
 - **Try new features early with beta updates.** Turn on **Beta updates** in Settings › General to get new features before they're public. Turn it off to go back to public releases; you stay on your beta until the next public one is newer.
 
+### Improved
+
+- **Say a phrase again without doubling it.** Put the cursor mid-sentence and dictate the new words, running on into the words already after the cursor: `Let's meet | at noon tomorrow.` plus "on Friday at noon tomorrow" now gives `Let's meet on Friday at noon tomorrow.` Herga drops the words you said again, even with a small spelling difference, and keeps the field's own. Live text may show them for a moment before it settles.
+
 ### Fixed
 
 - **⌘H keeps Herga out of the way.** Dictating after hiding Herga with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Herga in the Dock or ⌘Tab to it.
