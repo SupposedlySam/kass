@@ -17,12 +17,14 @@ import {
   StyleBoard,
 } from '@/components/WritingStyle/StyleBoard';
 import { StyleSettings } from '@/components/WritingStyle/StyleSettings';
+import { StyleStickyHeader } from '@/components/WritingStyle/StyleStickyHeader';
 import { defaultStyle, useWritingStyles } from '@/lib/hooks/useWritingStyle';
 
 /**
  * Writing style: the styles with a preview of their apps, every app with its
  * style, then everything about the selected style (`?style=<id>`, the default when none): its settings,
- * calibration, examples, rules and recent corrections.
+ * calibration, examples, rules and recent corrections, under a header naming
+ * the style and its apps once the style cards scroll away.
  */
 export function WritingStylePage() {
   const { t } = useTranslation();
@@ -40,6 +42,7 @@ export function WritingStylePage() {
   }
   const style = data.styles.find((s) => s.id === selectedId) ?? defaultStyle(data);
   if (!style) return null;
+  const apps = appsIn(data, style.id);
   const select = (id: string | undefined) =>
     navigate({ search: id ? { style: id } : {}, replace: true });
 
@@ -74,15 +77,18 @@ export function WritingStylePage() {
           </div>
         </SettingSection>
       )}
-      <StyleSettings key={style.id} style={style} onDeleted={() => select(undefined)} />
-      <CalibrationCard style={style} apps={appsIn(data, style.id).map(appLabel)} />
-      <SettingSection title={t('writingStyle.settings.learnsFrom', { style: style.name })}>
-        <PersonalExamples styleId={style.id} />
-        <CorrectionNotes styleId={style.id} />
-        <ExportCorrections />
-        <ResetWritingStyle style={style} />
-      </SettingSection>
-      <RecentCorrections style={style} />
+      <div>
+        <StyleStickyHeader style={style} apps={apps} />
+        <StyleSettings key={style.id} style={style} onDeleted={() => select(undefined)} />
+        <CalibrationCard style={style} apps={apps.map(appLabel)} />
+        <SettingSection title={t('writingStyle.settings.learnsFrom', { style: style.name })}>
+          <PersonalExamples styleId={style.id} />
+          <CorrectionNotes styleId={style.id} />
+          <ExportCorrections />
+          <ResetWritingStyle style={style} />
+        </SettingSection>
+        <RecentCorrections style={style} />
+      </div>
     </>
   );
 }
