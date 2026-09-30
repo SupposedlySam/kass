@@ -19,6 +19,7 @@ import { SettingsLayout } from '@/components/ServerTab/ServerTab';
 import { CommandModePage } from '@/components/Settings/CommandModePage';
 import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPage';
 import { DictionaryPage } from '@/components/Settings/DictionaryPage';
+import { FeaturesPage } from '@/components/Settings/FeaturesPage';
 import { TranscriptionSettingsPage } from '@/components/Settings/TranscriptionSettingsPage';
 import { WritingStylePage } from '@/components/Settings/WritingStylePage';
 import { useFirstRunRedirect } from '@/components/Setup/useFirstRunRedirect';
@@ -170,6 +171,12 @@ const settingsWritingStyleRoute = createRoute({
   }),
 });
 
+const settingsFeaturesRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: '/features',
+  component: FeaturesPage,
+});
+
 const settingsDictionaryRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: '/dictionary',
@@ -224,6 +231,7 @@ const routeTree = rootRoute.addChildren([
     settingsTranscriptionRoute,
     settingsWritingStyleRoute,
     settingsDictionaryRoute,
+    settingsFeaturesRoute,
     settingsCapturesRedirectRoute,
     settingsLogsRoute,
   ]),

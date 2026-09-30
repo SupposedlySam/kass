@@ -70,6 +70,7 @@ export function usePaletteCommands(): PaletteCommand[] {
     commands.push(go('settings-logs', t('palette.cmd.settingsLogs'), '/settings/logs', settings));
   }
   commands.push(
+    go('settings-features', t('palette.cmd.settingsFeatures'), '/settings/features', settings),
     go('setup', t('palette.cmd.setup'), '/setup'),
     // Teaching starts from the writing style page.
     go('calibrate', t('palette.cmd.calibrate'), '/settings/writing-style', t('palette.keys.style')),

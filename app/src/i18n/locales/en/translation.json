@@ -123,7 +123,8 @@
       "themeDark": "Switch to dark theme",
       "themeSystem": "Match system theme",
       "settingsCommandMode": "Settings: Command Mode",
-      "transform": "Transform selection: {{name}}"
+      "transform": "Transform selection: {{name}}",
+      "settingsFeatures": "Settings: Features"
     },
     "keys": {
       "go": "go",
@@ -566,7 +567,8 @@
       "transcription": "Transcription & refinement",
       "writingStyle": "Writing style",
       "dictionary": "Dictionary",
-      "logs": "Logs"
+      "logs": "Logs",
+      "features": "Features"
     },
     "theme": {
       "label": "Theme",
@@ -585,10 +587,10 @@
         "available": "Herga {{current}}. Version {{latest}} is out.",
         "download": "Get {{latest}}"
       },
-        "description": "Runs Whisper and Qwen3 on this Mac. Nothing leaves your machine."
-      },
       "server": {
         "title": "Local server",
+        "description": "Runs Whisper and Qwen3 on this Mac. Nothing leaves your machine."
+      },
       "connection": {
         "connecting": "Connecting",
         "offline": "Offline",
@@ -838,6 +840,55 @@
         "namePlaceholder": "Shorten",
         "instruction": "Instruction",
         "instructionPlaceholder": "Make this about half as long. Keep every fact and my tone."
+      }
+    },
+    "features": {
+      "title": "Features",
+      "description": "Everything Herga does besides hold and talk. Each one opens where you set it up or use it.",
+      "tryIt": "Try it",
+      "items": {
+        "styles": {
+          "title": "Writing styles",
+          "description": "Casual in Slack, full sentences in Mail. Each app gets a style."
+        },
+        "teach": {
+          "title": "Teach by replying",
+          "description": "Reply to a few messages out loud so Herga learns how you write."
+        },
+        "dictionary": {
+          "title": "Dictionary",
+          "description": "Names and terms Herga should always spell your way."
+        },
+        "fixCapture": {
+          "title": "Fix a capture",
+          "description": "Correct a dictation in Captures and Herga learns from it."
+        },
+        "formatting": {
+          "title": "Formatting by voice",
+          "description": "Say “new line” or “new paragraph”, or dictate a list."
+        },
+        "handsFree": {
+          "title": "Hands-free",
+          "description": "Tap your keys with Space to start, tap again to stop. For long thoughts."
+        },
+        "commandMode": {
+          "title": "Command Mode and transforms",
+          "description": "Select text in any app, hold the command keys and say what to do with it."
+        },
+        "palette": {
+          "title": "Command palette",
+          "description": "Press ⌘K in Herga to search everything you’ve said or run a command."
+        },
+        "insights": {
+          "title": "Insights",
+          "description": "Words dictated, speaking pace and time saved."
+        }
+      },
+      "onboardingTitle": "Onboarding",
+      "onboarding": {
+        "title": "Go through onboarding again",
+        "description": "Permissions, your microphone, your keys and a short practice run.",
+        "action": "Open onboarding"
       }
     }
   },
