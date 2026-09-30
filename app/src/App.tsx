@@ -14,6 +14,7 @@ import { useChordSync } from '@/lib/hooks/useChordSync';
 import { useDeepLinks } from '@/lib/hooks/useDeepLinks';
 import { useInAppDictationInsert } from '@/lib/hooks/useInAppDictationInsert';
 import { useSoundCueSync } from '@/lib/hooks/useSoundCueSync';
+import { queryClient } from '@/lib/queryClient';
 import { cn } from '@/lib/utils/cn';
 import { usePlatform } from '@/platform/PlatformContext';
 import { router } from '@/router';
@@ -100,6 +101,14 @@ function MainApp() {
   useSoundCueSync();
   // herga:// links open their screen once the router is showing.
   useDeepLinks(serverReady);
+
+  // Hooks above (the chord's settings among them) ask the server before it
+  // is up. Whatever failed for that is asked again once it is, so the global
+  // keys work without the window ever being opened.
+  useEffect(() => {
+    if (!serverReady) return;
+    queryClient.refetchQueries({ predicate: (query) => query.state.status === 'error' });
+  }, [serverReady]);
 
   // Setup lifecycle callbacks
   useEffect(() => {

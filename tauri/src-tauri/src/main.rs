@@ -1455,6 +1455,8 @@ pub fn run() {
         .setup(|app| {
             // The main window starts hidden (tauri.conf.json) so a login
             // launch stays out of the way until the Dock icon is clicked.
+            // Its page still runs while hidden (`backgroundThrottling`
+            // disabled there): it starts the server and arms the global keys.
             if !login_item::launched_at_login() {
                 if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                     let _ = window.show();

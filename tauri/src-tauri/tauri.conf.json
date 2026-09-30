@@ -52,6 +52,7 @@
         "userAgent": null,
         "titleBarStyle": "Overlay",
         "visible": false,
+        "backgroundThrottling": "disabled",
         "dragDropEnabled": false
       }
     ],
