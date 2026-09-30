@@ -1,29 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toggle } from '@/components/ui/toggle';
 import { useToast } from '@/components/ui/use-toast';
+import { type UpdateChannel, useUpdateChannel, useUpdateChannelStore } from '@/lib/betaFeatures';
 import { useUpdateCheck } from '@/lib/hooks/useUpdateCheck';
 import { SettingRow } from './SettingRow';
 
-type UpdateChannel = 'stable' | 'beta';
-
 /**
- * Opt in to beta releases (tauri src-tauri/src/updater.rs). Turning it off
- * keeps an installed beta until a public release is newer.
+ * Opt in to beta releases and beta features (tauri src-tauri/src/updater.rs,
+ * lib/betaFeatures.ts). Turning it off keeps an installed beta until a
+ * public release is newer.
  */
 export function BetaUpdatesRow() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { version } = useUpdateCheck();
-  const [channel, setChannel] = useState<UpdateChannel | null>(null);
+  const channel = useUpdateChannel();
+  const setChannel = useUpdateChannelStore((state) => state.setChannel);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    invoke<UpdateChannel>('update_channel')
-      .then(setChannel)
-      .catch((err) => console.warn('[update] channel failed:', err));
-  }, []);
 
   const onCheckedChange = async (beta: boolean) => {
     setSaving(true);

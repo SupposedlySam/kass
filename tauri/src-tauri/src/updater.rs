@@ -26,11 +26,15 @@ use tokio::sync::Notify;
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATUS_EVENT: &str = "update:status";
+/// Tells every window the channel changed, which turns beta features on or off.
+const CHANNEL_EVENT: &str = "update:channel";
 const BETA_ENDPOINT: &str = "https://github.com/mrgnhnt96/herga/releases/download/channels/beta.json";
-/// Present (containing `beta`) while this copy is on the beta channel.
+/// Present (containing `beta`) while this copy is on the beta channel. It
+/// sits in the app data dir, where the server reads it too (backend/beta.py).
 const CHANNEL_FILE: &str = "update-channel";
 
-/// Which releases this copy updates to.
+/// Which releases this copy updates to. The beta channel also turns on
+/// beta features: they ship in every release, but only show for beta users.
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
@@ -73,7 +77,7 @@ impl Default for UpdaterState {
 }
 
 fn channel_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     Ok(dir.join(CHANNEL_FILE))
 }
 
@@ -86,6 +90,12 @@ fn channel<R: Runtime>(app: &AppHandle<R>) -> Channel {
     } else {
         Channel::Stable
     }
+}
+
+/// Whether beta features are on: this copy is on the beta channel.
+#[allow(dead_code)] // Until a native feature is in beta.
+pub fn beta_features<R: Runtime>(app: &AppHandle<R>) -> bool {
+    channel(app) == Channel::Beta
 }
 
 fn set_status<R: Runtime>(app: &AppHandle<R>, status: UpdateStatus) {
@@ -216,6 +226,7 @@ pub fn set_update_channel(app: AppHandle, channel: Channel) -> Result<Channel, S
         }
     }
     app.state::<UpdaterState>().wake.notify_one();
+    let _ = app.emit(CHANNEL_EVENT, channel);
     Ok(channel)
 }
 
