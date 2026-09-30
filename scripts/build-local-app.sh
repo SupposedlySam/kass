@@ -26,10 +26,14 @@ codesign --force "$timestamp" --options runtime --entitlements tauri/src-tauri/E
 
 config=$(mktemp /tmp/herga-local-signing.XXXXXX)
 trap 'rm -f "$config"' EXIT
-python3 - "$config" "$identity" <<'PY'
+# With the updater key set (release.yml), Tauri also packs the app as a signed
+# .app.tar.gz for the background updater.
+updater=False
+[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && updater=True
+python3 - "$config" "$identity" "$updater" <<'PY'
 import json, sys
 with open(sys.argv[1], 'w') as config:
-    json.dump({'bundle': {'createUpdaterArtifacts': False, 'macOS': {'signingIdentity': sys.argv[2]}}}, config)
+    json.dump({'bundle': {'createUpdaterArtifacts': sys.argv[3] == 'True', 'macOS': {'signingIdentity': sys.argv[2]}}}, config)
 PY
 if command -v bun >/dev/null 2>&1; then
   bun=(bun)

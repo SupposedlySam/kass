@@ -24,6 +24,7 @@ mod server_version;
 mod sound_cues;
 mod synthetic_keys;
 mod text_insert;
+mod updater;
 
 use std::sync::Mutex;
 use tauri::{
@@ -1441,6 +1442,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdaterState::default())
         .manage(ServerState {
             child: Mutex::new(None),
             server_pid: Mutex::new(None),
@@ -1460,6 +1463,7 @@ pub fn run() {
             login_item::register_by_default(app.handle());
             dictation::restore(app.handle());
             sound_cues::init(app.handle());
+            updater::start(app.handle().clone());
             #[cfg(desktop)]
             {
                 // Resolve the active keyboard layout's V keycode now, on
@@ -1539,7 +1543,9 @@ pub fn run() {
             login_item::launch_at_login_status,
             login_item::set_launch_at_login,
             login_item::open_login_items_settings,
-            deep_link::take_deep_link
+            deep_link::take_deep_link,
+            updater::update_status,
+            updater::restart_to_update
         ])
         .on_window_event({
             let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1630,6 +1636,11 @@ pub fn run() {
                     let state = app.state::<ServerState>();
                     if let Err(error) = stop_managed_server(&state) {
                         eprintln!("Failed to stop local server on exit: {error}");
+                    }
+                    // A downloaded update goes in as Herga quits, with the
+                    // server stopped, so the next launch is the new version.
+                    if let Err(error) = updater::install_pending(app) {
+                        eprintln!("Failed to install the downloaded update: {error}");
                     }
                 }
                 RunEvent::ExitRequested { .. } => {

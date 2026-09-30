@@ -1,24 +1,43 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchLatestRelease, isNewerVersion, type Release } from '@/lib/utils/releases';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { useCallback, useEffect, useState } from 'react';
 import { usePlatform } from '@/platform/PlatformContext';
-import { version } from '../../../package.json';
-
-const SIX_HOURS = 6 * 60 * 60 * 1000;
 
 /**
- * The newer release to update to, or `null` while this is the latest.
- * Checks GitHub at launch and every six hours; a failed check just waits
- * for the next one.
+ * Herga downloads a newer release in the background (tauri
+ * src-tauri/src/updater.rs); it installs on restart or the next quit.
  */
-export function useUpdateCheck(): Release | null {
+export type UpdateStatus =
+  | { state: 'current' }
+  | { state: 'downloading'; version: string }
+  | { state: 'ready'; version: string };
+
+/** Where the background update is, and a restart into it once it's ready. */
+export function useUpdateCheck(): { status: UpdateStatus; restart: () => Promise<void> } {
   const platform = usePlatform();
-  const { data } = useQuery({
-    queryKey: ['latestRelease'],
-    queryFn: fetchLatestRelease,
-    enabled: platform.metadata.isTauri,
-    staleTime: SIX_HOURS,
-    refetchInterval: SIX_HOURS,
-    retry: false,
-  });
-  return data && isNewerVersion(data.version, version) ? data : null;
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'current' });
+
+  useEffect(() => {
+    if (!platform.metadata.isTauri) return;
+    let disposed = false;
+    let release: (() => void) | null = null;
+    listen<UpdateStatus>('update:status', ({ payload }) => setStatus(payload))
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else release = unlisten;
+      })
+      .catch((err) => console.warn('[update] listen failed:', err));
+    invoke<UpdateStatus>('update_status')
+      .then((current) => {
+        if (!disposed) setStatus(current);
+      })
+      .catch((err) => console.warn('[update] status failed:', err));
+    return () => {
+      disposed = true;
+      release?.();
+    };
+  }, [platform.metadata.isTauri]);
+
+  const restart = useCallback(() => invoke<void>('restart_to_update'), []);
+  return { status, restart };
 }

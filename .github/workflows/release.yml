@@ -83,16 +83,21 @@ jobs:
       # Signed with Developer ID and a secure timestamp. With the APPLE_API_*
       # variables set, Tauri also notarizes the app and staples the ticket,
       # so it opens without Gatekeeper warnings, even offline.
+      # The updater key also has Tauri pack the app as a signed .app.tar.gz,
+      # which installed copies download in the background.
       - name: Build, sign and notarize app
         env:
           HERGA_SIGNING_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
           APPLE_API_KEY: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APPLE_API_ISSUER: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           ./scripts/build-local-app.sh
           app=tauri/src-tauri/target/release/bundle/macos/Herga.app
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
+          test -f "$app.tar.gz" && test -f "$app.tar.gz.sig"
 
       # The branded window: background, icon positions and size come from
       # scripts/dmg-settings.py and tauri/assets/dmg.
@@ -136,7 +141,32 @@ jobs:
           [ -s notes.md ] || section Unreleased > notes.md
           [ -s notes.md ] || echo "See the [changelog](https://herga.mrgnhnt.com/changelog/)." > notes.md
 
+      # What the background updater reads: the version, and where to get the
+      # signed archive. The app checks releases/latest/download/latest.json.
+      - name: Updater manifest
+        id: updater
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="Herga-$version-macos-arm64.app.tar.gz"
+          cp tauri/src-tauri/target/release/bundle/macos/Herga.app.tar.gz "$archive"
+          python3 - "$version" "$archive" <<'PY'
+          import json, sys, datetime
+          version, archive = sys.argv[1], sys.argv[2]
+          signature = open('tauri/src-tauri/target/release/bundle/macos/Herga.app.tar.gz.sig').read().strip()
+          url = f'https://github.com/mrgnhnt96/herga/releases/download/v{version}/{archive}'
+          json.dump({
+              'version': version,
+              'notes': open('notes.md').read(),
+              'pub_date': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'platforms': {'darwin-aarch64': {'signature': signature, 'url': url}},
+          }, open('latest.json', 'w'), indent=2)
+          PY
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.file }}" --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.file }}" \
+            "${{ steps.updater.outputs.archive }}" latest.json \
+            --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md

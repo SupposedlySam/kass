@@ -16,8 +16,8 @@
     "models": "Models",
     "settings": "Settings",
     "update": {
-      "label": "Update",
-      "tip": "Herga {{latest}} is out (you have {{current}}). Click to download it."
+      "label": "Restart",
+      "tip": "Herga {{latest}} is downloaded (you have {{current}}). Click to restart into it; it also installs the next time you quit."
     },
     "alerts": {
       "missing": "{{role}} model {{name}} isn't downloaded. Dictation can't start without it.",
@@ -584,8 +584,9 @@
       "version": {
         "title": "Version",
         "current": "Herga {{version}}",
-        "available": "Herga {{current}}. Version {{latest}} is out.",
-        "download": "Get {{latest}}"
+        "downloading": "Herga {{current}}. Downloading {{latest}}…",
+        "ready": "Herga {{current}}. {{latest}} is downloaded and installs when Herga restarts.",
+        "restart": "Restart to update"
       },
       "server": {
         "title": "Local server",

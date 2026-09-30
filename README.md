@@ -170,7 +170,7 @@ Move the Unreleased notes in [CHANGELOG.md](CHANGELOG.md) (which the website als
 ./scripts/release.sh 0.6.0
 ```
 
-This sets the version everywhere, commits, tags `v0.6.0` and pushes. The tag starts `.github/workflows/release.yml`, which builds the app and publishes a GitHub release with the DMG attached. The app checks that release to let people know an update is available.
+This sets the version everywhere, commits, tags `v0.6.0` and pushes. The tag starts `.github/workflows/release.yml`, which builds the app and publishes a GitHub release with the DMG, a signed `.app.tar.gz` and `latest.json`. Installed copies read `latest.json`, download the archive in the background and install it on restart. The archive is signed with the updater key in the `TAURI_SIGNING_PRIVATE_KEY` (and `_PASSWORD`) secrets; its public half is in `tauri.conf.json`, so a new key means copies built with the old one can't update.
 
 ### Project Structure
 

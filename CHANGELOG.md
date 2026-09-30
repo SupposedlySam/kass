@@ -2,6 +2,12 @@
 
 Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### Improved
+
+- **Updates download in the background.** When a newer version is out, Herga downloads it while you work. Click **Restart** in the sidebar (or **Restart to update** in Settings › General) to switch to it, or it installs the next time you quit. Your permissions carry over. Versions before this one need a one-time manual update from the download page.
+
 ## 0.6.0 — September 30, 2026
 
 The first release of Herga as a dictation app. This fork of [jamiepine/voicebox](https://github.com/jamiepine/voicebox) 0.5.0 drops text-to-speech and focuses entirely on turning your speech into ready-to-send text on Apple Silicon Macs.
