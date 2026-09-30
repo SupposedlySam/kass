@@ -45,20 +45,20 @@
 }
 
 :root {
-  /* Console — light variant: warm paper greys, deep amber accent. */
+  /* Console — light variant: warm paper greys, deep green accent (the logo's mint, darkened for contrast). */
   --background: 40 10% 96%;
   --foreground: 220 10% 10%;
   --card: 0 0% 100%;
   --card-foreground: 220 10% 10%;
   --popover: 0 0% 100%;
   --popover-foreground: 220 10% 10%;
-  --primary: 38 88% 50%;
+  --primary: 154 70% 42%;
   --primary-foreground: 220 15% 7%;
   --secondary: 40 8% 90%;
   --secondary-foreground: 220 10% 10%;
   --muted: 40 8% 91%;
   --muted-foreground: 220 6% 38%;
-  --accent: 36 90% 40%;
+  --accent: 158 81% 26%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 46%;
   --destructive-foreground: 0 0% 100%;
@@ -66,7 +66,7 @@
   --warning: 28 90% 40%;
   --border: 40 8% 84%;
   --input: 40 8% 80%;
-  --ring: 36 90% 40%;
+  --ring: 158 81% 26%;
   --sidebar: 40 10% 92%;
   --radius: 0.5rem;
   --chart-1: 12 76% 61%;
@@ -77,20 +77,20 @@
 }
 
 .dark {
-  /* Console — dense graphite, one phosphor-amber accent. */
+  /* Console — dense graphite, one mint accent, the logo's. */
   --background: 220 11% 6%;
   --foreground: 60 5% 90%;
   --card: 216 12% 8%;
   --card-foreground: 60 5% 90%;
   --popover: 216 10% 10%;
   --popover-foreground: 60 5% 90%;
-  --primary: 39 87% 62%;
+  --primary: 154 85% 65%;
   --primary-foreground: 0 0% 7%;
   --secondary: 216 11% 13%;
   --secondary-foreground: 60 5% 90%;
   --muted: 216 12% 12%;
   --muted-foreground: 218 6% 60%;
-  --accent: 39 87% 62%;
+  --accent: 154 85% 65%;
   --accent-foreground: 0 0% 7%;
   --destructive: 0 84% 71%;
   --destructive-foreground: 0 0% 7%;
@@ -98,7 +98,7 @@
   --warning: 27 96% 72%;
   --border: 218 10% 15%;
   --input: 216 10% 19%;
-  --ring: 39 87% 62%;
+  --ring: 154 85% 65%;
   --sidebar: 220 12% 5%;
   --chart-1: 220 70% 50%;
   --chart-2: 160 60% 45%;

@@ -2,14 +2,14 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 
-/* Dark: graphite and gold, matching the landing page. */
+/* Dark: graphite and green, matching the landing page. */
 :root {
   --sl-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --sl-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
 
-  --sl-color-accent-low: #3a2a0c;
-  --sl-color-accent: #e9b44c;
-  --sl-color-accent-high: #f6cf7a;
+  --sl-color-accent-low: #0e3a28;
+  --sl-color-accent: #5cf2b0;
+  --sl-color-accent-high: #9af7cf;
   --sl-color-white: #f3efe6;
   --sl-color-gray-1: #e4dfd4;
   --sl-color-gray-2: #c4beb1;
@@ -21,9 +21,9 @@
 }
 
 :root[data-theme="light"] {
-  --sl-color-accent-low: #f7e6c2;
-  --sl-color-accent: #95650f;
-  --sl-color-accent-high: #4f3505;
+  --sl-color-accent-low: #cff5e3;
+  --sl-color-accent: #0b7a4e;
+  --sl-color-accent-high: #064029;
   --sl-color-white: #17150f;
   --sl-color-gray-1: #2a261d;
   --sl-color-gray-2: #423d31;

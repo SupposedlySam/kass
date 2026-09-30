@@ -11,10 +11,10 @@
   --ink: #f3efe6;
   --ink-soft: #b9b3a6;
   --ink-faint: #7d776b;
-  --gold: #e9b44c;
-  --gold-bright: #f6cf7a;
-  --gold-deep: #a8761c;
-  --gold-glow: rgba(233, 180, 76, 0.18);
+  --green: #5cf2b0;
+  --green-bright: #9af7cf;
+  --green-deep: #1f9d6a;
+  --green-glow: rgba(92, 242, 176, 0.18);
   --strike: #d9725b;
 
   --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
@@ -98,7 +98,7 @@ p {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--gold);
+  color: var(--green);
   margin-bottom: 18px;
 }
 
@@ -108,8 +108,8 @@ p {
   max-width: 44ch;
 }
 
-.gold {
-  color: var(--gold);
+.green {
+  color: var(--green);
 }
 
 .btn {
@@ -132,12 +132,12 @@ p {
   transform: translateY(-1px);
 }
 
-.btn-gold {
-  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
-  color: #1a1305;
+.btn-green {
+  background: linear-gradient(180deg, var(--green-bright), var(--green));
+  color: #06231a;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.35) inset,
-    0 10px 30px -10px rgba(233, 180, 76, 0.6);
+    0 10px 30px -10px rgba(92, 242, 176, 0.6);
 }
 
 .btn-ghost {
