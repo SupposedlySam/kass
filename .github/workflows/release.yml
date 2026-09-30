@@ -94,14 +94,13 @@ jobs:
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
 
+      # The branded window: background, icon positions and size come from
+      # scripts/dmg-settings.py and tauri/assets/dmg.
       - name: Make DMG
         id: dmg
         run: |
           name="Herga-${GITHUB_REF_NAME#v}-macos-arm64"
-          stage=$(mktemp -d)
-          ditto tauri/src-tauri/target/release/bundle/macos/Herga.app "$stage/Herga.app"
-          ln -s /Applications "$stage/Applications"
-          hdiutil create -volname Herga -srcfolder "$stage" -format UDZO -ov "$name.dmg"
+          ./scripts/build-dmg.sh tauri/src-tauri/target/release/bundle/macos/Herga.app "$name.dmg"
           echo "file=$name.dmg" >> "$GITHUB_OUTPUT"
 
       # The DMG gets its own signature and notarization ticket, so the

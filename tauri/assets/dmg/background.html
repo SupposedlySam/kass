@@ -1,0 +1,76 @@
+<!doctype html>
+<!--
+  The background of the DMG window, in points. The design is 660 × 400; it's
+  drawn 420 tall so a Mac whose title bar is shorter than macOS 26's shows
+  more background rather than a white strip. scripts/render-dmg-background.sh
+  renders it to background.tiff.
+
+  Finder draws the two icons on top, centred where scripts/dmg-settings.py
+  puts them: Herga at (180, 170) and Applications at (480, 170). The glow
+  sits behind the Herga icon and the wave runs between the two, so moving
+  an icon means moving these too.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Herga DMG background</title>
+<style>
+  @font-face {
+    font-family: "Bricolage Grotesque";
+    font-weight: 200 800;
+    src: url("../../../site/node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2") format("woff2");
+  }
+  html, body { margin: 0; width: 660px; height: 420px; overflow: hidden; background: #111318; }
+  .layer { position: absolute; left: 0; top: 0; }
+  /* The app icon's squircle, a little larger and blurred. */
+  .glow {
+    position: absolute; left: 110px; top: 100px; width: 140px; height: 140px;
+    border-radius: 31px; background: rgba(92, 242, 176, 0.55); filter: blur(12px);
+  }
+  /* Finder always draws icon names black over a background image, even in
+     dark mode, so each name gets a light tag where Finder writes it
+     (measured on macOS 26: centred under the icon, about y 243 to 264).
+     The tags leave room for a slightly wider label font. */
+  .tag { position: absolute; top: 242px; height: 22px; border-radius: 7px; background: #f4f2ec; }
+  .tag.app { left: 150px; width: 60px; }
+  .tag.applications { left: 431px; width: 98px; }
+  .hint {
+    position: absolute; left: 0; right: 0; top: 337px; text-align: center;
+    font-family: "Bricolage Grotesque", sans-serif; font-size: 15px; letter-spacing: 0.01em; color: #b9b3a6;
+  }
+</style>
+</head>
+<body>
+<!-- The logo's three strokes, blown up and faint. -->
+<svg class="layer" width="660" height="400" viewBox="0 0 660 400">
+  <g fill="none" stroke-width="34" stroke-linecap="round">
+    <path d="M -40 250 Q 140 236, 300 -40" stroke="#F4F2EC" stroke-opacity="0.05"/>
+    <path d="M 60 470 Q 380 440, 720 40" stroke="#5CF2B0" stroke-opacity="0.1"/>
+    <path d="M 330 520 Q 560 490, 720 250" stroke="#F4F2EC" stroke-opacity="0.05"/>
+  </g>
+</svg>
+<div class="glow"></div>
+<!-- The capture pill's level bars: a wave, then bars stepping down to a point. -->
+<svg class="layer" width="660" height="400" viewBox="0 0 660 400">
+  <g fill="#5CF2B0">
+    <rect x="262.5" y="163.2" width="5" height="13.6" rx="2.5"/>
+    <rect x="272.5" y="156.7" width="5" height="26.5" rx="2.5"/>
+    <rect x="282.5" y="158.8" width="5" height="22.4" rx="2.5"/>
+    <rect x="292.5" y="149" width="5" height="42" rx="2.5"/>
+    <rect x="302.5" y="155.2" width="5" height="29.6" rx="2.5"/>
+    <rect x="312.5" y="147" width="5" height="46" rx="2.5"/>
+    <rect x="322.5" y="152.9" width="5" height="34.2" rx="2.5"/>
+    <rect x="332.5" y="151.8" width="5" height="36.4" rx="2.5"/>
+    <rect x="342.5" y="159.8" width="5" height="20.4" rx="2.5"/>
+    <rect x="352.5" y="141" width="5" height="58" rx="2.5"/>
+    <rect x="362.5" y="147.5" width="5" height="45" rx="2.5"/>
+    <rect x="372.5" y="154" width="5" height="32" rx="2.5"/>
+    <rect x="382.5" y="160.5" width="5" height="19" rx="2.5"/>
+    <rect x="392.5" y="166.5" width="5" height="7" rx="2.5"/>
+  </g>
+</svg>
+<div class="tag app"></div>
+<div class="tag applications"></div>
+<div class="hint">Drag Herga into Applications</div>
+</body>
+</html>

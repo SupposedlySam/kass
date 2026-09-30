@@ -76,6 +76,10 @@ build-server: _ensure-venv
 build-tauri:
     ./scripts/build-local-app.sh
 
+# Pack the built app into Herga.dmg with the branded window (run `just build` first)
+dmg:
+    ./scripts/build-dmg.sh
+
 # Check requirements, build, and install or update /Applications/Herga.app
 install:
     ./scripts/install.sh
