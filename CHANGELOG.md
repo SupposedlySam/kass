@@ -2,7 +2,7 @@
 
 Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
 
-## Unreleased
+## 0.6.0 — September 30, 2026
 
 The first release of Herga as a dictation app. This fork of [jamiepine/voicebox](https://github.com/jamiepine/voicebox) 0.5.0 drops text-to-speech and focuses entirely on turning your speech into ready-to-send text on Apple Silicon Macs.
 
@@ -10,7 +10,7 @@ The first release of Herga as a dictation app. This fork of [jamiepine/voicebox]
 
 ### New
 
-- **Guided setup.** First-run onboarding downloads the models in the background while it walks you through permissions, your hotkey, your name and a first messy dictation. If macOS needs Herga to quit for a permission, setup reopens on the same step.
+- **Guided setup.** First-run onboarding downloads the models in the background while it walks you through permissions and your hotkey, then has you say your name, read a messy line, reply to a text in your own words to teach your writing style, and rewrite a paragraph by voice. If macOS needs Herga to quit for a permission, setup reopens on the same step.
 - **Native, streaming dictation.** The microphone is captured in native code and streamed while you speak, and cleanup runs a sentence at a time, so there's less to wait for when you let go.
 - **Text lands where you were typing.** Text is inserted through Accessibility, typed keystrokes or the clipboard, whichever works for the app. When it has to use the clipboard, it puts yours back.
 - **Writing styles per app.** Every app gets a style, and each style learns on its own. Switch style by saying so at the start of a dictation ("use formal mode"). The pill shows the style's name and plays a sound when it changes.
@@ -27,6 +27,7 @@ The first release of Herga as a dictation app. This fork of [jamiepine/voicebox]
 - **Sound cues** for start, stop and errors, with a volume setting.
 - **Launch at login**, on by default, with the window hidden.
 - **Command palette.** Press <kbd>⌘</kbd> <kbd>K</kbd> to jump to any setting or action.
+- **Update notices.** Herga tells you when a newer release is out.
 
 ### Improved
 
@@ -36,6 +37,7 @@ The first release of Herga as a dictation app. This fork of [jamiepine/voicebox]
 - Audio without a voice in it is never transcribed, and Whisper's repeated-phrase loops are removed.
 - Cleanup is rejected and your own words are used instead when it answers your question instead of writing it down, copies an example, or adds words you didn't say.
 - The microphone is released after every dictation.
+- The DMG opens to a drag-to-Applications install window.
 
 ### Removed
 
