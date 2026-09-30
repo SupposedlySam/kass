@@ -1,98 +1,77 @@
 #!/bin/bash
 set -e
 
-# Complete Icon Update Script
-# Updates both Liquid Glass icon bundle AND the macOS fallback icons from exports
+# Regenerates every Herga icon from the Icon Composer source, tauri/assets/herga.icon.
+#
+#   1. Renders the Liquid Glass appearances (Default, Dark, Clear, Tinted) with ictool
+#   2. Compiles herga.icon with actool into Assets.car + herga.icns
+#   3. Writes the Tauri fallback PNGs and icon.icns
+#   4. Writes the in-app logo, the site icons and the README icon
+#
+# The favicons (site/public/favicon.svg, app/public/favicon.svg) are hand-drawn SVGs with
+# thicker strokes so the mark holds up at 16 px; edit those directly.
+#
+# Requires Xcode 26+ (Icon Composer's ictool), ImageMagick (for the README webp) and
+# site/node_modules (sharp, for the apple-touch icon).
 
 cd "$(dirname "$0")/.."
 
-EXPORTS_DIR="tauri/assets/voicebox_exports"
-ICON_BUNDLE="tauri/assets/voicebox.icon"
-ASSETS_DIR="$ICON_BUNDLE/Assets"
+ICTOOL="$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executables/ictool"
+ICON_BUNDLE="tauri/assets/herga.icon"
+EXPORTS_DIR="tauri/assets/herga_exports"
 ICONS_DIR="tauri/src-tauri/icons"
-SOURCE_ICON="$EXPORTS_DIR/voicebox-iOS-Dark-1024x1024@1x.png"
+GEN_DIR="tauri/src-tauri/gen"
+SOURCE_ICON="$EXPORTS_DIR/herga-macOS-Default-1024x1024@1x.png"
 
-echo "🎨 Updating all Voicebox icons from exports..."
-echo ""
-
-# Check if source exists
-if [ ! -f "$SOURCE_ICON" ]; then
-  echo "Error: Source icon not found at $SOURCE_ICON"
+if [ ! -x "$ICTOOL" ]; then
+  echo "Error: ictool not found at $ICTOOL (install Xcode 26 or later)"
   exit 1
 fi
 
-# ============================================
-# PART 1: Compile Liquid Glass Icon Bundle
-# ============================================
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📦 Part 1: Compiling Liquid Glass Icon Bundle"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+render() { # platform rendition size output
+  "$ICTOOL" "$ICON_BUNDLE" --export-image --output-file "$4" \
+    --platform "$1" --rendition "$2" --width "$3" --height "$3" --scale 1 >/dev/null
+}
 
-echo "Compiling voicebox.icon with actool..."
-# Remove old generated icons to force rebuild
-rm -rf tauri/src-tauri/gen/*.icns tauri/src-tauri/gen/Assets.car 2>/dev/null
+echo "🎨 Updating all Herga icons from $ICON_BUNDLE"
 
-cd tauri/src-tauri
-cargo build 2>/dev/null || echo "  ⚠ Cargo build had warnings (this is normal)"
-cd ../..
+# 1. Appearance renders
+echo "Rendering appearances..."
+mkdir -p "$EXPORTS_DIR"
+rm -f "$EXPORTS_DIR"/*.png
+for rendition in Default Dark ClearLight ClearDark TintedLight TintedDark; do
+  render macOS "$rendition" 1024 "$EXPORTS_DIR/herga-macOS-$rendition-1024x1024@1x.png"
+done
 
-if [ -f "tauri/src-tauri/gen/voicebox.icns" ]; then
-  echo "  ✓ voicebox.icns generated"
-else
-  echo "  ⚠ Warning: voicebox.icns not generated (will use fallback)"
-fi
+# 2. Liquid Glass compile (same invocation as tauri/src-tauri/build.rs)
+echo "Compiling herga.icon with actool..."
+mkdir -p "$GEN_DIR"
+rm -f "$GEN_DIR/herga.icns" "$GEN_DIR/Assets.car" "$GEN_DIR/partial.plist"
+xcrun actool --compile "$GEN_DIR" --output-format human-readable-text \
+  --output-partial-info-plist "$GEN_DIR/partial.plist" --app-icon herga \
+  --include-all-app-icons --target-device mac --minimum-deployment-target 11.0 \
+  --platform macosx "$ICON_BUNDLE" >/dev/null
 
-echo ""
-
-# ============================================
-# PART 2: Generate Platform Fallback Icons
-# ============================================
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🖼️  Part 2: Generating Platform Fallback Icons"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
+# 3. Tauri fallback icons
+echo "Writing Tauri icons..."
 mkdir -p "$ICONS_DIR"
+sips -s format png -z 32 32 "$SOURCE_ICON" --out "$ICONS_DIR/32x32.png" >/dev/null
+sips -s format png -z 64 64 "$SOURCE_ICON" --out "$ICONS_DIR/64x64.png" >/dev/null
+sips -s format png -z 128 128 "$SOURCE_ICON" --out "$ICONS_DIR/128x128.png" >/dev/null
+sips -s format png -z 256 256 "$SOURCE_ICON" --out "$ICONS_DIR/128x128@2x.png" >/dev/null
+sips -s format png -z 512 512 "$SOURCE_ICON" --out "$ICONS_DIR/icon.png" >/dev/null
+cp "$GEN_DIR/herga.icns" "$ICONS_DIR/icon.icns"
+# build.rs falls back to this PNG when actool cannot produce herga.icns
+cp "$SOURCE_ICON" "$ICON_BUNDLE/Assets/Herga.png"
 
-# macOS & Desktop Icons
-echo "Generating macOS/Desktop icons..."
-sips -s format png -z 32 32 "$SOURCE_ICON" --out "$ICONS_DIR/32x32.png" 2>/dev/null
-sips -s format png -z 64 64 "$SOURCE_ICON" --out "$ICONS_DIR/64x64.png" 2>/dev/null
-sips -s format png -z 128 128 "$SOURCE_ICON" --out "$ICONS_DIR/128x128.png" 2>/dev/null
-sips -s format png -z 256 256 "$SOURCE_ICON" --out "$ICONS_DIR/128x128@2x.png" 2>/dev/null
-sips -s format png -z 512 512 "$SOURCE_ICON" --out "$ICONS_DIR/icon.png" 2>/dev/null
+# 4. App, site and README
+echo "Writing app, site and README icons..."
+cp "$SOURCE_ICON" app/src/assets/herga-logo.png
+sips -s format png -z 512 512 "$SOURCE_ICON" --out site/public/icon.png >/dev/null
+sips -s format png -z 256 256 "$SOURCE_ICON" --out site/src/assets/icon.png >/dev/null
+# iOS masks the home-screen icon itself, so it must be a full-bleed square
+(cd site && node -e "require('sharp')(Buffer.from(process.argv[1])).png().toFile('public/apple-touch-icon.png')" \
+  '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 100 100"><rect width="100" height="100" fill="#111318"/><g fill="none" stroke-width="8" stroke-linecap="round"><path d="M18 58 Q 34 55, 54 32" stroke="#F4F2EC"/><path d="M22 74 Q 48 70, 80 26" stroke="#5CF2B0"/><path d="M36 82 Q 60 78, 82 50" stroke="#F4F2EC"/></g></svg>')
+magick "$EXPORTS_DIR/herga-macOS-Dark-1024x1024@1x.png" -resize 256x256 docs/assets/icon-dark.webp
 
-# Copy Liquid Glass compiled ICNS or generate fallback
-echo "Copying icon.icns..."
-if [ -f "tauri/src-tauri/gen/voicebox.icns" ]; then
-  cp tauri/src-tauri/gen/voicebox.icns "$ICONS_DIR/icon.icns"
-  echo "  ✓ Copied Liquid Glass compiled icon.icns"
-else
-  echo "  ⚠ Liquid Glass icon not found, generating fallback icon.icns..."
-mkdir -p /tmp/voicebox-iconset.iconset
-sips -s format png -z 16 16 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_16x16.png 2>/dev/null
-sips -s format png -z 32 32 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_16x16@2x.png 2>/dev/null
-sips -s format png -z 32 32 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_32x32.png 2>/dev/null
-sips -s format png -z 64 64 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_32x32@2x.png 2>/dev/null
-sips -s format png -z 128 128 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_128x128.png 2>/dev/null
-sips -s format png -z 256 256 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_128x128@2x.png 2>/dev/null
-sips -s format png -z 256 256 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_256x256.png 2>/dev/null
-sips -s format png -z 512 512 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_256x256@2x.png 2>/dev/null
-sips -s format png -z 512 512 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_512x512.png 2>/dev/null
-  sips -s format png -z 1024 1024 "$SOURCE_ICON" --out /tmp/voicebox-iconset.iconset/icon_512x512@2x.png 2>/dev/null
-  iconutil -c icns /tmp/voicebox-iconset.iconset -o "$ICONS_DIR/icon.icns"
-  rm -rf /tmp/voicebox-iconset.iconset
-  echo "  ✓ Generated fallback icon.icns"
-fi
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ All icons updated successfully!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Updated:"
-echo "  ✓ Liquid Glass icon bundle with all appearance variants"
-echo "  ✓ macOS/Desktop fallback icons"
-echo ""
-echo "Next: Rebuild the app with 'cd tauri && bun run tauri build'"
+echo "✅ Icons updated. Rebuild the app to pick them up."

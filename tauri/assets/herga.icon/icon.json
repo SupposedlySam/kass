@@ -1,15 +1,17 @@
 {
-  "fill": "automatic",
+  "fill": {
+    "solid": "srgb:0.06667,0.07451,0.09412,1.00000"
+  },
   "groups": [
     {
       "layers": [
         {
-          "image-name": "Voicebox_Microphone.png",
-          "name": "Voicebox_Microphone",
-          "position": {
-            "scale": 0.36,
-            "translation-in-points": [0.140625, 270.1875]
-          }
+          "image-name": "stroke-accent.svg",
+          "name": "stroke-accent"
+        },
+        {
+          "image-name": "strokes-light.svg",
+          "name": "strokes-light"
         }
       ],
       "shadow": {
@@ -17,7 +19,7 @@
         "opacity": 0.5
       },
       "translucency": {
-        "enabled": true,
+        "enabled": false,
         "value": 0.5
       }
     }
