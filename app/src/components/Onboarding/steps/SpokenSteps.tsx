@@ -16,6 +16,7 @@ import {
   PosterButton,
   ProgressBar,
   SpeakRow,
+  StatusLine,
 } from '../Poster';
 import type { OnboardingDownloads } from '../useOnboardingDownloads';
 
@@ -174,10 +175,9 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
               onDictate={takes.toggle}
               {...labels}
             />
-            {takes.phase === 'working' ? (
-              <span className="text-[13px] opacity-80">{t('onboarding.working')}</span>
-            ) : null}
-            {takes.error ? <span className="text-[13px]">{takes.error}</span> : null}
+            <StatusLine>
+              {takes.phase === 'working' ? t('onboarding.working') : takes.error}
+            </StatusLine>
           </>
         ) : (
           <Actions>
@@ -273,27 +273,29 @@ export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
           </button>
         ))}
       </div>
-      {result ? (
-        <>
-          <p className="m-0 max-w-[700px] text-[17px] leading-snug">
-            {heardParts(result.heard, result.sent).map((part, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
-              <span key={i} className={part.dropped ? 'line-through opacity-50' : 'opacity-85'}>
-                {part.text}{' '}
-              </span>
-            ))}
+      <div className="flex h-[132px] flex-col gap-3 overflow-hidden">
+        {result ? (
+          <>
+            <p className="m-0 line-clamp-2 max-w-[700px] text-[17px] leading-snug">
+              {heardParts(result.heard, result.sent).map((part, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
+                <span key={i} className={part.dropped ? 'line-through opacity-50' : 'opacity-85'}>
+                  {part.text}{' '}
+                </span>
+              ))}
+            </p>
+            <p
+              className={`${DISPLAY_FONT} m-0 line-clamp-2 max-w-[720px] text-[32px] font-bold leading-tight tracking-[-0.02em]`}
+            >
+              {result.sent}
+            </p>
+          </>
+        ) : (
+          <p className={`${DISPLAY_FONT} m-0 max-w-[700px] text-[26px] font-medium leading-tight`}>
+            {t(`onboarding.messy.scripts.${script}.line`)}
           </p>
-          <p
-            className={`${DISPLAY_FONT} m-0 max-w-[720px] text-[32px] font-bold leading-tight tracking-[-0.02em]`}
-          >
-            {result.sent}
-          </p>
-        </>
-      ) : (
-        <p className={`${DISPLAY_FONT} m-0 max-w-[700px] text-[26px] font-medium leading-tight`}>
-          {t(`onboarding.messy.scripts.${script}.line`)}
-        </p>
-      )}
+        )}
+      </div>
       <label htmlFor="onboarding-messy" className="sr-only">
         {t('onboarding.messy.fieldLabel')}
       </label>
@@ -310,11 +312,14 @@ export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
         onDictate={takes.toggle}
         {...labels}
       />
-      {result ? (
+      <StatusLine>{takes.phase === 'working' ? t('onboarding.working') : takes.error}</StatusLine>
+      <div className={cn(!result && 'invisible')}>
         <Actions>
-          <PosterButton onClick={onNext}>{t('onboarding.next')}</PosterButton>
+          <PosterButton onClick={onNext} disabled={!result}>
+            {t('onboarding.next')}
+          </PosterButton>
         </Actions>
-      ) : null}
+      </div>
     </>
   );
 }
@@ -399,34 +404,38 @@ export function RewriteStep({
             disabled={busy !== null}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => run(key)}
-            className="h-8 rounded-full border border-white/40 px-3.5 text-[13px] text-[var(--poster-fg)] hover:border-white disabled:opacity-60"
+            aria-busy={busy === key}
+            className={cn(
+              'h-8 rounded-full border border-white/40 px-3.5 text-[13px] text-[var(--poster-fg)] hover:border-white disabled:opacity-60',
+              busy === key && 'animate-pulse border-white',
+            )}
           >
-            {busy === key
-              ? t('onboarding.working')
-              : `“${t(`onboarding.rewrite.instructions.${key}`)}”`}
+            {`“${t(`onboarding.rewrite.instructions.${key}`)}”`}
           </button>
         ))}
-        {text !== original ? (
-          <button
-            type="button"
-            onClick={() => {
-              setText(original);
-              requestAnimationFrame(selectAll);
-            }}
-            className="h-8 px-2.5 text-[13px] font-medium text-[var(--poster-fg)] underline"
-          >
-            {t('onboarding.rewrite.undo')}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          disabled={text === original}
+          onClick={() => {
+            setText(original);
+            requestAnimationFrame(selectAll);
+          }}
+          className={cn(
+            'h-8 px-2.5 text-[13px] font-medium text-[var(--poster-fg)] underline',
+            text === original && 'invisible',
+          )}
+        >
+          {t('onboarding.rewrite.undo')}
+        </button>
       </div>
-      {error ? <span className="text-[13px]">{error}</span> : null}
+      <StatusLine>{busy ? t('onboarding.working') : error}</StatusLine>
       <Actions>
         <PosterButton onClick={onNext}>{t('onboarding.next')}</PosterButton>
-        {text === original ? (
-          <PosterButton kind="ghost" onClick={onNext}>
+        <div className={cn(text !== original && 'invisible')}>
+          <PosterButton kind="ghost" onClick={onNext} disabled={text !== original}>
             {t('onboarding.skip')}
           </PosterButton>
-        ) : null}
+        </div>
       </Actions>
     </>
   );

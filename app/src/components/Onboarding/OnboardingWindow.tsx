@@ -180,7 +180,7 @@ export function OnboardingWindow() {
       </div>
       <main
         key={step}
-        className="flex flex-1 select-text flex-col justify-center gap-4 px-16 pb-10"
+        className="flex min-h-0 flex-1 select-text flex-col justify-start gap-4 px-16 pt-10 pb-14"
       >
         {body}
       </main>

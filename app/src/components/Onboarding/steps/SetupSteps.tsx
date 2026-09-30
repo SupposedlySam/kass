@@ -113,7 +113,9 @@ export function DownloadStep({
         {failed.error ? (
           <details className="max-w-[560px] text-[13px]">
             <summary className="cursor-pointer underline">{t('onboarding.failed.details')}</summary>
-            <p className="mt-2 font-mono text-xs opacity-80">{failed.error}</p>
+            <p className="mt-2 line-clamp-3 font-mono text-xs opacity-80" title={failed.error}>
+              {failed.error}
+            </p>
           </details>
         ) : null}
         <Actions>
@@ -359,7 +361,11 @@ export function MicrophoneStep({ onNext }: { onNext: () => void }) {
         <>
           <Lead>{t('onboarding.microphone.body')}</Lead>
           <LevelMeter db={mic.db} />
-          {mic.error ? <p className="m-0 text-[13px]">{mic.error}</p> : null}
+          {mic.error ? (
+            <p className="m-0 line-clamp-2 text-[13px]" title={mic.error}>
+              {mic.error}
+            </p>
+          ) : null}
           <label
             htmlFor="onboarding-mic"
             className="flex max-w-[520px] items-center gap-3 text-[13px]"

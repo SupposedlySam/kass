@@ -79,6 +79,22 @@ export function PosterButton({
   );
 }
 
+/**
+ * Room for one short status, such as "Working…" or an error, that's kept
+ * whether or not there's anything to say, so nothing below it moves.
+ */
+export function StatusLine({ children }: { children?: string | null }) {
+  return (
+    <p
+      className="m-0 line-clamp-2 min-h-10 max-w-[600px] text-[13px] leading-5 opacity-85"
+      title={children ?? undefined}
+      aria-live="polite"
+    >
+      {children}
+    </p>
+  );
+}
+
 export function Actions({ children }: { children: ReactNode }) {
   return <div className="mt-2 flex flex-wrap items-center gap-2.5">{children}</div>;
 }
@@ -199,21 +215,25 @@ export function SpeakRow({
         type="button"
         onClick={onDictate}
         disabled={disabled}
-        className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--poster-fg)] px-[18px] text-sm font-semibold text-[var(--poster-bg)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--poster-fg)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--poster-bg)] disabled:cursor-not-allowed"
+        className="inline-flex h-11 min-w-[124px] items-center justify-center gap-2 rounded-full bg-[var(--poster-fg)] px-[18px] text-sm font-semibold text-[var(--poster-bg)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--poster-fg)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--poster-bg)] disabled:cursor-not-allowed"
       >
         <Mic className="h-4 w-4" aria-hidden />
         {listening ? stopLabel : dictateLabel}
       </button>
       <span className="text-[13px] opacity-80">{orHoldLabel}</span>
       <Keycaps keys={keys} down={listening} />
-      {listening ? <ListeningBars /> : null}
+      <ListeningBars visible={listening} />
     </div>
   );
 }
 
-function ListeningBars() {
+/** Always laid out, and only shown while listening, so the row keeps its size. */
+function ListeningBars({ visible }: { visible: boolean }) {
   return (
-    <span className="inline-flex h-7 items-center gap-[3px]" aria-hidden>
+    <span
+      className={cn('inline-flex h-7 items-center gap-[3px]', !visible && 'invisible')}
+      aria-hidden
+    >
       {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
         <span
           key={i}
