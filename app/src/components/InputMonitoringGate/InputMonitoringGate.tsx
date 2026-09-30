@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { usePlatform } from '@/platform/PlatformContext';
+import { useMacPermission } from '@/lib/hooks/useMacPermission';
 
 /**
  * Tracks macOS Input Monitoring permission state. Without it, `rdev::listen`
@@ -12,38 +12,14 @@ import { usePlatform } from '@/platform/PlatformContext';
  * hotkey toggle instead of leaving the user wondering why the shortcut is
  * dead.
  *
- * Re-checked on mount and on window focus (cheap way to pick up the user
- * flipping the toggle in System Settings and alt-tabbing back).
+ * Re-checked on mount and on window focus, and watched for a while after a
+ * reinstall (see `useMacPermission`).
  */
 export function useInputMonitoringPermission() {
-  const platform = usePlatform();
-  const [needsPermission, setNeedsPermission] = useState(false);
-  const [checking, setChecking] = useState(false);
-
-  const recheck = useCallback(async (): Promise<boolean> => {
-    if (!platform.metadata.isTauri) return true;
-    setChecking(true);
-    try {
-      const trusted = await invoke<boolean>('check_input_monitoring_permission');
-      setNeedsPermission(!trusted);
-      return trusted;
-    } catch (err) {
-      console.warn('[input-monitoring] check failed:', err);
-      return false;
-    } finally {
-      setChecking(false);
-    }
-  }, [platform.metadata.isTauri]);
-
-  useEffect(() => {
-    if (!platform.metadata.isTauri) return;
-    recheck();
-    const onFocus = () => {
-      recheck();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [platform.metadata.isTauri, recheck]);
+  const { needsPermission, checking, recheck } = useMacPermission(
+    'check_input_monitoring_permission',
+    'herga.permission.inputMonitoring.granted',
+  );
 
   const openSettings = useCallback(async () => {
     try {

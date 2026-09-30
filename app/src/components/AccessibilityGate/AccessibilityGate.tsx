@@ -4,6 +4,7 @@ import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { useMacPermission } from '@/lib/hooks/useMacPermission';
 import { usePlatform } from '@/platform/PlatformContext';
 
 /**
@@ -19,36 +20,14 @@ import { usePlatform } from '@/platform/PlatformContext';
  *   failure handler
  * - window focus (cheap way to re-check after the user flips the toggle in
  *   System Settings and alt-tabs back)
+ * - a timer for a while after a reinstall (see `useMacPermission`)
  */
 export function useAccessibilityPermission() {
   const platform = usePlatform();
-  const [needsPermission, setNeedsPermission] = useState(false);
-  const [checking, setChecking] = useState(false);
-
-  const recheck = useCallback(async (): Promise<boolean> => {
-    if (!platform.metadata.isTauri) return true;
-    setChecking(true);
-    try {
-      const trusted = await invoke<boolean>('check_accessibility_permission');
-      setNeedsPermission(!trusted);
-      return trusted;
-    } catch (err) {
-      console.warn('[accessibility] check failed:', err);
-      return false;
-    } finally {
-      setChecking(false);
-    }
-  }, [platform.metadata.isTauri]);
-
-  useEffect(() => {
-    if (!platform.metadata.isTauri) return;
-    recheck();
-    const onFocus = () => {
-      recheck();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [platform.metadata.isTauri, recheck]);
+  const { needsPermission, setNeedsPermission, checking, recheck } = useMacPermission(
+    'check_accessibility_permission',
+    'herga.permission.accessibility.granted',
+  );
 
   useEffect(() => {
     if (!platform.metadata.isTauri) return;
@@ -63,7 +42,7 @@ export function useAccessibilityPermission() {
     return () => {
       if (unlisten) unlisten();
     };
-  }, [platform.metadata.isTauri]);
+  }, [platform.metadata.isTauri, setNeedsPermission]);
 
   const openSettings = useCallback(async () => {
     try {

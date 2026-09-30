@@ -7,6 +7,7 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 ### Fixed
 
 - **⌘H keeps Herga out of the way.** Dictating after hiding Herga with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Herga in the Dock or ⌘Tab to it.
+- **The global keys work right after reinstalling Herga.** They used to wait until you brought Herga's window to the front. Now Herga notices on its own when macOS confirms the permissions you'd already given it.
 
 ## 0.6.2 — September 30, 2026
 
