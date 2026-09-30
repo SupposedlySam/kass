@@ -12,6 +12,7 @@ export const STEPS = [
   'keys',
   'name',
   'messy',
+  'style',
   'rewrite',
   'done',
 ] as const;
@@ -19,7 +20,7 @@ export const STEPS = [
 export type Step = (typeof STEPS)[number];
 
 /** Steps that record speech, so they wait for the models. */
-const SPOKEN: ReadonlySet<Step> = new Set(['name', 'messy', 'rewrite']);
+const SPOKEN: ReadonlySet<Step> = new Set(['name', 'messy', 'style', 'rewrite']);
 
 /** Each step's color: a new one on every page. Text is dark only on sunflower. */
 export const STEP_COLORS: Record<Step, string> = {
@@ -31,6 +32,7 @@ export const STEP_COLORS: Record<Step, string> = {
   keys: '#F6C343',
   name: '#6B3FA0',
   messy: '#F2542D',
+  style: '#4A3A33',
   rewrite: '#2742D9',
   done: '#0F7B5A',
 };
@@ -167,4 +169,21 @@ export function heardParts(heard: string, sent: string): HeardPart[] {
     }
   }
   return parts;
+}
+
+/**
+ * `text` the way standard cleanup would write it: every sentence starts with
+ * a capital, "i" is "I", and it ends with a period. Shown beside the user's
+ * own way, so the difference is theirs.
+ */
+export function standardCleanup(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  const capitalized = trimmed
+    .replace(
+      /(^|[.!?]\s+)(\p{Ll})/gu,
+      (_, before: string, letter: string) => before + letter.toUpperCase(),
+    )
+    .replace(/\bi(?=\b|['\u2019])/g, 'I');
+  return /[.!?\u2026]$/.test(capitalized) ? capitalized : `${capitalized}.`;
 }

@@ -27,10 +27,18 @@ on the onboarding designs canvas.
    the spoken form when it was fixed).
 8. **Talk messy.** Three scripted lines to read out loud. Shows what was heard
    (raw) next to what was sent (cleaned).
-9. **Rewrite a selection.** A paragraph is selected in a text box. Hold the
+9. **Your style.** A text from a friend (a teach-by-replying session's text
+   conversation). The user dictates a reply in their own words, then sees
+   Herga's version with Looks right, Edit and Say it again. Edit makes it an
+   editable box, with what Herga wrote and what they changed; the final text is
+   sent as the reply, so the edits teach. The reveal shows what they said,
+   standard cleanup and their way, with the chips the reply earned. "Try a work
+   message" repeats it with a team chat. Next finishes the session (saving the
+   replies as examples); skipping or leaving discards it.
+10. **Rewrite a selection.** A paragraph is selected in a text box. Hold the
    command keys (right ⌘ + right ⇧ by default) and say an instruction, or click
    one. The text changes in place, with Undo.
-10. **You're set.** "Go talk." The three shortcuts. "Start using Herga"
+11. **You're set.** "Go talk." The three shortcuts. "Start using Herga"
     closes onboarding and shows the main window; "Show me now" opens
     Settings › Features.
 

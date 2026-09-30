@@ -7,6 +7,7 @@ import {
   parseProgress,
   previousStep,
   shouldRetryAutomatically,
+  standardCleanup,
 } from '../src/components/Onboarding/onboardingFlow';
 
 describe('onboarding order', () => {
@@ -23,7 +24,7 @@ describe('onboarding order', () => {
 
 describe('model lock', () => {
   test('only the spoken steps wait for the models', () => {
-    for (const step of ['name', 'messy', 'rewrite'] as const) {
+    for (const step of ['name', 'messy', 'style', 'rewrite'] as const) {
       expect(isLocked(step, false)).toBe(true);
       expect(isLocked(step, true)).toBe(false);
     }
@@ -81,5 +82,18 @@ describe('what cleanup dropped', () => {
     expect(heardParts('see you soon', 'See you soon.')).toEqual([
       { text: 'see you soon', dropped: false },
     ]);
+  });
+});
+
+describe('standard cleanup', () => {
+  test('capitalizes sentences and "i", and ends with a period', () => {
+    expect(standardCleanup('yeah for sure, i’ll be there around 7. grab chips lol')).toBe(
+      'Yeah for sure, I’ll be there around 7. Grab chips lol.',
+    );
+  });
+
+  test('keeps text that already reads that way', () => {
+    expect(standardCleanup('Sounds good!')).toBe('Sounds good!');
+    expect(standardCleanup('')).toBe('');
   });
 });

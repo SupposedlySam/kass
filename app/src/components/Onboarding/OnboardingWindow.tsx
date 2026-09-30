@@ -33,6 +33,7 @@ import {
   WelcomeStep,
 } from './steps/SetupSteps';
 import { DoneStep, LockedStep, MessyStep, NameStep, RewriteStep } from './steps/SpokenSteps';
+import { StyleStep } from './steps/StyleStep';
 import { useOnboardingDownloads } from './useOnboardingDownloads';
 
 /** How long a screen's pieces take to rise in (poster.css). */
@@ -181,6 +182,9 @@ export function OnboardingWindow() {
         break;
       case 'messy':
         body = <MessyStep pushKeys={pushKeys} onNext={next} />;
+        break;
+      case 'style':
+        body = <StyleStep pushKeys={pushKeys} onNext={next} />;
         break;
       case 'rewrite':
         body = <RewriteStep settings={settings} onNext={next} />;
