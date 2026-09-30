@@ -15,10 +15,14 @@ if [ ! -x "$server/herga-server" ]; then
   echo "Server not built at $server. Run scripts/build-server.sh first." >&2
   exit 1
 fi
+# Notarization (APPLE_API_KEY set, see release.yml) needs a secure timestamp
+# on every signature; local builds skip the round trip to Apple.
+timestamp=--timestamp=none
+[ -n "${APPLE_API_KEY:-}" ] && timestamp=--timestamp
 find "$server/_internal" -type f -print0 | xargs -0 file | grep 'Mach-O' | cut -d: -f1 | tr '\n' '\0' |
-  xargs -0 -n 32 -P 8 codesign --force --timestamp=none --options runtime --sign "$identity"
-codesign --force --timestamp=none --options runtime --entitlements tauri/src-tauri/Entitlements.plist \
-  --sign "$identity" "$server/voicebox-server"
+  xargs -0 -n 32 -P 8 codesign --force "$timestamp" --options runtime --sign "$identity"
+codesign --force "$timestamp" --options runtime --entitlements tauri/src-tauri/Entitlements.plist \
+  --sign "$identity" "$server/herga-server"
 
 config=$(mktemp /tmp/herga-local-signing.XXXXXX)
 trap 'rm -f "$config"' EXIT

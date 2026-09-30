@@ -51,18 +51,8 @@ jobs:
       - name: Check version
         id: version
         run: |
-          version=$(jq -r .version tauri/src-tauri/tauri.conf.json)
-          for other in \
-            "$(jq -r .version package.json)" \
-            "$(jq -r .version tauri/package.json)" \
-            "$(sed -n 's/^version *= *"\(.*\)"/\1/p' tauri/src-tauri/Cargo.toml | head -n 1)" \
-            "$(sed -n 's/^__version__ *= *"\(.*\)"/\1/p' backend/__init__.py)"; do
-            if [ "$other" != "$version" ]; then
-              echo "::error::Versions disagree: tauri.conf.json has $version, another file has $other"
-              exit 1
-            fi
-          done
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          ./scripts/set-version.sh --check
+          echo "version=$(jq -r .version tauri/src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python
         uses: actions/setup-python@v5

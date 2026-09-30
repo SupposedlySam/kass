@@ -7,9 +7,11 @@
 # same. Ad-hoc signing changes it on every build, so every update would lose
 # them. Signing every build with the same identity keeps them.
 #
-# The identity, in order: VOICEBOX_SIGNING_IDENTITY; the one the installed
-# app is signed with; the one used last time; an Apple Development
-# certificate; otherwise a self-signed "Voicebox Local Signing" certificate,
+# The identity, in order: HERGA_SIGNING_IDENTITY; a Developer ID
+# Application certificate (what releases are signed with, so a local build
+# and a downloaded one keep the same grants); the one the installed app is
+# signed with; the one used last time; an Apple Development
+# certificate; otherwise a self-signed "Herga Local Signing" certificate,
 # made once and kept in its own keychain.
 set -euo pipefail
 
@@ -108,6 +110,8 @@ EOF
   security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$state/local-signing.pem"
 }
 
+developer_id=$(identities | sed -n 's/^[0-9A-F]* \(Developer ID Application: .*\)$/\1/p' | head -n 1)
+if [ -n "$developer_id" ] && pick "$developer_id"; then exit 0; fi
 if [ -d "$app" ]; then
   installed=$(codesign -dvv "$app" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)
   if [ -n "$installed" ] && pick "$installed"; then exit 0; fi

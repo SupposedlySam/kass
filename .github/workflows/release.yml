@@ -1,0 +1,143 @@
+name: Release
+
+# Pushing a version tag (v0.6.0) builds the Apple Silicon app, packs it in a
+# DMG and publishes a GitHub release. The website's Download button links to
+# the latest release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.actor == 'mrgnhnt96'
+    # Apple Silicon runner: the server runs on MLX, which is arm64-only.
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version matches tag
+        run: ./scripts/set-version.sh --check "${GITHUB_REF_NAME#v}"
+
+      # scripts/release.sh wrote this version into every file before tagging.
+      - name: Check version
+        run: ./scripts/set-version.sh --check "${GITHUB_REF_NAME#v}"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./tauri/src-tauri -> target"
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Python dependencies
+        run: ./scripts/setup-python.sh
+
+      - name: Build Python server
+        run: ./scripts/build-server.sh
+
+      # The Developer ID certificate goes in a keychain of its own that lives
+      # only for this run.
+      - name: Import signing certificate
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -hex 24)
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: App Store Connect API key
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          echo "$API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+
+      # Signed with Developer ID and a secure timestamp. With the APPLE_API_*
+      # variables set, Tauri also notarizes the app and staples the ticket,
+      # so it opens without Gatekeeper warnings, even offline.
+      - name: Build, sign and notarize app
+        env:
+          HERGA_SIGNING_IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
+          APPLE_API_KEY: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APPLE_API_ISSUER: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          ./scripts/build-local-app.sh
+          app=tauri/src-tauri/target/release/bundle/macos/Herga.app
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+
+      - name: Make DMG
+        id: dmg
+        run: |
+          name="Herga-${GITHUB_REF_NAME#v}-macos-arm64"
+          stage=$(mktemp -d)
+          ditto tauri/src-tauri/target/release/bundle/macos/Herga.app "$stage/Herga.app"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname Herga -srcfolder "$stage" -format UDZO -ov "$name.dmg"
+          echo "file=$name.dmg" >> "$GITHUB_OUTPUT"
+
+      # The DMG gets its own signature and notarization ticket, so the
+      # download itself passes Gatekeeper too.
+      - name: Sign and notarize DMG
+        env:
+          IDENTITY: ${{ vars.DEVELOPER_ID_IDENTITY }}
+          KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          DMG: ${{ steps.dmg.outputs.file }}
+        run: |
+          codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" --key "$APPLE_API_KEY_PATH" --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          xcrun stapler staple "$DMG"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+
+      - name: Clean up signing
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      # The release notes are this version's section of CHANGELOG.md, or its
+      # Unreleased section when the version has none yet.
+      - name: Release notes
+        run: |
+          section() {
+            awk -v v="$1" '
+              /^## / { if (found) exit; found = ($2 == v || $2 == "[" v "]"); next }
+              found' CHANGELOG.md
+          }
+          section "${GITHUB_REF_NAME#v}" > notes.md
+          [ -s notes.md ] || section Unreleased > notes.md
+          [ -s notes.md ] || echo "See the [changelog](https://herga.mrgnhnt.com/changelog/)." > notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.file }}" --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md

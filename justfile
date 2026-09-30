@@ -80,6 +80,10 @@ build-tauri:
 install:
     ./scripts/install.sh
 
+# Set the version, tag vX.Y.Z and push; CI builds and publishes the GitHub release
+release version:
+    ./scripts/release.sh {{ version }}
+
 # ─── Code Quality ────────────────────────────────────────────────────
 
 # Run all checks (JS + Python lint + format)
