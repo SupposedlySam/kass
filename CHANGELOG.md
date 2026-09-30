@@ -10,7 +10,7 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 
 ### Improved
 
-- **Say a phrase again without doubling it.** Put the cursor mid-sentence and dictate the new words, running on into the words already after the cursor: `Let's meet | at noon tomorrow.` plus "on Friday at noon tomorrow" now gives `Let's meet on Friday at noon tomorrow.` Herga drops the words you said again, even with a small spelling difference, and keeps the field's own. Live text may show them for a moment before it settles.
+- **Say a phrase again without doubling it (beta).** With **Beta updates** on, put the cursor mid-sentence and dictate the new words, running on into the words already after the cursor: `Let's meet | at noon tomorrow.` plus "on Friday at noon tomorrow" now gives `Let's meet on Friday at noon tomorrow.` Herga drops the words you said again, even with a small spelling difference, and keeps the field's own. Live text may show them for a moment before it settles.
 
 ### Fixed
 

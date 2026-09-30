@@ -339,14 +339,19 @@ fn text_after<T: AxTextTarget>(target: &T, from: i64, count: i64, text: &str) ->
 
 /// `text` without the words at its end that the field already has right
 /// after the caret, fitted to `join`. The field's own text resumes at
-/// `from`, and it is `count` units long.
+/// `from`, and it is `count` units long. Only fitted unless `drop_repeat`
+/// (the `voice_edits` beta).
 fn fit_without_repeat<T: AxTextTarget>(
     target: &T,
     join: &join::Context,
     from: i64,
     count: Option<i64>,
     text: &str,
+    drop_repeat: bool,
 ) -> String {
+    if !drop_repeat {
+        return join.fit(text);
+    }
     let after = count.and_then(|count| text_after(target, from, count, text));
     join.fit(overlap::without_repeat(
         join.before.as_deref(),
@@ -358,7 +363,12 @@ fn fit_without_repeat<T: AxTextTarget>(
 /// `text` fitted to the text around the caret in `target`, without a
 /// repeat of the words after it, where that text may be read
 /// ([`context_readable`]).
-pub fn fit_at_caret<T: AxTextTarget>(target: &T, bundle_id: Option<&str>, text: &str) -> String {
+pub fn fit_at_caret<T: AxTextTarget>(
+    target: &T,
+    bundle_id: Option<&str>,
+    text: &str,
+    drop_repeat: bool,
+) -> String {
     if !context_readable(target, bundle_id) {
         return text.to_string();
     }
@@ -373,6 +383,7 @@ pub fn fit_at_caret<T: AxTextTarget>(target: &T, bundle_id: Option<&str>, text: 
         sel.location + sel.length,
         now.char_count,
         text,
+        drop_repeat,
     )
 }
 
@@ -405,7 +416,12 @@ pub fn sentence_before_focused(pid: i32, bundle_id: Option<&str>) -> Option<Stri
 /// that can't be read. Blocking.
 pub fn fit_to_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> String {
     match macos::FocusedElement::of_app(pid) {
-        Some(element) => fit_at_caret(&element, bundle_id, text),
+        Some(element) => fit_at_caret(
+            &element,
+            bundle_id,
+            text,
+            crate::updater::beta_features_on(),
+        ),
         None => text.to_string(),
     }
 }
@@ -735,12 +751,20 @@ pub fn finish_live<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     final_text: &str,
+    drop_repeat: bool,
     sleep: impl FnMut(Duration),
 ) -> Result<(), LiveError> {
     let state = intact(target, owned);
     // The field's own text resumes where the owned text ends.
     let count = state.and_then(|s| s.char_count);
-    let final_text = &fit_without_repeat(target, &owned.join, owned.end(), count, final_text);
+    let final_text = &fit_without_repeat(
+        target,
+        &owned.join,
+        owned.end(),
+        count,
+        final_text,
+        drop_repeat,
+    );
     if *final_text == owned.text {
         return Ok(());
     }
@@ -771,7 +795,13 @@ pub fn extend_live_focused(pid: i32, owned: &Owned, text: &str) -> Result<Owned,
 /// [`finish_live`] on the focused element of the app with `pid`. Blocking.
 pub fn finish_live_focused(pid: i32, owned: &Owned, final_text: &str) -> Result<(), LiveError> {
     match macos::FocusedElement::of_app(pid) {
-        Some(element) => finish_live(&element, owned, final_text, std::thread::sleep),
+        Some(element) => finish_live(
+            &element,
+            owned,
+            final_text,
+            crate::updater::beta_features_on(),
+            std::thread::sleep,
+        ),
         None => Err(LiveError::Edited),
     }
 }
@@ -1879,17 +1909,33 @@ mod tests {
     #[test]
     fn a_repeat_of_the_words_after_the_caret_is_dropped() {
         let field = FakeField::new("Let's meet at noon tomorrow.", range(11, 0));
-        let text = fit_at_caret(&field, None, "on Friday at noon tomorrow.");
+        let text = fit_at_caret(&field, None, "on Friday at noon tomorrow.", true);
         assert_eq!(text, "on Friday ");
         field.apply(&text);
         assert_eq!(field.contents(), "Let's meet on Friday at noon tomorrow.");
     }
 
     #[test]
+    fn a_repeat_is_kept_outside_the_beta() {
+        let field = FakeField::new("Let's meet at noon tomorrow.", range(11, 0));
+        assert_eq!(
+            fit_at_caret(&field, None, "on Friday at noon tomorrow.", false),
+            "on Friday at noon tomorrow "
+        );
+        let field = FakeField::new("Let's meet at noon tomorrow.", range(11, 0));
+        let owned = started(live(&field, "on Friday"));
+        finish_live(&field, &owned, "on Friday at noon tomorrow.", false, |_| {}).unwrap();
+        assert_eq!(
+            field.contents(),
+            "Let's meet on Friday at noon tomorrow at noon tomorrow."
+        );
+    }
+
+    #[test]
     fn a_repeat_over_a_selection_is_dropped() {
         let field = FakeField::new("Let's meet on Monday at noon.", range(11, 9));
         assert_eq!(
-            fit_at_caret(&field, None, "on Friday at noon."),
+            fit_at_caret(&field, None, "on Friday at noon.", true),
             "on Friday"
         );
     }
@@ -1898,7 +1944,7 @@ mod tests {
     fn no_repeat_is_only_fitted() {
         let field = FakeField::new("Can you before lunch?", range(8, 0));
         assert_eq!(
-            fit_at_caret(&field, None, "send the report."),
+            fit_at_caret(&field, None, "send the report.", true),
             "send the report "
         );
     }
@@ -1907,13 +1953,18 @@ mod tests {
     fn the_repeat_is_kept_where_the_field_cannot_be_read() {
         let field = FakeField::new("$ git commit -m", range(2, 0));
         assert_eq!(
-            fit_at_caret(&field, Some("com.apple.Terminal"), "run git commit -m"),
+            fit_at_caret(
+                &field,
+                Some("com.apple.Terminal"),
+                "run git commit -m",
+                true
+            ),
             "run git commit -m"
         );
         let mut field = FakeField::new("Let's meet at noon tomorrow.", range(11, 0));
         field.ranges_unreadable = true;
         assert_eq!(
-            fit_at_caret(&field, None, "on Friday at noon tomorrow."),
+            fit_at_caret(&field, None, "on Friday at noon tomorrow.", true),
             "on Friday at noon tomorrow."
         );
     }
@@ -1950,7 +2001,7 @@ mod tests {
             "Let's meet on Friday at noonat noon tomorrow."
         );
         let calls = field.set_calls.get();
-        finish_live(&field, &owned, "on Friday at noon tomorrow.", |_| {}).unwrap();
+        finish_live(&field, &owned, "on Friday at noon tomorrow.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "Let's meet on Friday at noon tomorrow.");
         assert_eq!(field.sel.get(), range(21, 0));
         // One verified write shrinks the owned text.
@@ -1962,7 +2013,7 @@ mod tests {
         let field = FakeField::new("Let's meet at noon tomorrow.", range(11, 0));
         let owned = started(live(&field, "on Friday"));
         let calls = field.set_calls.get();
-        finish_live(&field, &owned, "on Friday at noon.", |_| {}).unwrap();
+        finish_live(&field, &owned, "on Friday at noon.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "Let's meet on Friday at noon tomorrow.");
         assert_eq!(field.set_calls.get(), calls + 1);
     }
@@ -2013,7 +2064,7 @@ mod tests {
     fn final_text_that_extends_the_live_text_is_appended() {
         let field = FakeField::new("", range(0, 0));
         let owned = started(live(&field, "Hello there"));
-        finish_live(&field, &owned, "Hello there, my friend.", |_| {}).unwrap();
+        finish_live(&field, &owned, "Hello there, my friend.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "Hello there, my friend.");
         assert_eq!(field.sel.get(), range(23, 0));
     }
@@ -2027,6 +2078,7 @@ mod tests {
             &field,
             &owned,
             "Do not send the update to the team.",
+            true,
             |_| {},
         )
         .unwrap();
@@ -2042,7 +2094,7 @@ mod tests {
         let field = FakeField::new("", range(0, 0));
         let owned = started(live(&field, "It might. But"));
         let calls = field.set_calls.get();
-        finish_live(&field, &owned, "It might, but we'll see", |_| {}).unwrap();
+        finish_live(&field, &owned, "It might, but we'll see", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "It might, but we'll see");
         // One replacement of the changed tail.
         assert_eq!(field.set_calls.get(), calls + 1);
@@ -2052,7 +2104,7 @@ mod tests {
     fn empty_final_removes_the_live_text() {
         let field = FakeField::new("keep ", range(5, 0));
         let owned = started(live(&field, "Um so"));
-        finish_live(&field, &owned, "", |_| {}).unwrap();
+        finish_live(&field, &owned, "", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "keep ");
         assert_eq!(field.sel.get(), range(5, 0));
     }
@@ -2062,7 +2114,7 @@ mod tests {
         let field = FakeField::new("x", range(1, 0));
         let owned = started(live(&field, "Café 👍"));
         let owned = extend_live(&field, &owned, "Café 👍 and", |_| {}).unwrap();
-        finish_live(&field, &owned, "Café 👍 and naïve.", |_| {}).unwrap();
+        finish_live(&field, &owned, "Café 👍 and naïve.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "x Café 👍 and naïve.");
     }
 
@@ -2073,7 +2125,7 @@ mod tests {
         assert_eq!(field.contents(), "Can you send before lunch?");
         assert!(owned.grows_to("send the"));
         let owned = extend_live(&field, &owned, "send the", |_| {}).unwrap();
-        finish_live(&field, &owned, "send the report.", |_| {}).unwrap();
+        finish_live(&field, &owned, "send the report.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "Can you send the report before lunch?");
     }
 
@@ -2084,7 +2136,7 @@ mod tests {
         assert_eq!(owned.text, " move");
         assert!(owned.grows_to("move it"));
         assert!(!owned.grows_to("move"));
-        finish_live(&field, &owned, "move it.", |_| {}).unwrap();
+        finish_live(&field, &owned, "move it.", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "I think we should move it.");
     }
 
@@ -2098,7 +2150,7 @@ mod tests {
             Err(LiveError::Edited)
         ));
         assert!(matches!(
-            finish_live(&field, &owned, "Goodbye.", |_| {}),
+            finish_live(&field, &owned, "Goodbye.", true, |_| {}),
             Err(LiveError::Edited)
         ));
         assert_eq!(field.contents(), "Hello there!");
@@ -2111,7 +2163,7 @@ mod tests {
         field.user_types(0, "Oh ");
         field.sel.set(range(14, 0));
         assert!(matches!(
-            finish_live(&field, &owned, "Hello there.", |_| {}),
+            finish_live(&field, &owned, "Hello there.", true, |_| {}),
             Err(LiveError::Edited)
         ));
         assert_eq!(field.contents(), "Oh Hello there");
@@ -2123,7 +2175,7 @@ mod tests {
         let owned = started(live(&field, "Hi"));
         field.sel.set(range(0, 0));
         assert!(matches!(
-            finish_live(&field, &owned, "Hi there.", |_| {}),
+            finish_live(&field, &owned, "Hi there.", true, |_| {}),
             Err(LiveError::Edited)
         ));
         assert_eq!(field.contents(), "abc Hi");
@@ -2181,7 +2233,7 @@ mod tests {
         let field = FakeField::new("Hello world", range(6, 5));
         let owned = started(live(&field, "there"));
         assert_eq!(owned.start, 6);
-        finish_live(&field, &owned, "there, friend", |_| {}).unwrap();
+        finish_live(&field, &owned, "there, friend", true, |_| {}).unwrap();
         assert_eq!(field.contents(), "Hello there, friend");
     }
 
@@ -2190,7 +2242,7 @@ mod tests {
         let field = FakeField::new("", range(0, 0));
         let owned = started(live(&field, "Done"));
         let calls = field.set_calls.get();
-        finish_live(&field, &owned, "Done", |_| {}).unwrap();
+        finish_live(&field, &owned, "Done", true, |_| {}).unwrap();
         assert_eq!(field.set_calls.get(), calls);
     }
 
