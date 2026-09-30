@@ -96,12 +96,18 @@ jobs:
       - name: Install Python dependencies
         run: ./scripts/setup-python.sh
 
+      # With a Whisper model downloaded, phrase seams judge words by its
+      # vocabulary rather than the system word list, and the tests expect
+      # that. The vocabulary alone is enough; skip the weights.
+      - name: Download Whisper vocabulary
+        run: >-
+          backend/venv/bin/python -c "from huggingface_hub import hf_hub_download;
+          hf_hub_download('openai/whisper-base', 'vocab.json')"
+
       # test_hf_progress_tracker fails on its own (its tqdm patch captures
       # nothing) and has since before this workflow existed.
       - name: Backend tests
-        run: >-
-          backend/venv/bin/python -m pytest backend/tests -q
-          --deselect backend/tests/test_progress.py::test_hf_progress_tracker
+        run: backend/venv/bin/python -m pytest backend/tests -q -k "not test_hf_progress_tracker"
 
       - name: Build Python server
         run: ./scripts/build-server.sh
