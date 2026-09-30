@@ -233,7 +233,7 @@ if pgrep -f "$app/Contents/MacOS/" >/dev/null 2>&1; then
     pgrep -f "$app/Contents/MacOS/" >/dev/null 2>&1 || break
     sleep 0.5
   done
-  pkill -f "$app/Contents/MacOS/" 2>/dev/null || true
+  pkill -f "$app/Contents/" 2>/dev/null || true
   ok "Quit the running app"
 fi
 rm -rf "$app"
@@ -246,7 +246,7 @@ ok "Installed"
 # open by mistake.
 old_app="$HOME/Applications/Voicebox.app"
 if [ -d "$old_app" ]; then
-  pkill -f "$old_app/Contents/MacOS/" 2>/dev/null || true
+  pkill -f "$old_app/Contents/" 2>/dev/null || true
   if mv "$old_app" "$HOME/.Trash/Voicebox $(date '+%Y-%m-%d %H.%M.%S').app" 2>/dev/null; then
     ok "Moved the old copy in ~/Applications to the Trash"
   else
@@ -271,7 +271,7 @@ if [ -d "$voicebox_app" ]; then
   fi
   if $ours; then
     osascript -e 'quit app id "'"$voicebox_id"'"' >/dev/null 2>&1 || true
-    pkill -f "$voicebox_app/Contents/MacOS/" 2>/dev/null || true
+    pkill -f "$voicebox_app/Contents/" 2>/dev/null || true
     for service in Microphone Accessibility ListenEvent PostEvent; do
       tccutil reset "$service" "$voicebox_id" >/dev/null 2>&1 || true
     done
