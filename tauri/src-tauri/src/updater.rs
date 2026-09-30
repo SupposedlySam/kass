@@ -28,7 +28,7 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATUS_EVENT: &str = "update:status";
 /// Tells every window the channel changed, which turns beta features on or off.
 const CHANNEL_EVENT: &str = "update:channel";
-const BETA_ENDPOINT: &str = "https://github.com/mrgnhnt96/herga/releases/download/channels/beta.json";
+const BETA_ENDPOINT: &str = "https://github.com/mrgnhnt96/kass/releases/download/channels/beta.json";
 /// Present (containing `beta`) while this copy is on the beta channel. It
 /// sits in the app data dir, where the server reads it too (backend/beta.py).
 const CHANNEL_FILE: &str = "update-channel";
@@ -207,7 +207,7 @@ pub fn update_channel(app: AppHandle) -> Channel {
 }
 
 /// Switch channels and check again right away. Leaving beta keeps the
-/// beta that's installed; Herga moves on once a public release is newer.
+/// beta that's installed; Kass moves on once a public release is newer.
 #[command]
 pub fn set_update_channel(app: AppHandle, channel: Channel) -> Result<Channel, String> {
     let path = channel_path(&app)?;

@@ -593,7 +593,7 @@
       "betaUpdates": {
         "title": "Beta updates",
         "description": "Get new features before they're public. Betas may have rough edges.",
-        "leaving": "You're on beta {{version}}. Herga moves to the next public release once it's newer.",
+        "leaving": "You're on beta {{version}}. Kass moves to the next public release once it's newer.",
         "failed": "Couldn't change beta updates"
       },
       "server": {
