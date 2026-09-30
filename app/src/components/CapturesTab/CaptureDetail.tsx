@@ -13,8 +13,9 @@ import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './Transcript
  * The selected capture under the header: the text it delivered, what
  * refinement changed and what was heard, and the inspector beside them.
  * The card corrects the refined text, or the raw text when there is no
- * refinement; fixing a misheard word there teaches it too. Selecting a word
- * in the text offers to add it to the dictionary. The inspector
+ * refinement; fixing a misheard word there teaches it too. Selecting a
+ * word, in the text or while correcting it, offers to add it to the
+ * dictionary, as does each fixed word. The inspector
  * shows only while the header's details button has it open. Mount it keyed
  * by capture id so drafts reset between captures. A Command Mode rewrite
  * has its own view: it isn't a dictation to correct.
@@ -38,11 +39,7 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
     <div className="flex-1 min-h-0 flex">
       {/* The card gives up height to what's opened below it, down to half the
           pane; past that, the opened rows scroll instead. */}
-      <SelectionToDictionary
-        capture={capture}
-        enabled={teach.draft === null}
-        className="flex-1 min-w-0 flex flex-col gap-3 px-6 pt-6 pb-3"
-      >
+      <SelectionToDictionary className="flex-1 min-w-0 flex flex-col gap-3 px-6 pt-6 pb-3">
         {capture.refinement_review && (
           <div className="shrink-0">
             <RefinementReviewNotice review={capture.refinement_review} />

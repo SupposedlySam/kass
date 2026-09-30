@@ -26,7 +26,7 @@ When the cleaned-up text isn't what you meant, edit it right in the capture. Thi
 
 - The fix is used as an example for your next dictation right away.
 - Fixes teach the [writing style](/docs/writing-styles/) of the app you dictated into.
-- A misspelled name is better added to the [dictionary](/docs/dictionary/). Select it and click **Add to dictionary**.
+- A misspelled name is better added to the [dictionary](/docs/dictionary/). Select it, even while you're correcting the text, click **Add to dictionary**, and type how it's spelled. You don't need to save the correction first.
 
 Every six hours, or when you click **Check now**, a local job turns your corrections into rules. A new set of rules is only kept if it does no worse on your past corrections, and **Undo last update** rolls back to the previous set.
 

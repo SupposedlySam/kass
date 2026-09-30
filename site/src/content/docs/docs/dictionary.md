@@ -20,4 +20,4 @@ Each entry can apply **Everywhere**, to one or more [writing styles](/docs/writi
 
 ## Add a word from a capture
 
-Spotted a misspelled name in a past dictation? Open it in **Captures**, select the word, and click **Add to dictionary** above the selection.
+Spotted a misspelled name in a past dictation? Open it in **Captures**, select the word (in the text, or while you're correcting it), click **Add to dictionary** above the selection, and type the correct spelling. It applies everywhere unless you pick apps or styles under **Applies in**.

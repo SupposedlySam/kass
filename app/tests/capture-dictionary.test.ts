@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  defaultPlaceKeys,
-  entryFromCapture,
+  dictionaryWord,
   selectionPhrase,
+  spellingEntry,
 } from '../src/components/CapturesTab/captureDictionary';
 
 describe('selectionPhrase', () => {
@@ -24,44 +24,33 @@ describe('selectionPhrase', () => {
   });
 });
 
-describe('defaultPlaceKeys', () => {
-  test("the capture's app, else everywhere", () => {
-    expect(defaultPlaceKeys('dev.zed.Zed')).toEqual(['app:dev.zed.Zed']);
-    expect(defaultPlaceKeys(null)).toEqual(['global']);
-    expect(defaultPlaceKeys(undefined)).toEqual(['global']);
+describe('dictionaryWord', () => {
+  test('a changed word or phrase is what was heard and what to write', () => {
+    expect(dictionaryWord({ removed: 'post grass,', added: 'Postgres,' })).toEqual({
+      said: 'post grass',
+      written: 'Postgres',
+    });
+  });
+
+  test('words only added or removed, or a long rewrite, are not a dictionary word', () => {
+    expect(dictionaryWord({ removed: '', added: 'Postgres' })).toBeNull();
+    expect(dictionaryWord({ removed: 'um', added: '' })).toBeNull();
+    expect(
+      dictionaryWord({ removed: 'so', added: 'one two three four five six seven eight nine' }),
+    ).toBeNull();
   });
 });
 
-describe('entryFromCapture', () => {
-  const zed = { bundleId: 'dev.zed.Zed', name: 'Zed' };
-
-  test('a fixed spelling replaces what was said', () => {
-    expect(entryFromCapture(' voice box ', 'Voicebox ', [{ scope: 'global' }], zed)).toEqual({
+describe('spellingEntry', () => {
+  test('a fixed spelling replaces what was written, everywhere', () => {
+    expect(spellingEntry(' voice box ', 'Voicebox ')).toEqual({
       written: 'Voicebox',
       spoken: 'voice box',
       places: [{ scope: 'global' }],
     });
   });
 
-  test('written as it was said, it only teaches the spelling', () => {
-    expect(
-      entryFromCapture('Tailscale', ' Tailscale', [{ scope: 'global' }], zed).spoken,
-    ).toBeNull();
-  });
-
-  test("names the capture's app when the scope list didn't know it", () => {
-    const entry = entryFromCapture(
-      'zed',
-      'Zed',
-      [
-        { scope: 'app', scope_id: 'dev.zed.Zed', app_name: null },
-        { scope: 'app', scope_id: 'com.tinyspeck.slackmacgap', app_name: 'Slack' },
-      ],
-      zed,
-    );
-    expect(entry.places).toEqual([
-      { scope: 'app', scope_id: 'dev.zed.Zed', app_name: 'Zed' },
-      { scope: 'app', scope_id: 'com.tinyspeck.slackmacgap', app_name: 'Slack' },
-    ]);
+  test('spelled as it was written, it only teaches the spelling', () => {
+    expect(spellingEntry('Tailscale', ' Tailscale').spoken).toBeNull();
   });
 });

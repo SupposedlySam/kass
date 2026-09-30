@@ -140,9 +140,8 @@
     "dictionary": {
       "add": "Add to dictionary",
       "title": "Add to dictionary",
-      "description": "Herga writes it this way from now on.",
-      "spellingOnly": "Spelled as it is, so Herga only learns this spelling. Change “Write” to fix it.",
-      "replaces": "When you say “{{said}}”, Herga writes “{{written}}”.",
+      "description": "Herga spells it this way from now on.",
+      "spelling": "Correct spelling",
       "submit": "Add",
       "added": "Added “{{written}}” to the dictionary"
     },

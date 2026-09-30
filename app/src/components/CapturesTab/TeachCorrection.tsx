@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { BookPlus, Check } from 'lucide-react';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { apiClient } from '@/lib/api/client';
 import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
 import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
+import { AddToDictionaryDialog, type DictionaryWord } from './AddToDictionary';
+import { dictionaryWord } from './captureDictionary';
 import { type DiffHunk, diffWords } from './wordDiff';
 
 export type TeachTarget = 'raw' | 'refined';
@@ -109,8 +111,19 @@ export function useTeachCorrection(
 
 export type TeachState = ReturnType<typeof useTeachCorrection>;
 
-/** "post grass → Postgres" for each place the text changed. */
-export function HunkList({ hunks, className }: { hunks: DiffHunk[]; className?: string }) {
+/**
+ * "post grass → Postgres" for each place the text changed. With `onAdd`,
+ * a change that can be a dictionary entry offers to add it.
+ */
+export function HunkList({
+  hunks,
+  className,
+  onAdd,
+}: {
+  hunks: DiffHunk[];
+  className?: string;
+  onAdd?: (word: DictionaryWord) => void;
+}) {
   const { t } = useTranslation();
   const shown = hunks.slice(0, MAX_HUNKS_SHOWN);
   return (
@@ -123,6 +136,22 @@ export function HunkList({ hunks, className }: { hunks: DiffHunk[]; className?: 
           {hunk.removed && hunk.added && <span className="text-muted-foreground"> → </span>}
           {hunk.added && <span className="text-success">{hunk.added}</span>}
           {hunk.count && <span className="text-muted-foreground"> ×{hunk.count}</span>}
+          {onAdd && dictionaryWord(hunk) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              // Keeps the edit open: the text losing focus first would settle it.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const word = dictionaryWord(hunk);
+                if (word) onAdd(word);
+              }}
+              className="ml-2 h-6 gap-1 px-1.5 align-middle font-sans text-xs text-muted-foreground hover:text-foreground"
+            >
+              <BookPlus className="size-3.5!" />
+              {t('captures.dictionary.add')}
+            </Button>
+          )}
         </li>
       ))}
       {hunks.length > shown.length && (
@@ -236,11 +265,13 @@ export function EditableTranscript({
 
 /**
  * Under an edited transcript: what changed, an optional note and Save. Shown
- * only once the text differs from what Herga wrote.
+ * only once the text differs from what Herga wrote. A changed word can go
+ * straight into the dictionary, without saving the correction first.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
   const notesId = useId();
+  const [word, setWord] = useState<DictionaryWord | null>(null);
   const hunks = useMemo(
     () =>
       teach.changed && teach.draft !== null ? diffWords(teach.original, teach.draft).hunks : [],
@@ -253,7 +284,8 @@ export function TeachActions({ teach }: { teach: TeachState }) {
   if (!teach.changed) return null;
   return (
     <div className="flex flex-col gap-3.5">
-      {hunks.length > 0 && <HunkList hunks={hunks} className="space-y-0.5" />}
+      {hunks.length > 0 && <HunkList hunks={hunks} className="space-y-0.5" onAdd={setWord} />}
+      <AddToDictionaryDialog word={word} onClose={() => setWord(null)} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor={notesId} className="text-xs text-muted-foreground">
           {t('captures.feedback.notes')}

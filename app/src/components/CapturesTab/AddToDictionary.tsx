@@ -1,15 +1,10 @@
 import { BookPlus } from 'lucide-react';
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MAX_LENGTH, PlacesMenu, submitKeys } from '@/components/Settings/DictionaryControls';
 import {
-  Arrow,
-  MAX_LENGTH,
-  PlacesMenu,
-  submitKeys,
-} from '@/components/Settings/DictionaryControls';
-import {
-  allOptions,
   buildScopeOptions,
+  EVERYWHERE_KEY,
   placesFromKeys,
   togglePlace,
 } from '@/components/Settings/dictionaryScopes';
@@ -24,10 +19,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
-import type { CaptureResponse } from '@/lib/api/types';
 import { useAddDictionaryEntry, useDictionary } from '@/lib/hooks/useDictionary';
 import { useWritingStyles } from '@/lib/hooks/useWritingStyle';
-import { defaultPlaceKeys, entryFromCapture, selectionPhrase } from './captureDictionary';
+import { selectionPhrase, spellingEntry } from './captureDictionary';
 
 const P = 'captures.dictionary';
 
@@ -36,17 +30,75 @@ interface Picked {
   rect: DOMRect;
 }
 
-/** A word or phrase selected inside `container`, and where it is on screen. */
-function useSelectedPhrase(container: RefObject<HTMLElement>, enabled: boolean): Picked | null {
+/**
+ * Where `start`..`end` of a textarea's text is on screen. A textarea has no
+ * ranges to measure, so a hidden copy of it with the same styles lays the
+ * text out the same way, and the selected part is measured there.
+ */
+function textareaRect(field: HTMLTextAreaElement, start: number, end: number): DOMRect {
+  const style = window.getComputedStyle(field);
+  const mirror = document.createElement('div');
+  for (const name of [
+    'boxSizing',
+    'width',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft',
+    'borderTopWidth',
+    'borderRightWidth',
+    'borderBottomWidth',
+    'borderLeftWidth',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'letterSpacing',
+    'lineHeight',
+    'textTransform',
+    'wordSpacing',
+    'tabSize',
+  ] as const) {
+    mirror.style[name] = style[name];
+  }
+  Object.assign(mirror.style, {
+    position: 'fixed',
+    visibility: 'hidden',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'break-word',
+    top: '0',
+    left: '0',
+  });
+  mirror.textContent = field.value.slice(0, start);
+  const marked = document.createElement('span');
+  marked.textContent = field.value.slice(start, end) || '​';
+  mirror.appendChild(marked);
+  document.body.appendChild(mirror);
+  const inner = marked.getBoundingClientRect();
+  document.body.removeChild(mirror);
+  const outer = field.getBoundingClientRect();
+  return new DOMRect(
+    outer.left + inner.left - field.scrollLeft,
+    outer.top + inner.top - field.scrollTop,
+    inner.width,
+    inner.height,
+  );
+}
+
+/** A word or phrase selected inside `container`, in its text or its edit box, and where it is. */
+function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
   const [picked, setPicked] = useState<Picked | null>(null);
   useEffect(() => {
-    if (!enabled) {
-      setPicked(null);
-      return;
-    }
     const update = () => {
-      const selection = window.getSelection();
       const root = container.current;
+      const active = document.activeElement;
+      if (root && active instanceof HTMLTextAreaElement && root.contains(active)) {
+        const { selectionStart: start, selectionEnd: end } = active;
+        const text = start === end ? '' : selectionPhrase(active.value.slice(start, end));
+        setPicked(text ? { text, rect: textareaRect(active, start, end) } : null);
+        return;
+      }
+      const selection = window.getSelection();
       if (!selection || selection.isCollapsed || !selection.rangeCount || !root) {
         setPicked(null);
         return;
@@ -58,41 +110,44 @@ function useSelectedPhrase(container: RefObject<HTMLElement>, enabled: boolean):
       setPicked(text ? { text, rect: range.getBoundingClientRect() } : null);
     };
     document.addEventListener('selectionchange', update);
+    // A textarea's selection doesn't always report through the document.
+    document.addEventListener('select', update, true);
+    document.addEventListener('focusout', update, true);
     // The button sits over the selection, so it follows the text when it scrolls.
     window.addEventListener('scroll', update, true);
     return () => {
       document.removeEventListener('selectionchange', update);
+      document.removeEventListener('select', update, true);
+      document.removeEventListener('focusout', update, true);
       window.removeEventListener('scroll', update, true);
     };
-  }, [container, enabled]);
+  }, [container]);
   return picked;
 }
 
 /**
- * Selecting a word or phrase in a capture's text offers to add it to the
- * dictionary: what was selected is what was said, and the user writes how
- * it should be spelled. Off while the transcript is being edited.
+ * Selecting a word or phrase in a capture's text, or while correcting it,
+ * offers to add it to the dictionary: the user types how it should be
+ * spelled, and may narrow where it applies.
  */
 export function SelectionToDictionary({
-  capture,
-  enabled,
   children,
   className,
 }: {
-  capture: CaptureResponse;
-  enabled: boolean;
   children: ReactNode;
   className?: string;
 }) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
-  const picked = useSelectedPhrase(container, enabled);
-  const [said, setSaid] = useState<string | null>(null);
+  const picked = useSelectedPhrase(container);
+  const [word, setWord] = useState<DictionaryWord | null>(null);
 
   const open = () => {
     if (!picked) return;
-    setSaid(picked.text);
-    window.getSelection()?.removeAllRanges();
+    setWord({ said: picked.text, written: picked.text });
+    if (!(document.activeElement instanceof HTMLTextAreaElement)) {
+      window.getSelection()?.removeAllRanges();
+    }
   };
 
   return (
@@ -101,7 +156,7 @@ export function SelectionToDictionary({
       {picked && (
         <Button
           size="sm"
-          // Keep the selection: the click reads it.
+          // Keep the selection, and the correction being typed: the click reads it.
           onMouseDown={(event) => event.preventDefault()}
           onClick={open}
           className="fixed z-50 h-7 -translate-x-1/2 gap-1.5 px-2.5 text-xs shadow-md"
@@ -115,44 +170,46 @@ export function SelectionToDictionary({
           {t(`${P}.add`)}
         </Button>
       )}
-      <Dialog open={said !== null} onOpenChange={(isOpen) => !isOpen && setSaid(null)}>
-        {said !== null && <AddDialog capture={capture} said={said} onDone={() => setSaid(null)} />}
-      </Dialog>
+      <AddToDictionaryDialog word={word} onClose={() => setWord(null)} />
     </div>
   );
 }
 
-function AddDialog({
-  capture,
-  said: selected,
-  onDone,
-}: {
-  capture: CaptureResponse;
+/** A word to add: what the capture wrote, and how the user spells it. */
+export interface DictionaryWord {
   said: string;
-  onDone: () => void;
+  written: string;
+}
+
+/** Asks how `word` is spelled, and where, and adds it to the dictionary; closed while `word` is null. */
+export function AddToDictionaryDialog({
+  word,
+  onClose,
+}: {
+  word: DictionaryWord | null;
+  onClose: () => void;
 }) {
+  return (
+    <Dialog open={word !== null} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      {word !== null && <SpellingDialog word={word} onDone={onClose} />}
+    </Dialog>
+  );
+}
+
+function SpellingDialog({ word, onDone }: { word: DictionaryWord; onDone: () => void }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const add = useAddDictionaryEntry();
   const styles = useWritingStyles();
   const dictionary = useDictionary();
-  const [said, setSaid] = useState(selected);
-  const [written, setWritten] = useState(selected);
-  const [places, setPlaces] = useState(() => defaultPlaceKeys(capture.app_bundle_id));
-
+  const [written, setWritten] = useState(word.written);
+  const [places, setPlaces] = useState([EVERYWHERE_KEY]);
   const options = buildScopeOptions(styles.data, dictionary.data?.entries);
-  const appOption = allOptions(options).find(
-    (o) => places.includes(o.key) && o.scope.kind === 'app',
-  );
-  const spellingOnly = said.trim().split(/\s+/).join(' ') === written.trim().split(/\s+/).join(' ');
   const ready = !!written.trim() && places.length > 0 && !add.isPending;
 
   const submit = () => {
     if (!ready) return;
-    const body = entryFromCapture(said, written, placesFromKeys(places, options), {
-      bundleId: capture.app_bundle_id,
-      name: capture.app_name,
-    });
+    const body = spellingEntry(word.said, written, placesFromKeys(places, options));
     add.mutate(body, {
       onSuccess: () => {
         toast({ title: t(`${P}.added`, { written: body.written }) });
@@ -160,62 +217,38 @@ function AddDialog({
       },
     });
   };
-  // A stale error goes once the user changes what they typed.
-  const edit = (set: (value: string) => void) => (value: string) => {
-    if (add.error) add.reset();
-    set(value);
-  };
-  const onKeyDown = submitKeys(submit);
 
   return (
-    <DialogContent className="sm:max-w-[520px]">
+    <DialogContent className="sm:max-w-[400px]">
       <DialogHeader>
         <DialogTitle>{t(`${P}.title`)}</DialogTitle>
         <DialogDescription>{t(`${P}.description`)}</DialogDescription>
       </DialogHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-x-3 gap-y-1.5">
-        <label htmlFor="capture-dictionary-say" className="text-xs text-muted-foreground">
-          {t('dictionary.add.say')}
-        </label>
-        <span />
-        <label htmlFor="capture-dictionary-write" className="text-xs text-muted-foreground">
-          {t('dictionary.add.write')}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="capture-dictionary-spelling" className="text-xs text-muted-foreground">
+          {t(`${P}.spelling`)}
         </label>
         <Input
-          id="capture-dictionary-say"
-          value={said}
-          onChange={(e) => edit(setSaid)(e.target.value)}
-          onKeyDown={onKeyDown}
-          maxLength={MAX_LENGTH}
-          className="h-8"
-        />
-        <div className="flex h-8 items-center">
-          <Arrow amber />
-        </div>
-        <Input
-          id="capture-dictionary-write"
+          id="capture-dictionary-spelling"
           value={written}
-          onChange={(e) => edit(setWritten)(e.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={(e) => {
+            // A stale error goes once the user changes what they typed.
+            if (add.error) add.reset();
+            setWritten(e.target.value);
+          }}
+          onKeyDown={submitKeys(submit)}
           onFocus={(e) => e.currentTarget.select()}
           autoFocus
           maxLength={MAX_LENGTH}
-          className="h-8"
+          className="h-9"
         />
       </div>
-      <p className="-mt-1 text-xs text-muted-foreground">
-        {t(spellingOnly ? `${P}.spellingOnly` : `${P}.replaces`, {
-          said: said.trim(),
-          written: written.trim(),
-        })}
-      </p>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">{t('dictionary.list.appliesIn')}</span>
         <PlacesMenu
           selected={places}
           onToggle={(key) => setPlaces((current) => togglePlace(current, key))}
           options={options}
-          viewedFrom={appOption}
         />
       </div>
       {add.error && <p className="m-0 text-xs text-destructive">{add.error.message}</p>}

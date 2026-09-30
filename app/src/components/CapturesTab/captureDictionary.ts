@@ -1,5 +1,5 @@
-import { EVERYWHERE_KEY, scopeKey } from '@/components/Settings/dictionaryScopes';
 import type { DictionaryEntryCreate, DictionaryPlaceInput } from '@/lib/api/types';
+import type { DiffHunk } from './wordDiff';
 
 /** Matches the server's limit on either side of an entry. */
 const MAX_LENGTH = 200;
@@ -20,9 +20,15 @@ export function selectionPhrase(selected: string): string {
   return phrase;
 }
 
-/** Where a word from a capture applies unless the user picks otherwise: the capture's app, else everywhere. */
-export function defaultPlaceKeys(appBundleId: string | null | undefined): string[] {
-  return appBundleId ? [scopeKey({ kind: 'app', bundleId: appBundleId })] : [EVERYWHERE_KEY];
+/**
+ * A correction's change as a dictionary word: a word or short phrase Herga
+ * heard, and what the user wrote instead. Null for words only added or
+ * removed, or a rewrite too long to be a word or phrase.
+ */
+export function dictionaryWord(hunk: DiffHunk): { said: string; written: string } | null {
+  const said = selectionPhrase(hunk.removed);
+  const written = selectionPhrase(hunk.added);
+  return said && written ? { said, written } : null;
 }
 
 function same(a: string, b: string): boolean {
@@ -30,23 +36,19 @@ function same(a: string, b: string): boolean {
 }
 
 /**
- * The entry for a word picked from a capture. Written as it was said, it
- * only teaches the spelling, so nothing is said to replace; the capture's
- * app is named when the scope list didn't know it.
+ * The entry for a word picked from a capture, spelled the user's way, in
+ * `places` (everywhere unless the user picks). Spelled as it was written, it only teaches the
+ * spelling; spelled otherwise, what was written is also replaced, so a
+ * mishearing Whisper repeats is fixed however far it is from the word.
  */
-export function entryFromCapture(
+export function spellingEntry(
   said: string,
   written: string,
-  places: DictionaryPlaceInput[],
-  app: { bundleId?: string | null; name?: string | null },
+  places: DictionaryPlaceInput[] = [{ scope: 'global' }],
 ): DictionaryEntryCreate {
   return {
     written: written.trim(),
     spoken: same(said, written) ? null : said.trim() || null,
-    places: places.map((place) =>
-      place.scope === 'app' && place.scope_id === app.bundleId && !place.app_name
-        ? { ...place, app_name: app.name ?? null }
-        : place,
-    ),
+    places,
   };
 }

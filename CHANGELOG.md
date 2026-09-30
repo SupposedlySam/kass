@@ -7,6 +7,7 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 ### Fixed
 
 - **Dictionary words are spelled right from the start.** A word in your dictionary used to be fixed only where Whisper already heard it right, so a misheard one stayed wrong until you'd corrected it. Now Herga also fixes near misses like `Kubernetis` or `cuber netes`, and leaves everyday words you actually said alone.
+- **Add a word to the dictionary while you correct it.** Select a word in a capture, even mid-correction, and just type its correct spelling. You no longer have to save the correction first.
 
 ## 0.6.1 — September 30, 2026
 
