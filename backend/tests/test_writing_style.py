@@ -47,6 +47,27 @@ def test_final_period_is_counted_only_at_the_end():
     assert counts["final_period"] == {"kept": 0, "dropped": 1}
 
 
+def test_a_period_turned_into_a_question_mark_is_not_dropped():
+    counts = writing_style.observe("Is it done.", "Is it done?")
+    assert counts["final_period"] == {"kept": 0, "dropped": 0}
+
+
+def test_a_period_added_at_the_end_is_kept():
+    counts = writing_style.observe("That works for me", "That works for me.")
+    assert counts["final_period"] == {"kept": 1, "dropped": 0}
+
+
+def test_a_correction_that_only_fixes_words_says_nothing_about_punctuation():
+    counts = writing_style.observe("Command and push. Then stop.", "Commit and push. Then stop.", deliberate=False)
+    assert counts == writing_style._empty_counts()
+
+
+def test_a_correction_that_changes_punctuation_counts_what_it_left_too():
+    counts = writing_style.observe("It works. Ship it.", "It works, ship it.", deliberate=False)
+    assert counts["boundary"] == {"period": 0, "comma": 1, "none": 0}
+    assert counts["final_period"] == {"kept": 1, "dropped": 0}
+
+
 def test_decide_needs_evidence_and_breaks_ties_toward_the_period():
     one = writing_style.observe("It works. Ship it.", "It works, ship it.")
     assert writing_style.decide(one)["boundary"] is None

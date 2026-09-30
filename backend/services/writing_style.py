@@ -36,6 +36,9 @@ MAX_EXAMPLES = 50
 # Least evidence before a habit is applied. Calibration alone gives about ten
 # sentence breaks and a handful of each comma kind per run.
 MIN_EVIDENCE = 2
+# Bumped when ``observe`` counts corrections differently, so saved counts are
+# recounted (``recount_if_stale``). 2: corrections that only fix words count nothing.
+COUNTING = 2
 
 _CONJUNCTIONS = frozenset(("and", "but", "so", "or", "yet", "though", "because"))
 _ABBREVIATIONS = frozenset(("mr", "mrs", "ms", "dr", "st", "vs", "etc", "e.g", "i.e", "approx"))
@@ -106,8 +109,14 @@ def _merge(*counts: dict) -> dict:
     return total
 
 
-def observe(shown: str, written: str) -> dict:
-    """Count the user's punctuation choices in ``written`` against ``shown``."""
+def observe(shown: str, written: str, deliberate: bool = True) -> dict:
+    """Count the user's punctuation choices in ``written`` against ``shown``.
+
+    A teach reply is ``deliberate``: what the user left is what they write. A
+    correction is not: one that only fixes words leaves the punctuation as it
+    was shown without choosing it, so it counts only if some punctuation or
+    capital changed.
+    """
     counts = _empty_counts()
     before = [_split(token) for token in shown.split()]
     after = [_split(token) for token in written.split()]
@@ -118,6 +127,11 @@ def observe(shown: str, written: str) -> dict:
     for block in matcher.get_matching_blocks():
         for offset in range(block.size):
             aligned[block.a + offset] = block.b + offset
+    if not deliberate and all(
+        trail == after[j][1] and _capitalized(word) == _capitalized(after[j][0])
+        for (word, trail), j in ((before[i], j) for i, j in aligned.items())
+    ):
+        return counts
 
     def record_start(i: int, j: int):
         word = before[i][0]
@@ -133,8 +147,12 @@ def observe(shown: str, written: str) -> dict:
         if j is not None:
             written_trail = after[j][1]
             if last:
-                if _is_boundary(trail) and j == len(after) - 1:
-                    counts["final_period"]["kept" if _is_boundary(written_trail) else "dropped"] += 1
+                # A period turned into "?" or "!" is a different mark, not a dropped one.
+                if j == len(after) - 1 and written_trail[-1:] not in ("?", "!"):
+                    if _is_boundary(trail):
+                        counts["final_period"]["kept" if _is_boundary(written_trail) else "dropped"] += 1
+                    elif not trail and _is_boundary(written_trail):
+                        counts["final_period"]["kept"] += 1
             elif aligned.get(i + 1) == j + 1:
                 # Both words and the one after them survived, so the seam is comparable.
                 if _is_boundary(trail) and _key(word) not in _ABBREVIATIONS:
@@ -315,7 +333,8 @@ def habits(style: str | None = None) -> dict:
 
 def is_ready(style: str | None = None) -> bool:
     profile = _profile(style)
-    return profile["runs"] > 0 or sum(profile["feedback_counts"]["boundary"].values()) >= 3
+    evidence = sum(sum(outcomes.values()) for outcomes in profile["feedback_counts"].values())
+    return profile["runs"] > 0 or evidence >= 3
 
 
 def status(style: str | None = None) -> dict:
@@ -405,7 +424,7 @@ def refresh_feedback(db) -> None:
             continue
         if original and max(len(original), len(row.expected_text)) <= 2000:
             style = correction_style(styles, captured.get("app_bundle_id"), teaches)
-            counts.setdefault(style, []).append(observe(original, row.expected_text))
+            counts.setdefault(style, []).append(observe(original, row.expected_text, deliberate=False))
     with _lock:
         state = _load()
         profiles = {
@@ -414,7 +433,13 @@ def refresh_feedback(db) -> None:
         }
         for style_id in counts.keys() - profiles.keys():
             profiles[style_id] = {**_empty_style(), "feedback_counts": _merge(*counts[style_id])}
-        _save({**state, "styles": profiles})
+        _save({**state, "styles": profiles, "counting": COUNTING})
+
+
+def recount_if_stale(db) -> None:
+    """Recount at startup when the counts were made by an older ``observe``."""
+    if _load().get("counting") != COUNTING:
+        refresh_feedback(db)
 
 
 def reset(style: str | None = None) -> None:

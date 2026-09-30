@@ -37,9 +37,11 @@ def init_db() -> None:
 
     # The preset writing styles, with the global settings moved into the default.
     from ..services.styles import ensure_styles
+    from ..services.writing_style import recount_if_stale
 
     with SessionLocal() as db:
         ensure_styles(db)
+        recount_if_stale(db)
 
 
 def _rename_old_db(db_path) -> None:

@@ -468,6 +468,13 @@ def _prompt(flags: RefinementFlags, use_personal_examples, extra_examples, corre
     # Whisper ends every transcript with a period. Hide it, in the user's
     # examples too, so the ending follows how they write ("3. Do chores").
     personal = [(_without_final_period(said), meant) for said, meant in personal]
+    if flags.punctuation_style == "learned":
+        from .writing_style import habits, is_ready
+
+        if is_ready(flags.style) and habits(flags.style)["drop_final_period"]:
+            # A correction that fixed words kept the period it was shown; the
+            # examples end the way the style learned to.
+            personal = [(said, _without_final_period(meant)) for said, meant in personal]
     return build_refinement_prompt(flags, personal=bool(personal), notes=notes), refinement_examples(flags, personal)
 
 

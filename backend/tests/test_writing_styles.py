@@ -13,7 +13,7 @@ from backend import config
 from backend.database import get_db, session as database_session
 from backend.database.models import AppStyle, Base, Capture, CaptureFeedback, CaptureSettings, WritingStyle
 from backend.models import CaptureSettingsResponse
-from backend.services import correction_notes, personal_examples, styles, writing_style
+from backend.services import correction_notes, personal_examples, refinement, styles, writing_style
 from backend.services.refinement import RefinementFlags, build_refinement_prompt, style_first_word
 
 SLACK, MAIL = "com.tinyspeck.slackmacgap", "com.apple.mail"
@@ -455,3 +455,30 @@ def test_a_style_description_goes_into_only_its_own_cleanup_prompt(storage):
     chat = create(storage, "Chat", description="Mostly coworkers, so informal. No greetings.")
     assert "Mostly coworkers, so informal. No greetings." in build_refinement_prompt(RefinementFlags(style=chat))
     assert "coworkers" not in build_refinement_prompt(RefinementFlags(style="personal"))
+
+
+def test_word_fixes_do_not_outvote_the_endings_the_user_dropped(storage):
+    seed(storage)
+    for index in range(4):
+        correct(storage, f"w{index}", SLACK, "command and push", "Commit and push.", refined="Command and push.")
+    for index, (shown, meant) in enumerate([("Commit.", "Commit"), ("Status.", "Status")]):
+        correct(storage, f"d{index}", SLACK, meant.lower(), meant, refined=shown)
+    with storage() as db:
+        writing_style.refresh_feedback(db)
+    assert writing_style.is_ready("personal")
+    assert writing_style.status("personal")["habits"] == ["drop_final_period"]
+    assert writing_style.apply_learned("Commit. Then push.", "personal") == "Commit. Then push"
+
+    flags = RefinementFlags(punctuation_style="learned", style="personal")
+    _, examples = refinement._prompt(flags, True, None, None)
+    assert ("command and push", "Commit and push") in examples
+
+
+def test_counts_from_an_older_observe_are_recounted_once(storage):
+    seed(storage)
+    correct(storage, "d", SLACK, "status", "Status", refined="Status.")
+    writing_style._save({**writing_style._load(), "counting": 1})
+    with storage() as db:
+        writing_style.recount_if_stale(db)
+    assert writing_style._profile("personal")["feedback_counts"]["final_period"] == {"kept": 0, "dropped": 1}
+    assert writing_style._load()["counting"] == writing_style.COUNTING
