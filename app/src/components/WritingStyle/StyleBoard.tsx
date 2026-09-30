@@ -102,7 +102,6 @@ export function StyleBoard({
             style={style}
             apps={appsIn(data, style.id)}
             selected={style.id === selectedId}
-            filtered={filter?.kind === 'style' && filter.styleId === style.id}
             over={over === style.id}
             dragging={dragging}
             onShow={() => {
@@ -141,7 +140,6 @@ function StyleCard({
   style,
   apps,
   selected,
-  filtered,
   over,
   dragging,
   onShow,
@@ -153,7 +151,6 @@ function StyleCard({
   style: WritingStyle;
   apps: StyledApp[];
   selected: boolean;
-  filtered: boolean;
   over: boolean;
   dragging: string | null;
   onShow: () => void;
@@ -212,11 +209,6 @@ function StyleCard({
         {style.is_default && (
           <span className="shrink-0 rounded-full border border-input px-1.5 text-[10.5px] font-semibold text-muted-foreground">
             {t('writingStyle.styles.default')}
-          </span>
-        )}
-        {filtered && (
-          <span className="ml-auto shrink-0 text-[11px] text-accent">
-            {t('writingStyle.styles.showing')}
           </span>
         )}
       </button>

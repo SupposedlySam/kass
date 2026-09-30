@@ -1107,7 +1107,6 @@
       "add": "Add",
       "newHint": "Starts with the default style's settings and nothing learned. Press Enter to add it.",
       "default": "Default",
-      "showing": "Showing in list",
       "empty": "Drop apps here",
       "more": "+{{count}} more",
       "moreLabel_one": "Show the {{count}} app in {{style}}",
