@@ -1,6 +1,5 @@
 """Learning must earn activation on independent examples and remain reversible."""
 
-import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -16,7 +15,7 @@ from backend.services.captures import get_capture, refine_capture
 from backend.services.refinement import RefinementFlags
 
 
-def samples(language=None):
+def samples(language=None, sources=("manual", "manual", "manual")):
     return [
         rules.Example(
             str(i),
@@ -24,22 +23,56 @@ def samples(language=None):
             f"Please use voice box today at {place}.",
             f"Please use Voicebox today at {place}.",
             language,
+            source,
         )
-        for i, place in enumerate(("home", "work", "school"))
+        for i, (place, source) in enumerate(zip(("home", "work", "school"), sources, strict=True))
     ]
 
 
-def test_activation_requires_distinct_training_and_heldout_takes():
+@pytest.mark.parametrize("every_report", [False, True])
+def test_activation_requires_two_teaching_takes_and_a_third_that_improves(every_report):
     examples = samples()
-    assert rules.evaluate(examples[:2], [])[0] == []
-    selected, metrics = rules.evaluate(examples, [])
+    assert rules.evaluate(examples[:2], [], every_report=every_report)[0] == []
+    selected, metrics = rules.evaluate(examples, [], every_report=every_report)
     assert len(selected) == 1
-    assert metrics["training_examples"] == 2
-    assert metrics["heldout_examples"] == 1
+    assert metrics["examples"] == 3
     assert metrics["accepted"] == 1
-    assert rules.evaluate([examples[0]] * 6, [])[0] == []
+    assert rules.evaluate([examples[0]] * 6, [], every_report=every_report)[0] == []
     same_take = [rules.Example(e.id, "same", e.original, e.expected, e.language) for e in examples]
-    assert rules.evaluate(same_take, [])[0] == []
+    assert rules.evaluate(same_take, [], every_report=every_report)[0] == []
+
+
+def test_newest_reports_are_evidence_at_once():
+    # Chronological hold-out kept the newest third of reports from ever teaching.
+    # That stays the rule without the voice_edits beta.
+    older = [rules.Example(f"u{i}", f"u{i}", f"Old text {i}.", f"Totally new {i}.", None) for i in range(30)]
+    assert rules.evaluate([*older, *samples()], [])[0] == []
+    selected, metrics = rules.evaluate([*older, *samples()], [], every_report=True)
+    assert len(selected) == 1
+    assert metrics["accepted"] == 1
+
+
+@pytest.mark.parametrize(
+    ("sources", "learned"),
+    [
+        (("redictation", "redictation", "redictation"), False),
+        (("manual", "redictation", "redictation"), True),
+        (("voice_fix", "redictation", "voice_fix"), True),
+        (("voice_fix", "voice_fix", "voice_fix"), True),
+    ],
+)
+def test_redictations_only_back_up_an_explicit_report(sources, learned):
+    assert bool(rules.evaluate(samples(sources=sources), [], every_report=True)[0]) is learned
+
+
+def test_active_rule_without_support_is_dropped():
+    selected, _ = rules.evaluate(samples(), [], every_report=True)
+    kept, metrics = rules.evaluate(samples()[:2], selected, every_report=True)
+    assert kept == []
+    assert metrics["withdrawn"] == 1
+    assert rules.evaluate(samples(), selected, every_report=True)[0] == selected
+    # Without the beta, learned rules stay until contradicted or rolled back.
+    assert rules.evaluate(samples()[:2], selected)[0] == selected
 
 
 def test_only_matching_context_and_language_change():
@@ -199,25 +232,6 @@ def test_corrupt_state_falls_back_to_no_rules(storage):
     assert learning.status()["active_rules"] == 0
 
 
-@pytest.mark.asyncio
-async def test_periodic_job_runs_after_startup_delay_and_cancels(monkeypatch):
-    called = []
-    real_sleep = asyncio.sleep
-
-    async def sleep(seconds):
-        called.append(seconds)
-        if len(called) > 1:
-            raise asyncio.CancelledError
-        await real_sleep(0)
-
-    monkeypatch.setattr(learning, "initialize", lambda: None)
-    monkeypatch.setattr(learning, "run_job", lambda: called.append("run"))
-    monkeypatch.setattr(learning.asyncio, "sleep", sleep)
-    with pytest.raises(asyncio.CancelledError):
-        await learning.periodic_job()
-    assert called == [60, "run", learning.INTERVAL_SECONDS]
-
-
 def test_learning_http_controls(storage, monkeypatch):
     from backend.services.model_improvement import manager
     monkeypatch.setattr(manager, "start", lambda: {"can_rollback": False})
@@ -278,3 +292,132 @@ def test_legacy_state_waits_for_a_new_evaluation(storage, monkeypatch):
     monkeypatch.setattr(learning, "_state", None)
     assert learning.status()["evaluated_report_ids"] == []
     assert learning.run_job()["evaluated_report_ids"] == report_ids
+
+
+@pytest.fixture
+def beta_on(storage):
+    from backend import beta
+
+    (config.get_data_dir() / beta.CHANNEL_FILE).write_text("beta")
+
+
+def report(storage, capture_id, original, expected, source="manual"):
+    with storage() as db:
+        db.add(
+            Capture(id=capture_id, audio_path="unused.wav", transcript_raw=original, transcript_refined=original)
+        )
+        db.commit()
+        return save_feedback(
+            capture_id,
+            CaptureFeedbackCreate(
+                target="refined", expected_text=expected, snapshot=get_capture(capture_id, db), source=source
+            ),
+            db,
+        )
+
+
+def test_withdrawn_support_drops_the_rule_without_blocking_it(storage, beta_on):
+    from backend.database.models import CaptureFeedback
+    from backend.services.capture_feedback import withdraw_feedback
+
+    assert learning.run_job()["active_rules"] == 1
+    with storage() as db:
+        row = db.query(CaptureFeedback).filter(CaptureFeedback.capture_id == "0").one()
+        assert withdraw_feedback("0", row.id, db)
+    assert learning.pending()
+    assert learning.run_job()["active_rules"] == 0
+    assert not learning.pending()
+    assert learning.apply_learned_corrections(samples()[1].original) == samples()[1].original
+    assert learning._state["blocked"] == []
+    # Reported again, it is learned again.
+    report(storage, "again", "Please use voice box today at noon.", "Please use Voicebox today at noon.")
+    assert learning.run_job()["active_rules"] == 1
+
+
+def test_withdrawing_a_contradiction_lifts_its_block(storage, beta_on):
+    from backend.services.capture_feedback import withdraw_feedback
+
+    learning.run_job()
+    text = "Please use voice box today outside."
+    with storage() as db:
+        db.add(
+            Capture(
+                id="new",
+                audio_path="unused.wav",
+                transcript_raw=text,
+                transcript_refined=text.replace("voice box", "Voicebox"),
+            )
+        )
+        db.commit()
+        contradiction = save_feedback(
+            "new",
+            CaptureFeedbackCreate(
+                target="refined", expected_text=text, snapshot=get_capture("new", db), source="voice_fix"
+            ),
+            db,
+        )
+    assert learning.run_job()["active_rules"] == 0
+    assert learning._state["blocked_by"] == {learning._state["blocked"][0]: [contradiction.id]}
+    with storage() as db:
+        assert withdraw_feedback("new", contradiction.id, db)
+    assert learning.run_job()["active_rules"] == 1
+    assert learning._state["blocked"] == []
+
+
+def test_rollback_block_outlives_withdrawals(storage, beta_on):
+    from backend.database.models import CaptureFeedback
+    from backend.services.capture_feedback import withdraw_feedback
+
+    learning.run_job()
+    learning.rollback()
+    with storage() as db:
+        row = db.query(CaptureFeedback).filter(CaptureFeedback.capture_id == "0").one()
+        withdraw_feedback("0", row.id, db)
+    report(storage, "again", "Please use voice box today at noon.", "Please use Voicebox today at noon.")
+    assert learning.run_job()["active_rules"] == 0
+
+
+def test_only_a_withdrawal_asks_for_the_adapter_to_retrain(storage, beta_on, monkeypatch):
+    from backend.services.capture_feedback import withdraw_feedback
+
+    monkeypatch.setattr(learning, "_retrain", False)
+    saved = report(storage, "again", "Please use voice box today at noon.", "Please use Voicebox today at noon.")
+    assert learning.pending()
+    assert not learning.take_retrain()
+    with storage() as db:
+        assert not withdraw_feedback("other", saved.id, db)
+        assert withdraw_feedback("again", saved.id, db)
+    assert learning.take_retrain()
+    assert not learning.take_retrain()
+
+
+def test_without_the_beta_reports_are_manual_and_final(storage):
+    from backend.database.models import CaptureFeedback
+    from backend.services.capture_feedback import withdraw_feedback
+
+    assert learning.run_job()["active_rules"] == 1
+    with pytest.raises(ValueError, match="beta"):
+        report(storage, "voice", "Please use voice box today at noon.", "x", source="voice_fix")
+    with storage() as db:
+        row = db.query(CaptureFeedback).filter(CaptureFeedback.capture_id == "0").one()
+        assert not withdraw_feedback("0", row.id, db)
+        assert db.query(CaptureFeedback).count() == 3
+
+
+def test_turning_the_beta_on_relearns_with_every_report(storage):
+    from datetime import datetime
+
+    from backend import beta
+    from backend.database.models import CaptureFeedback
+
+    for i in range(6):
+        report(storage, f"old{i}", f"Old text {i}.", f"Totally new {i}.")
+    with storage() as db:
+        db.query(CaptureFeedback).filter(CaptureFeedback.capture_id.like("old%")).update(
+            {"created_at": datetime(2020, 1, 1)}, synchronize_session=False
+        )
+        db.commit()
+    # The three matching reports are the newest third, so they are held out.
+    assert learning.run_job()["active_rules"] == 0
+    (config.get_data_dir() / beta.CHANNEL_FILE).write_text("beta")
+    assert learning.run_job()["active_rules"] == 1

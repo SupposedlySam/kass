@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from ... import config
+from ... import beta, config
 from ...database import session as database_session
 from .. import correction_learning
 from .data import collect, digest, readiness
@@ -535,13 +535,39 @@ def rollback():
         return status()
 
 
+def _learn_rules():
+    """Relearn correction rules; whether that invalidated the active adapter."""
+    correction_learning.initialize()
+    before = digest(correction_learning._state["rules"])
+    try:
+        correction_learning.run_job()
+    except Exception:
+        logger.exception("Correction learning failed; keeping the active rules")
+        return False
+    return bool(_active.get("llm")) and digest(correction_learning._state["rules"]) != before
+
+
 async def periodic_job():
     initialize()
     try:
         while True:
             await asyncio.sleep(60)
-            now = time.monotonic()
-            if now - _last_activity >= IDLE_SECONDS and now - _last_attempt >= INTERVAL_SECONDS:
+            if idle_generation() is None:
+                continue
+            # A withdrawn report may be in the active adapter's training data.
+            retrain = correction_learning.take_retrain() and bool(_active.get("llm"))
+            if (
+                retrain
+                or time.monotonic() - _last_attempt >= INTERVAL_SECONDS
+                # With the voice_edits beta, a saved or withdrawn report is learned
+                # from soon, not in six hours. The adapter was tested with the old
+                # rules, so new ones retest it.
+                or (
+                    correction_learning.pending()
+                    and beta.enabled("voice_edits")
+                    and await asyncio.to_thread(_learn_rules)
+                )
+            ):
                 start()
     finally:
         await asyncio.to_thread(foreground_activity)

@@ -1,25 +1,30 @@
-"""Periodic, local-only correction learning; inference reads an immutable cache."""
+"""Local-only correction learning; inference reads an immutable cache.
 
-import asyncio
+The model-improvement job runs it (model_improvement/manager.py) before each
+adapter run and, with the voice_edits beta, at the next idle moment after a
+report is saved or withdrawn.
+"""
+
 import hashlib
 import json
 import logging
 import os
 import threading
-from contextlib import suppress
 from datetime import UTC, datetime
 
-from .. import config
+from .. import beta, config
 from ..database import session as database_session
 from ..database.models import CaptureFeedback
 from .correction_rules import MAX_TEXT, Example, apply_rules, compile_rules, evaluate, loss
 
 logger = logging.getLogger(__name__)
-INTERVAL_SECONDS = 6 * 60 * 60
 _lock = threading.RLock()
 _state = None
 _path = None
 _compiled = ()
+# Reports changed since the last run; a withdrawn one also needs the adapter retrained.
+_pending = False
+_retrain = False
 
 
 def _empty():
@@ -29,6 +34,8 @@ def _empty():
         "rules": [],
         "history": [],
         "blocked": [],
+        # Rule id -> the reports that contradicted it. Rollback blocks have none.
+        "blocked_by": {},
         "last_run": None,
         "fingerprint": None,
         "evaluated_report_ids": [],
@@ -74,6 +81,24 @@ def _publish(state):
     _compiled = compiled
 
 
+def request_run(retrain=False):
+    """Ask for a run at the next idle moment, and an adapter run if ``retrain``."""
+    global _pending, _retrain
+    _pending = True
+    _retrain = _retrain or retrain
+
+
+def pending():
+    return _pending
+
+
+def take_retrain():
+    """Whether a withdrawn report asked for an adapter run; clears the request."""
+    global _retrain
+    retrain, _retrain = _retrain, False
+    return retrain
+
+
 def apply_learned_corrections(text, language=None):
     # No disk/DB access, locks, extra prompts, or model calls during dictation.
     # Very long transcripts skip the bounded, latency-tested rule layer.
@@ -114,7 +139,9 @@ def _examples(db):
             original = snapshot["transcript_raw" if row.target == "raw" else "transcript_refined"]
             if not original or max(len(original), len(row.expected_text)) > 1000:
                 continue
-            examples.append(Example(row.id, row.capture_id, original, row.expected_text, snapshot.get("language")))
+            examples.append(
+                Example(row.id, row.capture_id, original, row.expected_text, snapshot.get("language"), row.source)
+            )
         except (ValueError, KeyError, TypeError):
             logger.warning("Skipping invalid correction snapshot %s", row.id)
     return examples
@@ -122,30 +149,47 @@ def _examples(db):
 
 def run_job():
     """Run serially in a worker thread, owning the DB session in that thread."""
+    global _pending
     initialize()
     with _lock:
+        # A report saved during the run asks for another one.
+        _pending = False
         with database_session.SessionLocal() as db:
             examples = _examples(db)
-        fingerprint = hashlib.sha256(repr(examples).encode()).hexdigest()
+            causes = {report for reports in _state["blocked_by"].values() for report in reports}
+            existing = {report for (report,) in db.query(CaptureFeedback.id).filter(CaptureFeedback.id.in_(causes))}
+        every_report = beta.enabled("voice_edits")
+        # Turning the beta on or off relearns with the other evidence rules.
+        fingerprint = hashlib.sha256(repr((examples, every_report)).encode()).hexdigest()
         report_ids = [example.id for example in examples]
-        if fingerprint == _state["fingerprint"] and report_ids == _state["evaluated_report_ids"]:
+        # A contradiction's block lasts while a report behind it exists.
+        lifted = {rule for rule, reports in _state["blocked_by"].items() if not existing & set(reports)}
+        if not every_report:
+            lifted = set()
+        if fingerprint == _state["fingerprint"] and report_ids == _state["evaluated_report_ids"] and not lifted:
             return status()
         state = json.loads(json.dumps(_state))
+        state["blocked"] = [rule for rule in state["blocked"] if rule not in lifted]
+        state["blocked_by"] = {rule: reports for rule, reports in state["blocked_by"].items() if rule not in lifted}
         active = state["rules"]
         # A new report contradicting a learned rule disables it before proposing
-        # replacements. Never automatically re-enable a withdrawn rule.
+        # replacements. With the voice_edits beta the block lasts until that
+        # report is withdrawn or deleted; without it, for good.
         retained = []
         for rule in active:
             compiled = compile_rules([rule])
-            if any(
-                apply_rules(e.expected, compiled, e.language) != e.expected
-                or loss(apply_rules(e.original, compiled, e.language), e.expected) > loss(e.original, e.expected)
+            contradicting = [
+                e.id
                 for e in examples
-            ):
+                if apply_rules(e.expected, compiled, e.language) != e.expected
+                or loss(apply_rules(e.original, compiled, e.language), e.expected) > loss(e.original, e.expected)
+            ]
+            if contradicting:
                 state["blocked"].append(rule["id"])
+                state["blocked_by"][rule["id"]] = contradicting
             else:
                 retained.append(rule)
-        rules, metrics = evaluate(examples, retained, state["blocked"])
+        rules, metrics = evaluate(examples, retained, state["blocked"], every_report)
         if rules != active:
             state["history"] = (state["history"] + [{"revision": state["revision"], "rules": active}])[-10:]
             state["revision"] += 1
@@ -178,20 +222,3 @@ def rollback():
         state["outcome"] = "rolled_back"
         _publish(state)
         return status()
-
-
-async def periodic_job():
-    initialize()
-    await asyncio.sleep(60)
-    while True:
-        # Shield the worker so shutdown waits for atomic publication to finish.
-        worker = asyncio.create_task(asyncio.to_thread(run_job))
-        try:
-            await asyncio.shield(worker)
-        except asyncio.CancelledError:
-            with suppress(Exception):
-                await worker
-            raise
-        except Exception:
-            logger.exception("Correction improvement job failed; keeping active version")
-        await asyncio.sleep(INTERVAL_SECONDS)

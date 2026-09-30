@@ -58,7 +58,12 @@ def _recent() -> tuple[list[str], set[str]]:
             .all()
         )
         corrected = (
-            db.query(CaptureFeedback.expected_text).order_by(CaptureFeedback.created_at.desc()).limit(_RECENT).all()
+            db.query(CaptureFeedback.expected_text)
+            # A redictation's text is already a capture of its own above.
+            .filter(CaptureFeedback.teaches_style())
+            .order_by(CaptureFeedback.created_at.desc())
+            .limit(_RECENT)
+            .all()
         )
         kept = db.query(KnownName.name)
         # A full page of dictations newer than a deleted one pushes its names out.

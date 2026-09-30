@@ -410,3 +410,62 @@ def test_real_child_is_killed_on_recording_and_never_promoted(storage, monkeypat
     assert process.poll() is not None
     assert manager.status()["phase"] == "paused"
     assert not manager.status()["active_adapter"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("beta_on", "pending", "retrain", "adapter", "rules_change", "learned", "started"),
+    [
+        (True, False, False, True, False, False, False),
+        # A report is learned from at the next idle minute.
+        (True, True, False, False, True, True, False),
+        # New rules invalidate the adapter tested with the old ones: retest it.
+        (True, True, False, True, True, True, True),
+        (True, True, False, True, False, True, False),
+        # A withdrawn report may be in the active adapter's training data.
+        (True, True, True, True, False, False, True),
+        (True, False, True, False, False, False, False),
+        # Without the voice_edits beta, reports wait for the six-hourly run.
+        (False, True, False, True, True, False, False),
+    ],
+)
+async def test_idle_tick_learns_reports_soon_and_retests_the_adapter(
+    storage, tmp_path, monkeypatch, beta_on, pending, retrain, adapter, rules_change, learned, started
+):
+    import asyncio
+    import time
+
+    from backend import beta
+
+    if beta_on:
+        (tmp_path / beta.CHANNEL_FILE).write_text("beta")
+    calls = []
+    ticks = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(seconds):
+        ticks.append(seconds)
+        if len(ticks) > 1:
+            raise asyncio.CancelledError
+        await real_sleep(0)
+
+    learning = manager.correction_learning
+
+    def run_job():
+        calls.append("learn")
+        if rules_change:
+            learning._state = {"rules": [{"id": "new"}]}
+
+    monkeypatch.setattr(manager.asyncio, "sleep", sleep)
+    monkeypatch.setattr(manager, "_last_attempt", time.monotonic())
+    monkeypatch.setattr(manager, "_active", {"llm": {"path": "adapter"}} if adapter else {})
+    monkeypatch.setattr(manager, "start", lambda: calls.append("start"))
+    monkeypatch.setattr(learning, "initialize", lambda: None)
+    monkeypatch.setattr(learning, "run_job", run_job)
+    monkeypatch.setattr(learning, "_pending", pending)
+    monkeypatch.setattr(learning, "_retrain", retrain)
+    with pytest.raises(asyncio.CancelledError):
+        await manager.periodic_job()
+    assert ("learn" in calls) is learned
+    assert ("start" in calls) is started
+    assert not learning.take_retrain()

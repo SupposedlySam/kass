@@ -151,7 +151,10 @@ class AppStyle(Base):
 
 
 class CaptureFeedback(Base):
-    """Immutable correction paired with the model output observed by the user."""
+    """Correction paired with the model output observed by the user.
+
+    Never edited; the user can withdraw it (capture_feedback.withdraw_feedback).
+    """
 
     __tablename__ = "capture_feedback"
 
@@ -161,12 +164,24 @@ class CaptureFeedback(Base):
     expected_text = Column(Text, nullable=False)
     notes = Column(Text, nullable=False, default="")
     snapshot = Column(Text, nullable=False)
+    # How the report was made: "manual" in Captures, "voice_fix" when the user
+    # fixed Herga's text by voice, "redictation" when they dictated it again.
+    # A redictation is weaker evidence: it teaches learning only, never the
+    # writing style (examples, habits, names), and a rule needs an explicit report.
+    source = Column(String, nullable=False, default="manual", server_default="manual")
     # Copied from the capture when history retention deletes it, so the
     # correction keeps teaching the same style (docs/plans/HISTORY_RETENTION.md).
     # Null while the capture exists: read the capture's own columns then.
     app_bundle_id = Column(String, nullable=True)
     teaches_style_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    EXPLICIT_SOURCES = ("manual", "voice_fix")
+
+    @classmethod
+    def teaches_style(cls):
+        """Filter for reports that teach the writing style: explicit ones."""
+        return cls.source.in_(cls.EXPLICIT_SOURCES)
 
 
 class RetiredCapture(Base):

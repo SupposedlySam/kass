@@ -39,6 +39,8 @@ class Example:
     original: str
     expected: str
     language: str | None
+    # CaptureFeedback.source: "manual", "voice_fix" or "redictation".
+    source: str = "manual"
 
 
 def words(text):
@@ -124,16 +126,18 @@ def loss(actual, expected):
     return previous[-1]
 
 
-def evaluate(examples, active, blocked=()):
+def _improves(rule, before, example):
+    prior, after = compile_rules(before), compile_rules([*before, rule])
+    return loss(apply_rules(example.original, after, example.language), example.expected) < loss(
+        apply_rules(example.original, prior, example.language), example.expected
+    )
+
+
+def _heldout_evidence(examples, active, blocked):
     """Derive on two distinct takes; require improvement on an unseen third.
 
     The chronological final third is withheld from candidate generation.
-    Duplicate utterances cannot supply independent training/validation evidence.
     """
-    unique = {}
-    for example in examples:
-        unique[(example.language, example.original)] = example
-    examples = list(unique.values())
     split = max(0, len(examples) * 2 // 3)
     training, heldout = examples[:split], examples[split:]
     groups = defaultdict(list)
@@ -143,18 +147,66 @@ def evaluate(examples, active, blocked=()):
             groups[rule["id"]].append((rule, example))
     proposed = []
     for group in groups.values():
-        if len({example.capture_id for _, example in group}) < 2:
+        taught = {example.capture_id for _, example in group}
+        if len(taught) < 2:
             continue
         rule = group[0][0]
-        compiled = compile_rules([rule])
-        if any(
-            loss(apply_rules(e.original, compiled, e.language), e.expected) < loss(e.original, e.expected)
-            for e in heldout
-            if e.capture_id not in {example.capture_id for _, example in group}
-        ):
+        if any(_improves(rule, [], e) for e in heldout if e.capture_id not in taught):
             proposed.append(rule)
-    # Require each addition to improve the held-out set and regress nowhere.
-    selected = list(active)
+
+    def confirmed(rule, before):
+        return any(_improves(rule, before, e) for e in heldout)
+
+    return list(active), proposed, confirmed
+
+
+def _every_report_evidence(examples, active, blocked):
+    """Two recordings teach a rule and a third confirms it; every report counts at once.
+
+    At least one teaching report must be explicit (a redictation only backs a
+    rule up). No report is held back by age, so a new one is evidence as soon
+    as it is saved. Active rules are checked the same way, so one that lost its
+    support (a withdrawn or deleted report) is dropped.
+    """
+    teachers, candidates = defaultdict(list), {}
+    for example in examples:
+        rule = candidate(example)
+        if rule:
+            teachers[rule["id"]].append(example)
+            candidates[rule["id"]] = rule
+
+    def confirmed(rule, before):
+        improved = [e for e in examples if _improves(rule, before, e)]
+        taught = [e for e in teachers[rule["id"]] if e in improved]
+        return (
+            len({e.capture_id for e in improved}) >= 3
+            and len({e.capture_id for e in taught}) >= 2
+            and any(e.source != "redictation" for e in taught)
+        )
+
+    proposed = [
+        candidates[rule_id]
+        for rule_id, group in teachers.items()
+        if rule_id not in blocked and len({e.capture_id for e in group}) >= 2
+    ]
+    return [rule for rule in active if confirmed(rule, [])], proposed, confirmed
+
+
+def evaluate(examples, active, blocked=(), every_report=False):
+    """Add a rule only on independent evidence; never regress a saved example.
+
+    ``every_report`` (the voice_edits beta, backend/beta.py) lets new reports
+    count at once instead of holding the newest third back. Duplicate
+    utterances cannot supply independent evidence.
+    """
+    unique = {}
+    for example in examples:
+        unique[(example.language, example.original)] = example
+    examples = list(unique.values())
+    evidence = _every_report_evidence if every_report else _heldout_evidence
+    retained, proposed, confirmed = evidence(examples, active, blocked)
+    # Require each addition to be confirmed and regress nowhere.
+    selected = list(retained)
     validation = [(e.original, e.expected, e.language) for e in examples]
     validation += [(e.expected, e.expected, e.language) for e in examples]
     languages = {e.language for e in examples} | {None}
@@ -169,11 +221,7 @@ def evaluate(examples, active, blocked=()):
             for text, expected, lang in validation
         ):
             continue
-        if not any(
-            loss(apply_rules(e.original, after, e.language), e.expected)
-            < loss(apply_rules(e.original, before, e.language), e.expected)
-            for e in heldout
-        ):
+        if not confirmed(rule, selected):
             continue
         selected.append(rule)
         accepted += 1
@@ -189,11 +237,12 @@ def evaluate(examples, active, blocked=()):
         timings.append((time.perf_counter() - start) * 1000)
     latency = statistics.median(timings)
     passed = latency <= 5
-    return (selected if passed else active), {
-        "training_examples": len(training),
-        "heldout_examples": len(heldout),
+    # Dropping unsupported rules only makes the layer faster.
+    return (selected if passed else retained), {
+        "examples": len(examples),
         "candidates": len(proposed),
         "accepted": accepted if passed else 0,
+        "withdrawn": len(active) - len(retained),
         "median_rule_ms": round(latency, 3),
         "latency_passed": passed,
     }

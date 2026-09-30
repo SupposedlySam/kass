@@ -9,7 +9,10 @@ cached Qwen model. No reports, audio, adapters or metrics are uploaded.
 ## Scheduling and foreground priority
 
 The server checks every six hours after at least two minutes without foreground
-work. Check now starts a job explicitly. A separate worker process owns training
+work. With the `voice_edits` beta, a saved or withdrawn report relearns the vocabulary rules at the next idle
+minute instead (CORRECTION_LEARNING.md); when that changes the rules, or a report
+is withdrawn, while an adapter is active, a full run follows, since the adapter
+was tested with the old rules and data. Check now starts a job explicitly. A separate worker process owns training
 and evaluation, with a 30-minute limit and a 16 GiB MLX allocation limit. Training
 waits if the system has under 8 GiB available memory. There are no background model
 downloads. Currently this trainer runs on Apple Silicon Macs.

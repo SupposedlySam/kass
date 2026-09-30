@@ -405,7 +405,7 @@ def refresh_feedback(db) -> None:
         # A correction whose capture history retention deleted keeps its own copy.
         db.query(CaptureFeedback, func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id))
         .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
-        .filter(CaptureFeedback.target == "refined")
+        .filter(CaptureFeedback.target == "refined", CaptureFeedback.teaches_style())
         .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
         .limit(200)
         .all()

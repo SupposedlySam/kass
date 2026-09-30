@@ -465,11 +465,16 @@ class ActiveTasksResponse(BaseModel):
     downloads: List[ActiveDownloadTask]
 
 
+CaptureFeedbackSource = Literal["manual", "voice_fix", "redictation"]
+
+
 class CaptureFeedbackCreate(BaseModel):
     target: Literal["raw", "refined"]
     expected_text: str = Field(max_length=100000)
     notes: str = Field(default="", max_length=5000)
     snapshot: CaptureResponse
+    # See CaptureFeedback.source (docs/plans/CORRECTION_LEARNING.md).
+    source: CaptureFeedbackSource = "manual"
 
 
 class WritingStyleStatus(BaseModel):
@@ -671,6 +676,7 @@ class CaptureFeedbackResponse(BaseModel):
     expected_text: str
     notes: str
     snapshot: CaptureResponse
+    source: CaptureFeedbackSource
     created_at: datetime
 
 

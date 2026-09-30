@@ -93,6 +93,8 @@ def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "teaches_style_id"):
         if column not in columns:
             _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
+    if "source" not in columns:
+        _add_column(engine, "capture_feedback", "source VARCHAR NOT NULL DEFAULT 'manual'", "source")
 
 
 def _migrate_writing_styles(engine, inspector, tables: set[str]) -> None:

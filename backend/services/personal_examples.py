@@ -1,7 +1,8 @@
 """The user's own "when I say this, I mean this" examples.
 
 Two sources feed it: corrections to refined output (Teach Herga) and
-calibration rewrites the user edited. Cleanup shows the model the same
+calibration rewrites the user edited. Only explicit corrections count: a
+redictation report teaches correction learning alone. Cleanup shows the model the same
 recent examples on every dictation, so a correction counts on the very next
 dictation, and the model's prompt cache keeps the wait short. Examples too old
 to fit are summarized into correction notes, so none stop counting.
@@ -52,7 +53,7 @@ def _from_corrections() -> list[dict]:
             # A correction whose capture history retention deleted keeps its own copy.
             db.query(CaptureFeedback, func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id))
             .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
-            .filter(CaptureFeedback.target == "refined")
+            .filter(CaptureFeedback.target == "refined", CaptureFeedback.teaches_style())
             .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
             .all()
         )
