@@ -1,4 +1,5 @@
 mod accessibility;
+mod app_hide;
 mod app_icon;
 mod app_location;
 mod clipboard;
@@ -1475,6 +1476,8 @@ pub fn run() {
                 // (Cmd+V is matched by translated character, not keycode,
                 // so QWERTY keycode 9 produces Cmd+. on Dvorak).
                 keyboard_layout::init();
+                // ⌘H hides the windows, so the pill can show without them.
+                app_hide::init();
 
                 // HotkeyMonitor is spawned lazily via the `enable_hotkey`
                 // command — see HotkeyState. The hidden dictate webview is

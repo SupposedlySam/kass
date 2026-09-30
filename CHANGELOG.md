@@ -2,6 +2,12 @@
 
 Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### Fixed
+
+- **⌘H keeps Herga out of the way.** Dictating after hiding Herga with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Herga in the Dock or ⌘Tab to it.
+
 ## 0.6.2 — September 30, 2026
 
 ### Fixed
