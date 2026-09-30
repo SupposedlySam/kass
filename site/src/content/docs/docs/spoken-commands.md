@@ -87,3 +87,18 @@ Start a dictation by naming a [writing style](/docs/writing-styles/) and Herga u
 - "I'd like this to be more formal"
 
 "Formal" also matches a style called Professional, and "casual" matches Informal or Relaxed. The instruction itself is left out of the text. The pill shows the style's name and plays a short sound so you know it switched.
+
+## Fix what Herga just typed
+
+*Beta: turn on **Beta updates** in **Settings › General**.*
+
+Hold your dictation keys and start with **"fix that"** or **"edit"** to change your last dictation instead of adding to it. No need to select anything:
+
+- "fix that, Morgan not Megan"
+- "edit, change Tuesday to Thursday"
+- "fix that, delete actually"
+- "fix that, add tomorrow after meeting"
+
+For a name Herga keeps hearing wrong, say it and spell it: "fix that, Meghan, M-E-G-H-A-N". You can also start with "Herga": "Herga, change Tuesday to Thursday".
+
+Herga fixes only its last dictation, and only while it's still as Herga left it, with the cursor right after it. If you've typed since, or the app doesn't let Herga edit its text (Safari pages, Firefox), you hear the error sound and nothing changes. Each fix shows in Captures with the text before and after. Turn it off with **Voice edits** in **Settings › Dictation**.

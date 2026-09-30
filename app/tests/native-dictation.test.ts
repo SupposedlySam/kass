@@ -6,7 +6,9 @@ type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Handler>();
 const unlisten = mock(() => {});
 const invoke = mock(async (_command: string, _args?: unknown) => undefined as unknown);
-let settings: { input_device_id: string | null } | undefined = { input_device_id: null };
+let settings: { input_device_id: string | null; voice_edits?: boolean } | undefined = {
+  input_device_id: null,
+};
 
 mock.module('@tauri-apps/api/event', () => ({
   listen: async (name: string, handler: Handler) => {
@@ -68,7 +70,7 @@ afterEach(async () => {
 });
 
 test('pushes the server, origin and saved native microphone to Rust', async () => {
-  settings = { input_device_id: 'native:AirPods' };
+  settings = { input_device_id: 'native:AirPods', voice_edits: false };
   await mount();
   expect(invoke).toHaveBeenCalledWith('dictation_configure', {
     serverUrl: 'http://127.0.0.1:17493',
@@ -76,6 +78,7 @@ test('pushes the server, origin and saved native microphone to Rust', async () =
     inputDeviceId: 'native:AirPods',
     deviceKnown: true,
     liveText: false,
+    voiceEdits: false,
   });
 });
 
@@ -88,6 +91,7 @@ test('does not replace the remembered microphone before settings load', async ()
     inputDeviceId: null,
     deviceKnown: false,
     liveText: false,
+    voiceEdits: undefined,
   });
 });
 

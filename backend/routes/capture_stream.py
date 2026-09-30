@@ -170,6 +170,10 @@ async def stream_capture(websocket: WebSocket):
                 # The field's text before the caret, read just after key-down.
                 session.set_context(command.get("before"))
                 continue
+            if command.get("type") == "last_take":
+                # The end of the take Herga typed last, which a voice edit may change.
+                session.set_last_take(command.get("text"), command.get("capture_id"))
+                continue
             if command.get("type") == "app":
                 # The target app, from the focus snapshot at key-down.
                 app = target_app(command.get("bundle_id"), command.get("name"))
@@ -181,7 +185,7 @@ async def stream_capture(websocket: WebSocket):
                 session.set_selection(command.get("text"))
                 continue
             if command.get("type") != "finish":
-                raise ValueError("Expected app, context, cue, selection, finish or cancel")
+                raise ValueError("Expected app, context, last_take, cue, selection, finish or cancel")
             if not session.samples:
                 raise ValueError("Cannot finish empty audio")
             app = command.get("app")
@@ -213,11 +217,16 @@ async def stream_capture(websocket: WebSocket):
                 refinement_error=session.refinement_error,
                 degraded_reason=session.degraded_reason,
             )
+            if (edit := session.edit_result()) is not None:
+                # A voice edit: the app changes its last take instead of pasting.
+                result["edit"] = edit
             logger.info("Dictation stream finished: %s", session.timing_summary())
             _results[session.id] = (time.monotonic(), result)
             while len(_results) > 32:
                 _results.popitem(last=False)
             await send_finalizing(result)
+            if "edit" in result:
+                _start(asyncio.to_thread(session.learn_from_edit))
             return
     except WebSocketDisconnect:
         pass

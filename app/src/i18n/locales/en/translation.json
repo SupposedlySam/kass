@@ -675,6 +675,10 @@
         "autoPaste": {
           "title": "Paste at cursor",
           "description": "Types the refined text into the focused field. Needs Accessibility. Herga saves and restores whatever was on your clipboard."
+        },
+        "voiceEdits": {
+          "title": "Voice edits",
+          "description": "Start with “fix that” to change what Herga just typed: “fix that, Morgan not Megan”, “fix that, delete actually”, or spell the word out."
         }
       },
       "transcription": {

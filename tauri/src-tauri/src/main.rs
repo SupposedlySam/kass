@@ -1173,11 +1173,25 @@ pub(crate) async fn paste_final_text_with(
     focus: focus_capture::FocusSnapshot,
     prepared: Option<clipboard::ClipboardSnapshot>,
 ) -> Result<bool, String> {
+    paste_final_text_tracked(text, focus, prepared, false)
+        .await
+        .0
+}
+
+/// [`paste_final_text_with`], and with `track` the text as owned in the
+/// field where Accessibility wrote it and it reads back, for a voice edit
+/// (docs/plans/VOICE_EDITS.md).
+pub(crate) async fn paste_final_text_tracked(
+    text: String,
+    focus: focus_capture::FocusSnapshot,
+    prepared: Option<clipboard::ClipboardSnapshot>,
+    track: bool,
+) -> (Result<bool, String>, Option<text_insert::Owned>) {
     if focus.bundle_id.as_deref() == Some(HERGA_BUNDLE_ID) {
-        return Ok(false);
+        return (Ok(false), None);
     }
     if !accessibility::is_trusted() {
-        return Err(ACCESSIBILITY_REQUIRED.into());
+        return (Err(ACCESSIBILITY_REQUIRED.into()), None);
     }
 
     // Only re-activate the target when the user actually left it. When it is
@@ -1189,8 +1203,8 @@ pub(crate) async fn paste_final_text_with(
     let pid = focus.pid;
     let bundle_id = focus.bundle_id.clone();
     let role = focus.role.clone();
-    let report = tokio::task::spawn_blocking(move || {
-        run_insert_chain(pid, bundle_id.as_deref(), role.as_deref(), &text, prepared)
+    let inserted = tokio::task::spawn_blocking(move || {
+        run_insert_chain(pid, bundle_id.as_deref(), role.as_deref(), &text, prepared, track)
     })
     .await
     .map_err(|e| {
@@ -1199,11 +1213,15 @@ pub(crate) async fn paste_final_text_with(
             "Text insertion stopped unexpectedly ({e}). It was not pasted again; \
              copy it from Captures if it is missing."
         )
-    })?;
+    });
+    let (report, owned) = match inserted {
+        Ok(inserted) => inserted,
+        Err(message) => return (Err(message), None),
+    };
 
     let app = focus.bundle_id.as_deref().unwrap_or("unknown app");
     eprintln!("[herga] insert into {app}: {}", report.summary());
-    match report.delivery() {
+    let result = match report.delivery() {
         insert_chain::Delivery::Inserted { method, .. } => {
             // Accessibility writes without activating; bring the user back
             // to the app they dictated into, as the other steps do.
@@ -1216,7 +1234,8 @@ pub(crate) async fn paste_final_text_with(
         insert_chain::Delivery::Exhausted => {
             Err("Could not insert the dictated text into this app. Copy it from Captures.".into())
         }
-    }
+    };
+    (result, owned)
 }
 
 const ACCESSIBILITY_REQUIRED: &str = "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Herga.";
@@ -1268,14 +1287,16 @@ pub(crate) async fn paste_around_clipboard(
 /// windows and restoring its last-focused field before keys arrive.
 const POST_ACTIVATE_SETTLE: std::time::Duration = std::time::Duration::from_millis(120);
 
-/// The insertion chain for a target app. Blocking.
+/// The insertion chain for a target app, and with `track` the text as
+/// owned where the Accessibility step wrote it. Blocking.
 fn run_insert_chain(
     pid: i32,
     bundle_id: Option<&str>,
     role: Option<&str>,
     text: &str,
     prepared: Option<clipboard::ClipboardSnapshot>,
-) -> insert_chain::Report {
+    track: bool,
+) -> (insert_chain::Report, Option<text_insert::Owned>) {
     let bring_front = || {
         if focus_capture::frontmost_pid() == Some(pid) {
             return Ok(());
@@ -1298,7 +1319,7 @@ fn run_insert_chain(
     // 3-6 ms, typing ~6 ms plus 2.7 ms per keystroke, and a paste ~20 ms
     // (`insert_bench.rs`).
     let chain: [&dyn insert_chain::Inserter; 3] = [&text_insert::Accessibility, &keys, &paste];
-    insert_chain::deliver(
+    let report = insert_chain::deliver(
         &chain,
         &insert_chain::Request {
             pid,
@@ -1306,7 +1327,20 @@ fn run_insert_chain(
             role,
             text,
         },
-    )
+    );
+    // Only where Accessibility wrote it can an edit be written and checked
+    // the same way (docs/plans/VOICE_EDITS.md).
+    let by_accessibility = matches!(
+        report.delivery(),
+        insert_chain::Delivery::Inserted {
+            method: insert_chain::Method::Accessibility,
+            ..
+        }
+    );
+    let owned = (track && by_accessibility)
+        .then(|| text_insert::owned_before_focused(pid, bundle_id, text))
+        .flatten();
+    (report, owned)
 }
 
 /// Inspect the currently focused UI element. Returns the owning app's PID,
