@@ -22,15 +22,27 @@ COMMON = {"mark", "slack", "open", "source", "voice", "box"}
 START = datetime(2026, 9, 1)
 
 
+@pytest.fixture
+def voice_edits_beta(monkeypatch):
+    monkeypatch.setattr(dictionary.beta, "enabled", lambda feature: feature == "voice_edits")
+
+
 @pytest.fixture(autouse=True)
 def common_words(monkeypatch):
     # The real check reads Whisper's vocabulary and the system word list.
     monkeypatch.setattr(phrase_seams, "_common_word", lambda word: word.casefold() in COMMON)
 
 
-def entry(scope, written, spoken=None, scope_id=None, minutes=0):
+def entry(scope, written, spoken=None, scope_id=None, minutes=0, match_sound=True):
     return Entry(
-        f"{scope}-{written}-{spoken}", scope, scope_id, None, written, spoken, START + timedelta(minutes=minutes)
+        f"{scope}-{written}-{spoken}",
+        scope,
+        scope_id,
+        None,
+        written,
+        spoken,
+        START + timedelta(minutes=minutes),
+        match_sound=match_sound,
     )
 
 
@@ -152,6 +164,34 @@ def test_a_term_heard_like_another_term_stays_itself():
     assert found.apply("Saggarr") == "Saggar"
 
 
+def test_a_term_without_sound_matching_leaves_names_that_sound_like_it_alone():
+    megan = "Megan, Meagan and Meghann met meghan."
+
+    assert merged(entry("global", "Meghan")).apply(megan) == "Meghan, Meghan and Meghan met Meghan."
+    spelled = merged(entry("global", "Meghan", match_sound=False))
+    # Only the exact spelling is recased; the others are other names.
+    assert spelled.apply(megan) == "Megan, Meagan and Meghann met Meghan."
+    # It is still prompted, and still a known name.
+    assert spelled.terms == ("Meghan",)
+    assert "Meghan" in spelled.names
+    assert dictionary.prompt(spelled.terms) == "Meghan."
+
+
+def test_a_term_without_sound_matching_is_never_taken_for_another_term():
+    found = merged(entry("global", "Meghan", match_sound=False), entry("global", "Megan"))
+
+    assert found.apply("Meghan and Megan and Meagan") == "Meghan and Megan and Megan"
+
+
+def test_the_most_specific_entry_decides_sound_matching():
+    found = merged(
+        entry("app", "Meghan", scope_id=ZED),
+        entry("global", "Meghan", "meg h", match_sound=False),
+    )
+
+    assert found.apply("Megan") == "Meghan"
+
+
 def test_an_empty_dictionary_leaves_text_alone():
     assert dictionary.EMPTY.apply("anything at all") == "anything at all"
     assert merged().terms == ()
@@ -240,6 +280,8 @@ def test_the_api_adds_lists_and_rejects_the_same_word_twice(client):
         "spoken": "voice box",
         "places": [{"scope": "global", "scope_id": None, "app_name": None}],
         "created_at": None,
+        "match_sound": True,
+        "source": "user",
     }
 
     duplicate = add(client, "VoiceBox", "Voice Box")
@@ -332,6 +374,118 @@ def test_an_app_gets_its_styles_entries_and_resolved_shows_overrides(client, sto
     assert dictionary.for_app(SLACK).apply("voice box") == "VoiceBox"
 
 
+def test_the_api_turns_sound_matching_off_and_on(client, voice_edits_beta):
+    added = add(client, "Meghan").json()
+    assert added["match_sound"] is True
+    assert added["source"] == "user"
+    assert dictionary.for_app(ZED).apply("Megan") == "Meghan"
+
+    edited = client.patch(f"/dictionary/{added['id']}", json={"match_sound": False}).json()
+    assert edited["match_sound"] is False
+    assert dictionary.for_app(ZED).apply("Megan") == "Megan"
+    resolved = client.get("/dictionary/resolved", params={"bundle_id": ZED}).json()
+    assert [(e["written"], e["match_sound"]) for e in resolved["entries"]] == [("Meghan", False)]
+    assert resolved["prompt_terms"] == ["Meghan"]
+
+    exact = client.post("/dictionary", json={"written": "Saggar", "places": GLOBAL, "match_sound": False}).json()
+    assert exact["match_sound"] is False
+    assert dictionary.for_app(ZED).apply("Sagar") == "Sagar"
+
+
+@pytest.mark.parametrize(
+    ("letters", "heard", "written"),
+    [
+        ("MEGHAN", "Megan", "Meghan"),
+        ("meghan", None, "Meghan"),
+        ("MEGHAN.", "meghan", "Meghan"),
+        ("NASA", "NASA", "NASA"),
+        ("IPHONE", "iPhone", "iPhone"),
+        ("McKAY", None, "McKAY"),
+        ("MRGNHNT96", None, "MRGNHNT96"),
+        ("mrgnhnt96", None, "mrgnhnt96"),
+    ],
+)
+def test_a_spelled_word_is_written_as_a_name(letters, heard, written):
+    assert dictionary.spelled_word(letters, heard) == written
+
+
+def test_a_spelled_fix_adds_a_word_that_never_respells_others(storage, voice_edits_beta):
+    dictionary.for_app(ZED)
+    with storage() as db:
+        added = dictionary.add_spelled_word("MEGHAN", ZED, "Megan", db)
+
+    assert (added.written, added.spoken, added.match_sound, added.source) == ("Meghan", None, False, "spoken_fix")
+    assert [(p.scope, p.scope_id) for p in added.places] == [("global", None)]
+    # The caches were cleared: dictation uses it at once, in every app.
+    for app in (ZED, SLACK):
+        found = dictionary.for_app(app)
+        assert found.terms == ("Meghan",)
+        assert found.apply("meghan met Megan and Meagan") == "Meghan met Megan and Meagan"
+
+
+def test_a_spelled_fix_twice_adds_the_word_once(storage, client):
+    with storage() as db:
+        first = dictionary.add_spelled_word("MEGHAN", ZED, db=db)
+    with storage() as db:
+        again = dictionary.add_spelled_word("meghan", SLACK, "Meghan", db)
+
+    assert again.id == first.id
+    [listed] = client.get("/dictionary").json()["entries"]
+    assert (listed["written"], listed["match_sound"], listed["source"]) == ("Meghan", False, "spoken_fix")
+
+
+def test_a_spelled_fix_never_changes_the_users_entry(storage, client):
+    mine = add(client, "Meghan").json()
+    zed = {"scope": "app", "scope_id": ZED, "app_name": "Zed"}
+    theirs = add(client, "Saggar", "sagar", [zed]).json()
+
+    with storage() as db:
+        kept = dictionary.add_spelled_word("MEGHAN", ZED, db=db)
+        # Said "sagar" everywhere is taken only in Zed: everywhere gets the word.
+        elsewhere = dictionary.add_spelled_word("SAGAR", SLACK, db=db)
+        # In Zed, "sagar" already writes something else; that stays.
+        assert dictionary.add_spelled_word("SAGAR", ZED, db=db) is None
+
+    assert kept.id == mine["id"]
+    assert (kept.match_sound, kept.source) == (True, "user")
+    assert elsewhere.written == "Sagar"
+    assert dictionary.for_app(ZED).apply("sagar met Megan") == "Saggar met Meghan"
+    entries = {e["id"]: e for e in client.get("/dictionary").json()["entries"]}
+    assert (entries[mine["id"]]["match_sound"], entries[theirs["id"]]["spoken"]) == (True, "sagar")
+
+
+def test_a_spelled_fix_an_entry_already_said_that_way_is_left_alone(storage, client):
+    add(client, "Megan", "meghan")
+
+    with storage() as db:
+        assert dictionary.add_spelled_word("MEGHAN", ZED, db=db) is None
+
+    assert [e["written"] for e in client.get("/dictionary").json()["entries"]] == ["Megan"]
+
+
+def test_editing_a_spelled_fix_makes_it_the_users(storage, client):
+    with storage() as db:
+        added = dictionary.add_spelled_word("MEGHAN", db=db)
+
+    edited = client.patch(f"/dictionary/{added.id}", json={"match_sound": True}).json()
+
+    assert (edited["match_sound"], edited["source"]) == (True, "user")
+
+
+def test_a_spelled_fix_without_a_word_or_database_adds_nothing(storage, monkeypatch):
+    with storage() as db:
+        assert dictionary.add_spelled_word("  . ", ZED, db=db) is None
+    monkeypatch.setattr(database_session, "SessionLocal", None)
+    assert dictionary.add_spelled_word("MEGHAN", ZED) is None
+
+
+def test_a_spelled_fix_opens_its_own_session(storage):
+    added = dictionary.add_spelled_word("MEGHAN", ZED)
+
+    with storage() as db:
+        assert [g.id for g in dictionary.list_groups(db)] == [added.id]
+
+
 def test_entries_from_before_groups_are_their_own_entry(storage):
     from backend.database.models import DictionaryEntry
 
@@ -380,6 +534,21 @@ def test_the_migration_adds_groups_to_an_existing_dictionary():
     run_migrations(engine)
     run_migrations(engine)
 
-    assert "group_id" in {c["name"] for c in inspect(engine).get_columns("dictionary_entries")}
+    columns = {c["name"] for c in inspect(engine).get_columns("dictionary_entries")}
+    assert {"group_id", "match_sound", "source"} <= columns
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT id, group_id FROM dictionary_entries")).all() == [("old", None)]
+        # An existing entry keeps matching by sound, and is the user's.
+        assert conn.execute(text("SELECT id, group_id, match_sound, source FROM dictionary_entries")).all() == [
+            ("old", None, 1, None)
+        ]
+    make = sessionmaker(bind=engine)
+    with make() as db:
+        [group] = dictionary.list_groups(db)
+    assert (group.match_sound, group.source) == (True, "user")
+
+
+def test_sound_matching_stays_on_outside_the_beta(client, monkeypatch):
+    monkeypatch.setattr(dictionary.beta, "enabled", lambda feature: False)
+    added = add(client, "Meghan").json()
+    client.patch(f"/dictionary/{added['id']}", json={"match_sound": False})
+    assert dictionary.for_app(ZED).apply("Megan") == "Meghan"

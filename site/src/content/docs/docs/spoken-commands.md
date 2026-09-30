@@ -87,3 +87,18 @@ Start a dictation by naming a [writing style](/docs/writing-styles/) and Kass us
 - "I'd like this to be more formal"
 
 "Formal" also matches a style called Professional, and "casual" matches Informal or Relaxed. The instruction itself is left out of the text. The pill shows the style's name and plays a short sound so you know it switched.
+
+## Fix what Kass just typed
+
+*Beta: turn on **Beta updates** in **Settings › General**.*
+
+Hold your dictation keys and start with **"fix that"** or **"edit"** to change your last dictation instead of adding to it. No need to select anything:
+
+- "fix that, Morgan not Megan"
+- "edit, change Tuesday to Thursday"
+- "fix that, delete actually"
+- "fix that, add tomorrow after meeting"
+
+For a name Kass keeps hearing wrong, say it and spell it: "fix that, Meghan, M-E-G-H-A-N". Kass also adds the name to your dictionary, marked **spelled aloud**, so it's heard right from then on without changing a real Megan. You can also start with "Kass": "Kass, change Tuesday to Thursday".
+
+Kass fixes only its last dictation, and only while it's still as Kass left it, with the cursor right after it. If you've typed since, or the app doesn't let Kass edit its text (Safari pages, Firefox), you hear the error sound and nothing changes. Each fix shows in Captures with the text before and after. Turn it off with **Voice edits** in **Settings › Dictation**.

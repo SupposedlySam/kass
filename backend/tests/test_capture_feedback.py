@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import Base, Capture, CaptureFeedback
 from backend.models import CaptureFeedbackCreate
-from backend.services.capture_feedback import list_feedback, save_feedback
+from backend.services.capture_feedback import list_feedback, save_feedback, withdraw_feedback
 from backend.services.captures import delete_capture, get_capture
 
 
@@ -21,6 +21,14 @@ def db():
         session.commit()
         yield session
     engine.dispose()
+
+
+@pytest.fixture
+def beta_on(tmp_path, monkeypatch):
+    from backend import beta, config
+
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    (tmp_path / beta.CHANNEL_FILE).write_text("beta")
 
 
 def request(db, **kwargs):
@@ -97,9 +105,10 @@ def test_missing_capture_and_snapshot_mismatch(db):
 def test_http_roundtrip_export_and_validation(db):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+
     from backend.database import get_db
     from backend.routes.captures import router
-    from sqlalchemy.pool import StaticPool
 
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -114,9 +123,58 @@ def test_http_roundtrip_export_and_validation(db):
             body = {"snapshot": snapshot, "target": "raw", "expected_text": "Right words"}
             response = client.post("/captures/take/feedback", json=body)
             assert response.status_code == 200
+            assert response.json()["source"] == "manual"
             assert client.get("/capture/feedback/export").json() == [response.json()]
             assert client.get("/captures/take/feedback").json() == [response.json()]
             assert client.post("/captures/missing/feedback", json=body).status_code == 404
             body["target"] = "unknown"
             assert client.post("/captures/take/feedback", json=body).status_code == 422
     engine.dispose()
+
+
+def test_spoken_reports_join_spelled_letters(db, beta_on):
+    assert save_feedback("take", request(db), db).expected_text == "Right words"
+    draft = request(db, source="voice_fix")
+    draft.expected_text = "Thanks, M-E-G-H-A-N."
+    report = save_feedback("take", draft, db)
+    assert (report.source, report.expected_text) == ("voice_fix", "Thanks, MEGHAN.")
+    draft = request(db)
+    draft.expected_text = "Code A-B-C"
+    assert save_feedback("take", draft, db).expected_text == "Code A-B-C"
+
+
+def test_http_withdraw_removes_only_that_report(beta_on):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+
+    from backend.database import get_db
+    from backend.routes.captures import router
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(Capture(id="take", audio_path="captures/take.wav", transcript_raw="wrong words"))
+        session.commit()
+        kept = save_feedback("take", request(session), session)
+        withdrawn = save_feedback("take", request(session, source="redictation"), session)
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_db] = lambda: session
+        with TestClient(app) as client:
+            assert client.delete(f"/captures/other/feedback/{withdrawn.id}").status_code == 404
+            assert client.delete(f"/captures/take/feedback/{withdrawn.id}").status_code == 204
+            assert client.delete(f"/captures/take/feedback/{withdrawn.id}").status_code == 404
+        assert [report.id for report in list_feedback(session)] == [kept.id]
+    engine.dispose()
+
+
+def test_voice_edits_are_a_beta_feature(db, tmp_path, monkeypatch):
+    from backend import config
+
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    with pytest.raises(ValueError, match="beta"):
+        save_feedback("take", request(db, source="voice_fix"), db)
+    manual = save_feedback("take", request(db), db)
+    assert not withdraw_feedback("take", manual.id, db)
+    assert [report.id for report in list_feedback(db)] == [manual.id]

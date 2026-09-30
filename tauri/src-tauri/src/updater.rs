@@ -14,6 +14,7 @@
 //! once they're newer.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -93,9 +94,17 @@ fn channel<R: Runtime>(app: &AppHandle<R>) -> Channel {
 }
 
 /// Whether beta features are on: this copy is on the beta channel.
-#[allow(dead_code)] // Until a native feature is in beta.
 pub fn beta_features<R: Runtime>(app: &AppHandle<R>) -> bool {
     channel(app) == Channel::Beta
+}
+
+/// [`beta_features`], kept in memory for code with no `AppHandle`, such as
+/// text insertion. Set at launch and on every channel switch.
+static BETA_FEATURES: AtomicBool = AtomicBool::new(false);
+
+/// Whether beta features are on, for code with no `AppHandle`.
+pub fn beta_features_on() -> bool {
+    BETA_FEATURES.load(Ordering::Relaxed)
 }
 
 fn set_status<R: Runtime>(app: &AppHandle<R>, status: UpdateStatus) {
@@ -107,6 +116,7 @@ fn set_status<R: Runtime>(app: &AppHandle<R>, status: UpdateStatus) {
 /// Check now and then every few hours, downloading any newer release.
 /// Development builds never update themselves.
 pub fn start<R: Runtime>(app: AppHandle<R>) {
+    BETA_FEATURES.store(beta_features(&app), Ordering::Relaxed);
     if cfg!(debug_assertions) {
         return;
     }
@@ -225,6 +235,7 @@ pub fn set_update_channel(app: AppHandle, channel: Channel) -> Result<Channel, S
             discard_pending_beta(&app);
         }
     }
+    BETA_FEATURES.store(channel == Channel::Beta, Ordering::Relaxed);
     app.state::<UpdaterState>().wake.notify_one();
     let _ = app.emit(CHANNEL_EVENT, channel);
     Ok(channel)

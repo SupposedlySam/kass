@@ -98,6 +98,13 @@ pub fn context_message(before: &str) -> String {
     serde_json::json!({ "type": "context", "before": before }).to_string()
 }
 
+/// The end of the take Kass typed last and the capture that wrote it,
+/// which a voice edit may change (docs/plans/VOICE_EDITS.md). Older servers
+/// reject unknown messages, so it is only sent while voice edits are on.
+pub fn last_take_message(text: &str, capture_id: Option<&str>) -> String {
+    serde_json::json!({ "type": "last_take", "text": text, "capture_id": capture_id }).to_string()
+}
+
 /// The text a command take rewrites, read just after key-down.
 pub fn selection_message(text: &str) -> String {
     serde_json::json!({ "type": "selection", "text": text }).to_string()
@@ -128,6 +135,11 @@ pub enum ServerEvent {
         session_id: Option<String>,
         from: Option<String>,
         to: String,
+    },
+    /// The take opens as a voice edit of the last one ("fix that, ..."),
+    /// heard while the user still speaks.
+    Edit {
+        session_id: Option<String>,
     },
     /// `transcript` / `refined` updates and anything else informational.
     Update,
@@ -177,6 +189,12 @@ pub fn parse_server_event(text: &str) -> ServerEvent {
                 to: name.to_string(),
             },
             None => ServerEvent::Update,
+        },
+        "edit" => ServerEvent::Edit {
+            session_id: value
+                .get("session_id")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         },
         "error" => ServerEvent::Error(
             value

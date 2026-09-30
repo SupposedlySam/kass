@@ -38,6 +38,9 @@ class CaptureSettings(Base):
     # Type cleaned text into the app while cleanup is still writing it
     # (docs/plans/STREAMING_INSERTION.md). Off until checked in more apps.
     live_text = Column(Boolean, nullable=False, default=False)
+    # Fix the last dictation by voice ("fix that, Morgan not Megan";
+    # docs/plans/VOICE_EDITS.md).
+    voice_edits = Column(Boolean, nullable=False, default=True)
     # Chimes when dictation starts, stops or fails, played by the desktop app.
     sound_cues = Column(Boolean, nullable=False, default=True)
     sound_cue_volume = Column(Float, nullable=False, default=0.5)
@@ -151,7 +154,10 @@ class AppStyle(Base):
 
 
 class CaptureFeedback(Base):
-    """Immutable correction paired with the model output observed by the user."""
+    """Correction paired with the model output observed by the user.
+
+    Never edited; the user can withdraw it (capture_feedback.withdraw_feedback).
+    """
 
     __tablename__ = "capture_feedback"
 
@@ -161,12 +167,24 @@ class CaptureFeedback(Base):
     expected_text = Column(Text, nullable=False)
     notes = Column(Text, nullable=False, default="")
     snapshot = Column(Text, nullable=False)
+    # How the report was made: "manual" in Captures, "voice_fix" when the user
+    # fixed Herga's text by voice, "redictation" when they dictated it again.
+    # A redictation is weaker evidence: it teaches learning only, never the
+    # writing style (examples, habits, names), and a rule needs an explicit report.
+    source = Column(String, nullable=False, default="manual", server_default="manual")
     # Copied from the capture when history retention deletes it, so the
     # correction keeps teaching the same style (docs/plans/HISTORY_RETENTION.md).
     # Null while the capture exists: read the capture's own columns then.
     app_bundle_id = Column(String, nullable=True)
     teaches_style_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    EXPLICIT_SOURCES = ("manual", "voice_fix")
+
+    @classmethod
+    def teaches_style(cls):
+        """Filter for reports that teach the writing style: explicit ones."""
+        return cls.source.in_(cls.EXPLICIT_SOURCES)
 
 
 class RetiredCapture(Base):
@@ -221,4 +239,9 @@ class DictionaryEntry(Base):
     # Rows added together as one entry that applies in several places share
     # this; null means the row is an entry of its own (its id).
     group_id = Column(String, nullable=True, index=True)
+    # Off: the word is only prompted and recased where spelled exactly, never
+    # swapped in for words that sound like it ("Meghan" leaves "Megan" alone).
+    match_sound = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Who added it: null for the user, "spoken_fix" for a word spelled aloud to fix it.
+    source = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

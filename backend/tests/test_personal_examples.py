@@ -32,7 +32,7 @@ def storage(tmp_path, monkeypatch):
     return session
 
 
-def _correct(storage, said, meant, capture_id=None, target="refined"):
+def _correct(storage, said, meant, capture_id=None, target="refined", source="manual"):
     with storage() as db:
         capture = Capture(id=capture_id or said[:20], audio_path="a.wav", transcript_raw=said)
         db.add(capture)
@@ -42,6 +42,7 @@ def _correct(storage, said, meant, capture_id=None, target="refined"):
                 target=target,
                 expected_text=meant,
                 snapshot=json.dumps({"transcript_raw": said, "transcript_refined": said}),
+                source=source,
             )
         )
         db.commit()
@@ -55,6 +56,31 @@ def test_refined_corrections_become_examples(storage):
     assert [(e["source"], e["said"], e["meant"]) for e in examples] == [
         ("correction", "so the release we need to push the release to friday", "We need to push the release to Friday.")
     ]
+
+
+def test_only_explicit_reports_teach_the_style(storage):
+    from backend.services import known_names
+
+    _correct(storage, "meet megan at noon", "Meet Morgan at noon.", "voice", source="voice_fix")
+    _correct(storage, "call megan at noon", "Call Rosalind at noon.", "again", source="redictation")
+    assert [e["meant"] for e in personal_examples.all_examples()] == ["Meet Morgan at noon."]
+    known_names.invalidate()
+    names = known_names.known_names()
+    assert "Morgan" in names
+    assert "Rosalind" not in names
+
+
+def test_withdrawn_correction_stops_being_an_example(storage):
+    from backend import beta
+    from backend.services.capture_feedback import withdraw_feedback
+
+    (config.get_data_dir() / beta.CHANNEL_FILE).write_text("beta")
+    _correct(storage, "meet megan at noon", "Meet Morgan at noon.", "voice", source="voice_fix")
+    assert personal_examples.all_examples()
+    with storage() as db:
+        report = db.query(CaptureFeedback).one()
+        assert withdraw_feedback("voice", report.id, db)
+    assert personal_examples.all_examples() == []
 
 
 def test_every_dictation_gets_the_same_examples_oldest_first(storage):

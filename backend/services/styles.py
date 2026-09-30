@@ -426,7 +426,7 @@ def app_corrections(db: Session) -> dict[str, int]:
             func.coalesce(Capture.teaches_style_id, CaptureFeedback.teaches_style_id),
         )
         .outerjoin(Capture, Capture.id == CaptureFeedback.capture_id)
-        .filter(CaptureFeedback.target == "refined")
+        .filter(CaptureFeedback.target == "refined", CaptureFeedback.teaches_style())
         .distinct()
         .all()
     )

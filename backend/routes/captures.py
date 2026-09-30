@@ -329,6 +329,15 @@ async def report_capture_output(
     return feedback
 
 
+@router.delete("/captures/{capture_id}/feedback/{report_id}", status_code=204)
+async def withdraw_capture_report(capture_id: str, report_id: str, db: Session = Depends(get_db)):
+    """Withdraw one report and what it taught (docs/plans/CORRECTION_LEARNING.md)."""
+    from ..services.capture_feedback import withdraw_feedback
+
+    if not withdraw_feedback(capture_id, report_id, db):
+        raise HTTPException(status_code=404, detail="Report not found")
+
+
 @router.get("/captures/{capture_id}/feedback", response_model=list[models.CaptureFeedbackResponse])
 async def list_capture_feedback(capture_id: str, db: Session = Depends(get_db)):
     from ..services.capture_feedback import list_feedback

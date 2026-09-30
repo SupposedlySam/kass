@@ -117,6 +117,17 @@ class ApiClient {
     });
   }
 
+  /** Withdraws one report and everything it taught. */
+  async withdrawCaptureReport(captureId: string, reportId: string): Promise<void> {
+    const response = await fetch(
+      `${this.getBaseUrl()}/captures/${encodeURIComponent(captureId)}/feedback/${encodeURIComponent(reportId)}`,
+      { method: 'DELETE' },
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  }
+
   async listCaptureFeedback(captureId: string): Promise<CaptureFeedbackResponse[]> {
     return this.request(`/captures/${captureId}/feedback`);
   }

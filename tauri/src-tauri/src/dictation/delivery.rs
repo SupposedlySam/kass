@@ -13,6 +13,12 @@ pub const TARGET_UNAVAILABLE_MESSAGE: &str =
 #[derive(Debug, Clone, PartialEq)]
 pub enum Delivery {
     Paste(String),
+    /// A voice edit (docs/plans/VOICE_EDITS.md): the last take ends in
+    /// `after` instead of `before`. Nothing is pasted.
+    Edit {
+        before: String,
+        after: String,
+    },
     /// Nothing to paste (auto-paste off, or empty output). Not an error.
     Nothing,
     Error(String),
@@ -39,6 +45,9 @@ pub fn plan(capture: &Value, allow_auto_paste: bool, refinement_error: Option<&s
 
 /// Delivery plan for a streaming `final` event.
 pub fn plan_final(event: &Value) -> Delivery {
+    if let Some(edit) = event.get("edit").filter(|e| e.is_object()) {
+        return plan_edit(edit);
+    }
     let capture = event.get("capture").unwrap_or(&Value::Null);
     let allow_auto_paste = capture
         .get("allow_auto_paste")
@@ -49,6 +58,17 @@ pub fn plan_final(event: &Value) -> Delivery {
         allow_auto_paste,
         event.get("refinement_error").and_then(Value::as_str),
     )
+}
+
+/// A voice edit the server planned, or declined with a message to show.
+/// Either way the take's words are never pasted.
+fn plan_edit(edit: &Value) -> Delivery {
+    let text = |key: &str| edit.get(key).and_then(Value::as_str).map(str::to_string);
+    match (text("before"), text("after"), text("declined")) {
+        (Some(before), Some(after), None) => Delivery::Edit { before, after },
+        (_, _, Some(message)) => Delivery::Error(message),
+        _ => Delivery::Error("Could not read the fix, so nothing changed".into()),
+    }
 }
 
 /// Error for the pill after a paste attempt; `None` when the paste landed.
@@ -152,6 +172,34 @@ mod tests {
         );
         // Missing flag: default to allowing paste, as the webview did.
         let event = json!({"capture": {"transcript_raw": "hi"}});
+        assert_eq!(plan_final(&event), Delivery::Paste("hi".into()));
+    }
+
+    #[test]
+    fn a_voice_edit_is_applied_or_declined_never_pasted() {
+        let event = json!({
+            "capture": {"transcript_raw": "Fix that, Morgan not Megan.", "transcript_refined": "Hi Morgan."},
+            "edit": {"before": "Hi Megan.", "after": "Hi Morgan."}
+        });
+        assert_eq!(
+            plan_final(&event),
+            Delivery::Edit {
+                before: "Hi Megan.".into(),
+                after: "Hi Morgan.".into()
+            }
+        );
+        let event = json!({
+            "capture": {"transcript_raw": "Fix that, Morgan not Sarah."},
+            "edit": {"declined": "Couldn't find it"}
+        });
+        assert_eq!(
+            plan_final(&event),
+            Delivery::Error("Couldn't find it".into())
+        );
+        let event = json!({"capture": {"transcript_raw": "x"}, "edit": {"before": "x"}});
+        assert!(matches!(plan_final(&event), Delivery::Error(_)));
+        // A server without voice edits sends none.
+        let event = json!({"capture": {"transcript_raw": "hi"}, "edit": null});
         assert_eq!(plan_final(&event), Delivery::Paste("hi".into()));
     }
 

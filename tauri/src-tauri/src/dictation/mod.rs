@@ -12,6 +12,9 @@
 //! same take with an instruction for selected text: the selection is read
 //! while the user speaks ([`command`]) and the rewrite replaces it.
 //!
+//! A dictation take that opens with "fix that" changes the last take
+//! instead of pasting (docs/plans/VOICE_EDITS.md, [`last_take`]).
+//!
 //! Escape cancels a take until its text starts going in ([`cancel()`]).
 
 pub mod audio;
@@ -21,6 +24,7 @@ pub mod client;
 pub mod command;
 pub mod delivery;
 pub mod http;
+pub mod last_take;
 pub mod live;
 pub mod mic;
 pub mod paste_command;
@@ -72,6 +76,9 @@ struct Config {
     /// the app while cleanup is still writing it. The "Show text as it's
     /// written" setting; off by default.
     live_text: bool,
+    /// Voice edits (docs/plans/VOICE_EDITS.md): a take that opens with "fix
+    /// that" changes the last take. The "Voice edits" setting; on by default.
+    voice_edits: bool,
 }
 
 impl Default for Config {
@@ -81,6 +88,7 @@ impl Default for Config {
             origin: None,
             input_device_id: None,
             live_text: false,
+            voice_edits: true,
         }
     }
 }
@@ -167,17 +175,24 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
     // Live text writes a dictation as it is cleaned up; a command's result
     // replaces the selection once, when it is complete.
     let live_text = config.live_text && mode == TakeMode::Dictation;
+    // Only a dictation may be an edit; a command already has its selection.
+    // A beta feature: off, nothing is tracked, sent or applied.
+    let voice_edits =
+        config.voice_edits && mode == TakeMode::Dictation && crate::updater::beta_features_on();
+    let last = voice_edits.then(last_take::current).flatten();
     let take_id = state.next_take_id();
     let selection: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let focus: Arc<Mutex<Option<FocusSnapshot>>> = Arc::new(Mutex::new(None));
     let field_before: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let released: Arc<OnceLock<Instant>> = Arc::new(OnceLock::new());
     let cancel = CancelSwitch::new();
+    let written: Arc<Mutex<Option<crate::text_insert::Owned>>> = Arc::new(Mutex::new(None));
     let live = Live::new(AxLive {
         take_id,
         focus: focus.clone(),
         released: released.clone(),
         cancel: cancel.clone(),
+        written: written.clone(),
     });
     let env = AppEnv {
         app: app.clone(),
@@ -191,6 +206,9 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         mode,
         selection: selection.clone(),
         cancel: cancel.clone(),
+        voice_edits,
+        capture_id: Arc::new(Mutex::new(None)),
+        written,
     };
     env.emit(PillEvent::Preparing);
 
@@ -272,6 +290,25 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         let client = match env.mode {
             TakeMode::Dictation => client,
             TakeMode::Command => client.with_command(),
+        };
+        let client = match last {
+            // Sent once the take's target is known to be the app it went to.
+            Some(last) => {
+                let edit_focus = env.focus.clone();
+                let edit_env = env.clone();
+                client
+                    .with_last_take(move || {
+                        let pid = edit_focus.lock().ok()?.as_ref()?.pid;
+                        (pid == last.pid)
+                            .then(|| (last.tail().to_string(), last.capture_id.clone()))
+                    })
+                    .with_edit(
+                        crate::sound_cues::EDIT_CUE_DELAY_MS,
+                        crate::sound_cues::STYLE_CUE_SPAN_MS,
+                        move || edit_env.emit_edit(),
+                    )
+            }
+            None => client,
         };
         let client = if live_text {
             let offer = live.clone();
@@ -632,6 +669,13 @@ struct AppEnv {
     selection: Arc<Mutex<Option<String>>>,
     /// Flipped by Escape until the text starts going in.
     cancel: Arc<CancelSwitch>,
+    /// Whether what this take pastes is kept as the last take, for a voice
+    /// edit (docs/plans/VOICE_EDITS.md).
+    voice_edits: bool,
+    /// The take's capture, once the server saved it.
+    capture_id: Arc<Mutex<Option<String>>>,
+    /// The live text as it ended, shared with [`AxLive`].
+    written: Arc<Mutex<Option<crate::text_insert::Owned>>>,
 }
 
 impl AppEnv {
@@ -660,6 +704,27 @@ impl AppEnv {
             move || !cancel.is_cancelled(),
         )
     }
+
+    /// The take opens as a voice edit: its cue, while the user still speaks.
+    /// Returns whether the cue was scheduled. The pill doesn't change.
+    fn emit_edit(&self) -> bool {
+        let cancel = self.cancel.clone();
+        crate::sound_cues::play_after(
+            crate::sound_cues::Cue::Edit,
+            std::time::Duration::from_millis(crate::sound_cues::EDIT_CUE_DELAY_MS.into()),
+            move || !cancel.is_cancelled(),
+        )
+    }
+
+    /// Keep what this take wrote into `pid`'s field as the last take.
+    fn remember(&self, pid: i32, owned: crate::text_insert::Owned) {
+        let capture_id = self.capture_id.lock().ok().and_then(|id| id.clone());
+        last_take::remember(last_take::LastTake {
+            pid,
+            capture_id,
+            owned,
+        });
+    }
 }
 
 /// Live text goes into the target's focused field through Accessibility.
@@ -668,6 +733,8 @@ struct AxLive {
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
     released: Arc<OnceLock<Instant>>,
     cancel: Arc<CancelSwitch>,
+    /// The text as it ended, once the final text is in place.
+    written: Arc<Mutex<Option<crate::text_insert::Owned>>>,
 }
 
 impl AxLive {
@@ -761,7 +828,11 @@ impl LiveTarget for AxLive {
             .await
             .unwrap_or_else(|e| Err(crate::text_insert::LiveError::Uncertain(e.to_string())));
             self.log(format_args!("final (revised: {revised}) {outcome:?}"));
-            outcome
+            outcome.map(|owned| {
+                if let Ok(mut written) = self.written.lock() {
+                    *written = Some(owned);
+                }
+            })
         }
     }
 }
@@ -799,6 +870,12 @@ impl TakeEnv for AppEnv {
     }
 
     fn capture_created(&self, capture: &Value) {
+        if let (Some(id), Ok(mut slot)) = (
+            capture.get("id").and_then(Value::as_str),
+            self.capture_id.lock(),
+        ) {
+            *slot = Some(id.to_string());
+        }
         let _ = self
             .app
             .emit("capture:created", serde_json::json!({ "capture": capture }));
@@ -821,11 +898,15 @@ impl TakeEnv for AppEnv {
         let live = self.live.clone();
         let app = self.app.clone();
         let take_id = self.take_id;
+        let env = self.clone();
         async move {
             if !pastes {
                 // Started from Kass itself: the capture is the result.
                 return Ok(true);
             }
+            // This take's text is the last take from here, once it is known
+            // to be in the field as written.
+            last_take::forget();
             let text = match paste_command::plan(&text) {
                 Plan::Text(text) => text,
                 Plan::Clipboard => {
@@ -845,15 +926,60 @@ impl TakeEnv for AppEnv {
             };
             // Text already written live is made final in place.
             if let Finish::Done(result) = live.finish(Some(text.clone())).await {
+                let written = env.written.lock().ok().and_then(|mut w| w.take());
+                if let (true, Some(focus), Some(owned)) = (env.voice_edits, &focus, written) {
+                    env.remember(focus.pid, owned);
+                }
                 return result;
             }
             match focus {
                 Some(focus) if focus.bundle_id.as_deref() == Some(crate::KASS_BUNDLE_ID) => {
                     insert_in_app(&app, take_id, text).await
                 }
-                Some(focus) => crate::paste_final_text_with(text, focus, prepared).await,
+                Some(focus) => {
+                    let pid = focus.pid;
+                    let (result, owned) =
+                        crate::paste_final_text_tracked(text, focus, prepared, env.voice_edits)
+                            .await;
+                    if let Some(owned) = owned {
+                        env.remember(pid, owned);
+                    }
+                    result
+                }
                 None => Err(delivery::NO_FOCUS_MESSAGE.to_string()),
             }
+        }
+    }
+
+    /// A voice edit of the last take, in the field it is still in.
+    fn edit(
+        &self,
+        before: String,
+        after: String,
+    ) -> impl Future<Output = Result<(), String>> + Send {
+        let focus = self.focus.lock().ok().and_then(|f| f.clone());
+        let take_id = self.take_id;
+        let voice_edits = self.voice_edits;
+        async move {
+            let focus = focus.ok_or_else(|| delivery::NO_FOCUS_MESSAGE.to_string())?;
+            let last = last_take::current()
+                .filter(|last| voice_edits && last.pid == focus.pid)
+                .ok_or_else(|| last_take::NOTHING_TO_FIX.to_string())?;
+            let owned = last.owned.clone();
+            let result = tauri::async_runtime::spawn_blocking(move || {
+                crate::text_insert::edit_focused(focus.pid, &owned, &before, &after)
+            })
+            .await
+            .unwrap_or_else(|e| Err(crate::text_insert::EditError::Uncertain(e.to_string())));
+            eprintln!("[dictation] take {take_id}: voice edit {result:?}");
+            last_take::edited(&last, &result);
+            // TODO(voice-edits): the automatic report on the capture that
+            // wrote the text is filed by the server (voice_edits.learn_from),
+            // which can't know whether this write landed; confirm it here if
+            // that ever matters.
+            result
+                .map(|_| ())
+                .map_err(|error| last_take::message(&error))
         }
     }
 
@@ -908,10 +1034,17 @@ pub fn dictation_configure(
     input_device_id: Option<String>,
     device_known: Option<bool>,
     live_text: Option<bool>,
+    voice_edits: Option<bool>,
 ) -> Result<(), String> {
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     if let Some(live_text) = live_text {
         config.live_text = live_text;
+    }
+    if let Some(voice_edits) = voice_edits {
+        config.voice_edits = voice_edits;
+        if !voice_edits {
+            last_take::forget();
+        }
     }
     config.server_url = server_url
         .filter(|u| !u.trim().is_empty())

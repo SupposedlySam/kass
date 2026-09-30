@@ -7,6 +7,12 @@ Notable changes to Kass for users. Each release gets a section here, newest firs
 ### New
 
 - **Try new features early with beta updates.** Turn on **Beta updates** in Settings › General to get new features before they're public. Turn it off to go back to public releases; you stay on your beta until the next public one is newer.
+- **Fix what Kass just typed by voice (beta).** Start a dictation with "fix that" to change your last one: "fix that, Morgan not Megan", "fix that, delete actually", or spell a name out. No selecting needed. Works where Kass can edit the field directly (not yet in Safari pages or Firefox).
+
+### Improved
+
+- **Dictionary names can leave similar names alone (beta).** With **Beta updates** on, you can stop a name from respelling similar ones. A `Meghan` entry used to also turn `Megan` and `Meagan` into `Meghan`. Turn off **Also fix words that sound like it** on an entry to fix only its exact spelling.
+- **Say a phrase again without doubling it (beta).** With **Beta updates** on, put the cursor mid-sentence and dictate the new words, running on into the words already after the cursor: `Let's meet | at noon tomorrow.` plus "on Friday at noon tomorrow" now gives `Let's meet on Friday at noon tomorrow.` Kass drops the words you said again, even with a small spelling difference, and keeps the field's own. Live text may show them for a moment before it settles.
 
 ### Changed
 

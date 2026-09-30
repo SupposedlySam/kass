@@ -93,6 +93,8 @@ def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
     for column in ("app_bundle_id", "teaches_style_id"):
         if column not in columns:
             _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
+    if "source" not in columns:
+        _add_column(engine, "capture_feedback", "source VARCHAR NOT NULL DEFAULT 'manual'", "source")
 
 
 def _migrate_writing_styles(engine, inspector, tables: set[str]) -> None:
@@ -106,8 +108,14 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
     # One entry can apply in several places (docs/plans/DICTIONARIES.md).
     if "dictionary_entries" not in tables:
         return
-    if "group_id" not in _get_columns(inspector, "dictionary_entries"):
+    columns = _get_columns(inspector, "dictionary_entries")
+    if "group_id" not in columns:
         _add_column(engine, "dictionary_entries", "group_id VARCHAR", "group_id")
+    # Existing entries keep matching by sound, as they always have.
+    if "match_sound" not in columns:
+        _add_column(engine, "dictionary_entries", "match_sound BOOLEAN NOT NULL DEFAULT 1", "match_sound")
+    if "source" not in columns:
+        _add_column(engine, "dictionary_entries", "source VARCHAR", "source")
 
 
 # Kass was Herga (com.mrgnhnt.herga), and before that Voicebox, with bundle
@@ -200,6 +208,13 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             "live_text BOOLEAN NOT NULL DEFAULT 0",
             "live_text",
+        )
+    if "voice_edits" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            "voice_edits BOOLEAN NOT NULL DEFAULT 1",
+            "voice_edits",
         )
     if "sound_cues" not in columns:
         _add_column(

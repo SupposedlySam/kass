@@ -90,6 +90,27 @@ If the user fixes a join that came out wrong, the difference between refined and
 - Store `insert_context` and the actually inserted text on the capture. `capture_feedback.py` and `TeachCorrection.tsx` compare the user's edit against the **inserted** text, and train on the pair with the hint included.
 - Personal examples (`personal_examples.py`) should carry `continues_sentence`. Otherwise a lowercase continuation example teaches the model to lowercase whole messages.
 
+## 5. Re-dictation cleanup
+
+**Built.** People put the caret mid-sentence and say the new words, running on into the words already after the caret: `Let's meet | at noon tomorrow.` + "on Friday at noon tomorrow". `overlap::without_repeat` drops the repeated words from the *dictated* text and leaves the field alone, so the field keeps its own spelling, case and punctuation. It runs before `fit`, so it works for Accessibility, keystrokes and paste alike.
+
+The rules are general, with no word lists (the module doc has the details):
+
+- The caret continues a sentence (`continues_sentence`, as in section 2) and is not inside a word. A side that can't be read trims nothing.
+- Only the rest of the caret's sentence counts: up to `.?!…` before a capital or the end, or a line break. It must start at the caret, after nothing but whitespace.
+- The overlap is the longest end of the dictation equal to a start of that text. Words compare ignoring case and punctuation, split at whitespace, hyphens, slashes and digit/letter changes (`3pm` = `3 pm` = `3 p.m.`).
+- At least two field words overlap, and at least one dictated word stays.
+- One edit per word is allowed when both words have five or more letters, start the same and hold no digits: at most one such word in three, never all. Emoji match exactly. No overlap crosses a sentence end in the dictation.
+
+Where it runs:
+
+- **Paste path.** `text_insert::fit_at_caret` (through `fit_to_focused` in `run_insert_chain`) reads the text after the caret too: up to the dictation's length plus 32 UTF-16 units, clamped to the character count (past the end TextEdit and Notes read nothing, Safari and Gecko a shortened string), dropping a partial last word when cut short. It costs about 0.1 ms. Terminals and secure fields are still not read, and Kass's own window, which isn't fitted either, isn't trimmed.
+- **Live text.** `finish_live` reads the same text from the end of the owned text and trims the final text, so `rewrite` shrinks the owned text in one verified write. Drafts are not held back, so they may show the repeat until the final text arrives.
+
+The capture keeps the refined text as the model wrote it. Corrections are compared with that text (section 4), and the inserted text isn't stored yet, so a dropped repeat is never read as a correction. When section 4 stores the inserted text, it has to be the trimmed text: `finish_live` and `fit_at_caret` would need to return it.
+
+Known limits, kept in the tests: emphasis said twice ("no way, no way") is taken as a repeat, and an abbreviation's period (`Dr. Smith`) ends the field's sentence early.
+
 ## Tests
 
 - `join.rs`: table tests for every rule above, including emoji and other multi-unit UTF-16 characters in `before` and `after`, a replaced selection, an empty field, a caret right after a newline, and text that is only whitespace.
@@ -103,6 +124,7 @@ If the user fixes a join that came out wrong, the difference between refined and
 1. `join.rs` plus reading the context at insertion. This fixes all the spacing and doubled punctuation, needs no backend change, and ships by itself. **Done.** `text_insert::fit_to_focused` runs once before the insertion chain in `run_insert_chain`, and live insertion reads the context in `begin_live` and keeps it on `Owned`. Insertion into Kass's own window, which goes through the DOM, is not fitted yet. `insert_bench::caret_context_bench` measures the extra AX read in TextEdit.
 2. Reading the context at key-down, and the first word's case. This fixes capitals. **Done** (section 2).
 3. Capture fields and the correction and learning changes.
+4. Re-dictation cleanup. **Done** (section 5).
 
 ## Open questions
 

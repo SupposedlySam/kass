@@ -1,5 +1,6 @@
 //! Short sounds for dictation: recording started, recording stopped,
-//! cancelled with Escape, failed, and the writing style changed by voice.
+//! cancelled with Escape, failed, the writing style changed by voice, and a
+//! voice edit heard.
 //!
 //! Played with AppKit's `NSSound`, which follows the current output device
 //! and takes a per-sound volume, so no audio stream of our own stays open
@@ -42,6 +43,8 @@ pub const STYLE_CUE_SPAN_MS: u32 = 350;
 /// `StyleChip.tsx`), so it rings as the ring lights up and grows, not as the
 /// chip fades in.
 pub const STYLE_CUE_DELAY_MS: u32 = 920;
+/// The edit cue plays as soon as the edit is heard: no chip to wait for.
+pub const EDIT_CUE_DELAY_MS: u32 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cue {
@@ -55,6 +58,8 @@ pub enum Cue {
     Cancel,
     /// The user asked for a writing style by name ("make this formal").
     Style,
+    /// The take opens as a voice edit of the last one ("fix that, ...").
+    Edit,
 }
 
 impl Cue {
@@ -63,7 +68,9 @@ impl Cue {
             Cue::Start => 0,
             Cue::Stop | Cue::Cancel => 1,
             Cue::Error => 2,
-            Cue::Style => 3,
+            // TODO(voice-edits): its own sound; until then the style
+            // sound, quieter (EDIT_GAIN).
+            Cue::Style | Cue::Edit => 3,
         }
     }
 
@@ -72,6 +79,7 @@ impl Cue {
         match self {
             Cue::Cancel => CANCEL_GAIN,
             Cue::Style => STYLE_GAIN,
+            Cue::Edit => EDIT_GAIN,
             Cue::Start | Cue::Stop | Cue::Error => 1.0,
         }
     }
@@ -81,6 +89,8 @@ impl Cue {
 const CANCEL_GAIN: f32 = 0.5;
 /// The style cue plays over the user's own voice: a little under the others.
 const STYLE_GAIN: f32 = 0.8;
+/// The edit cue borrows the style sound, softer so the two can be told apart.
+const EDIT_GAIN: f32 = 0.45;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

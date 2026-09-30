@@ -266,6 +266,7 @@ class CaptureSettingsResponse(BaseModel):
     punctuation_style: str = Field(default="standard", pattern="^(standard|casual|learned)$")
     allow_auto_paste: bool = True
     live_text: bool = False
+    voice_edits: bool = True
     sound_cues: bool = True
     sound_cue_volume: float = Field(default=0.5, ge=0, le=1)
     input_device_id: Optional[str] = Field(
@@ -303,6 +304,7 @@ class CaptureSettingsUpdate(BaseModel):
     punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
     allow_auto_paste: Optional[bool] = None
     live_text: Optional[bool] = None
+    voice_edits: Optional[bool] = None
     sound_cues: Optional[bool] = None
     sound_cue_volume: Optional[float] = Field(default=None, ge=0, le=1)
     input_device_id: Optional[str] = Field(
@@ -465,11 +467,16 @@ class ActiveTasksResponse(BaseModel):
     downloads: List[ActiveDownloadTask]
 
 
+CaptureFeedbackSource = Literal["manual", "voice_fix", "redictation"]
+
+
 class CaptureFeedbackCreate(BaseModel):
     target: Literal["raw", "refined"]
     expected_text: str = Field(max_length=100000)
     notes: str = Field(default="", max_length=5000)
     snapshot: CaptureResponse
+    # See CaptureFeedback.source (docs/plans/CORRECTION_LEARNING.md).
+    source: CaptureFeedbackSource = "manual"
 
 
 class WritingStyleStatus(BaseModel):
@@ -671,6 +678,7 @@ class CaptureFeedbackResponse(BaseModel):
     expected_text: str
     notes: str
     snapshot: CaptureResponse
+    source: CaptureFeedbackSource
     created_at: datetime
 
 
@@ -690,6 +698,10 @@ class DictionaryEntryModel(BaseModel):
     spoken: str | None = None
     places: list[DictionaryPlace]
     created_at: datetime | None = None
+    # Off: only fixed where spelled exactly, never swapped in for a word that sounds like it.
+    match_sound: bool = True
+    # "spoken_fix": added by itself when the user spelled the word aloud to fix it.
+    source: Literal["user", "spoken_fix"] = "user"
 
 
 class DictionaryResponse(BaseModel):
@@ -700,12 +712,14 @@ class DictionaryEntryCreate(BaseModel):
     written: str = Field(max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] = Field(min_length=1, max_length=100)
+    match_sound: bool = True
 
 
 class DictionaryEntryUpdate(BaseModel):
     written: str | None = Field(default=None, max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] | None = Field(default=None, min_length=1, max_length=100)
+    match_sound: bool | None = None
 
 
 class ResolvedDictionaryEntry(BaseModel):
@@ -718,6 +732,7 @@ class ResolvedDictionaryEntry(BaseModel):
     written: str
     spoken: str | None = None
     created_at: datetime | None = None
+    match_sound: bool = True
     # A more specific place has an entry for the same word said.
     overridden: bool = False
 
