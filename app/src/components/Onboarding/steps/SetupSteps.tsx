@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { inputDevicePickerValue, useNativeInputDevices } from '@/lib/hooks/useNativeInputDevices';
@@ -413,17 +413,35 @@ export function MicrophoneStep({ onNext }: { onNext: () => void }) {
   );
 }
 
+// How long the keys show as held before the name step opens (the take keeps recording).
+const KEYS_TO_NAME_MS = 600;
+
 export function KeysStep({
   readiness,
   pushKeys,
+  modelsReady,
   onNext,
 }: {
   readiness: DictationReadiness;
   pushKeys: string[];
-  onNext: () => void;
+  /** Whether a take can be transcribed yet. */
+  modelsReady: boolean;
+  /** `holding` when the keys went down and the take is recording. */
+  onNext: (holding?: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const { held, pressedOnce } = useHeldChord(true);
+  // Once the models are ready the first press is a real take: the name step
+  // opens while the keys are still held, and what's said there is the name.
+  // Until then the keys only practice.
+  const { held, pressedOnce } = useHeldChord(!modelsReady);
+  const advance = useRef(onNext);
+  advance.current = onNext;
+  useEffect(() => {
+    if (!pressedOnce || !modelsReady) return;
+    // A beat to see the keys go down first.
+    const timer = setTimeout(() => advance.current(true), KEYS_TO_NAME_MS);
+    return () => clearTimeout(timer);
+  }, [pressedOnce, modelsReady]);
   const login = useLaunchAtLogin();
   const down = held === 'push_to_talk' || held === 'toggle_to_talk';
   return (

@@ -117,8 +117,12 @@ export type TakePhase = 'idle' | 'listening' | 'working';
  * Dictate button that starts and stops one, and each finished capture.
  * Shortcut takes also type into the focused field on their own.
  */
-export function useTakes(onCapture: (capture: CaptureResponse) => void) {
-  const [phase, setPhase] = useState<TakePhase>('idle');
+export function useTakes(
+  onCapture: (capture: CaptureResponse) => void,
+  /** A take already recording when the step opened (its start event came before). */
+  recording = false,
+) {
+  const [phase, setPhase] = useState<TakePhase>(recording ? 'listening' : 'idle');
   const [error, setError] = useState<string | null>(null);
 
   useTauriEvent<NativeDictationEvent>('dictation:state', (event) => {

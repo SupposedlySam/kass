@@ -1,5 +1,5 @@
 import { Check, Lock } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse, CaptureSettings } from '@/lib/api/types';
@@ -18,7 +18,7 @@ import {
   SpeakRow,
   StatusLine,
 } from '../Poster';
-import { Confetti } from '../PosterMotion';
+import { Confetti, TypedParts, typingMs } from '../PosterMotion';
 import type { OnboardingDownloads } from '../useOnboardingDownloads';
 
 /** The text a dictation capture delivered. */
@@ -83,13 +83,27 @@ export function LockedStep({
   );
 }
 
+/** A name as said: no period (or other end punctuation) after it. */
+function withoutEndPunctuation(text: string): string {
+  return text.replace(/[.!?,;:…]+$/, '');
+}
+
 type NamePhase = 'ask' | 'confirm' | 'edit' | 'saved';
 
 /**
  * The first real dictation. What was heard fills a field; the user confirms
  * the spelling or fixes it before it goes into the dictionary.
  */
-export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () => void }) {
+export function NameStep({
+  pushKeys,
+  recording = false,
+  onNext,
+}: {
+  pushKeys: string[];
+  /** Opened by holding the keys on the step before: that take is the name. */
+  recording?: boolean;
+  onNext: () => void;
+}) {
   const { t } = useTranslation();
   const labels = useSpeakLabels();
   const [phase, setPhase] = useState<NamePhase>('ask');
@@ -102,7 +116,7 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
     useCallback(
       (capture: CaptureResponse) => {
         if (phase !== 'ask' || capture.source !== 'dictation') return;
-        const said = sentText(capture).replace(/[.!?,]+$/, '');
+        const said = withoutEndPunctuation(sentText(capture));
         if (!said) return;
         setHeard(said);
         setName(said);
@@ -110,6 +124,7 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
       },
       [phase],
     ),
+    recording,
   );
 
   useEffect(() => {
@@ -157,7 +172,10 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
             id="onboarding-name"
             ref={field}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            // Dictation types into the field too, ending the name with a period.
+            onChange={(e) =>
+              setName(phase === 'ask' ? withoutEndPunctuation(e.target.value) : e.target.value)
+            }
             onKeyDown={(e) => {
               if (e.key === 'Enter' && phase === 'edit') save(name, true);
             }}
@@ -238,122 +256,102 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
   );
 }
 
-const SCRIPT_KEYS = ['lunch', 'work', 'friend'] as const;
-const STRIKE_START = 450;
+// After what was said is typed out.
+const STRIKE_START = 250;
 const STRIKE_EACH = 320;
 
 /** Read a scripted line with filler and a change of mind; see what was kept. */
 export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () => void }) {
   const { t } = useTranslation();
   const labels = useSpeakLabels();
-  const [script, setScript] = useState<(typeof SCRIPT_KEYS)[number]>('lunch');
   const [result, setResult] = useState<{ heard: string; sent: string } | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const takes = useTakes(
     useCallback((capture: CaptureResponse) => {
       if (capture.source !== 'dictation') return;
-      setResult({ heard: capture.transcript_raw ?? '', sent: sentText(capture) });
+      // Once the line is said, it stays until "Say it again".
+      setResult(
+        (current) => current ?? { heard: capture.transcript_raw ?? '', sent: sentText(capture) },
+      );
     }, []),
   );
+  // The field is back (and empty) whenever there's no take yet.
   useEffect(() => {
-    field.current?.focus();
-  }, []);
+    if (!result) field.current?.focus();
+  }, [result]);
 
-  // Each dropped piece is struck in turn, then the clean line lands.
-  let strikes = 0;
-  const parts = result
-    ? heardParts(result.heard, result.sent).map((part) => ({
-        ...part,
-        strike: part.dropped ? strikes++ : null,
-      }))
-    : [];
+  // What was said types out, each dropped piece is struck in turn, then the clean line lands.
+  const parts = result ? heardParts(result.heard, result.sent) : [];
+  const strikes = parts.filter((part) => part.dropped).length;
+  const typed = typingMs(parts.map((part) => part.text).join(' '));
 
   return (
     <>
       <Headline size="md">{t('onboarding.messy.title')}</Headline>
       <Lead>{t('onboarding.messy.body')}</Lead>
-      <div className="flex flex-wrap gap-1.5">
-        {SCRIPT_KEYS.map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => {
-              setScript(key);
-              setResult(null);
-              field.current?.focus();
-            }}
-            className={cn(
-              'h-8 rounded-full border px-3.5 text-[13px] text-[var(--poster-fg)]',
-              key === script ? 'border-white bg-white/20' : 'border-white/40 bg-transparent',
-            )}
-          >
-            {t(`onboarding.messy.scripts.${key}.title`)}
-          </button>
-        ))}
-      </div>
-      <div className="flex h-[132px] flex-col gap-3 overflow-hidden">
+      {/* Two lines of what was said and two of what was sent, reserved. */}
+      <div className="flex h-[140px] shrink-0 flex-col gap-3 overflow-hidden">
         {result ? (
           <div key={`${result.heard}\n${result.sent}`} className="contents">
-            <p className="poster-rise-late m-0 line-clamp-2 max-w-[700px] text-[17px] leading-snug">
-              {parts.map((part, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
-                <Fragment key={i}>
-                  {i ? ' ' : null}
-                  <span
-                    className={part.dropped ? 'poster-strike' : 'opacity-85'}
-                    style={
-                      part.strike === null
-                        ? undefined
-                        : { animationDelay: `${STRIKE_START + part.strike * STRIKE_EACH}ms` }
-                    }
-                  >
-                    {part.text}
-                  </span>
-                </Fragment>
-              ))}
+            <p className="poster-rise-late m-0 line-clamp-2 max-w-[700px] shrink-0 text-[17px] leading-snug">
+              <TypedParts
+                parts={parts}
+                keptClassName="opacity-85"
+                strikeDelay={(nth) => STRIKE_START + nth * STRIKE_EACH}
+              />
             </p>
             <p
-              className={`${DISPLAY_FONT} poster-rise-late m-0 line-clamp-2 max-w-[720px] text-[32px] font-bold leading-tight tracking-[-0.02em]`}
-              style={{ animationDelay: `${STRIKE_START + strikes * STRIKE_EACH + 150}ms` }}
+              className={`${DISPLAY_FONT} poster-rise-late m-0 line-clamp-2 max-w-[720px] shrink-0 text-[32px] font-bold leading-tight tracking-[-0.02em]`}
+              style={{ animationDelay: `${typed + STRIKE_START + strikes * STRIKE_EACH + 150}ms` }}
             >
               {result.sent}
             </p>
           </div>
         ) : (
           <p className={`${DISPLAY_FONT} m-0 max-w-[700px] text-[26px] font-medium leading-tight`}>
-            {t(`onboarding.messy.scripts.${script}.line`)}
+            {t('onboarding.messy.line')}
           </p>
         )}
       </div>
-      <label htmlFor="onboarding-messy" className="sr-only">
-        {t('onboarding.messy.fieldLabel')}
-      </label>
-      <textarea
-        id="onboarding-messy"
-        ref={field}
-        rows={1}
-        placeholder={t('onboarding.messy.fieldPlaceholder')}
-        className="max-w-[560px] resize-none rounded-xl border border-white/40 bg-white/10 px-3.5 py-2 text-sm text-white placeholder:text-white/50 focus:border-white focus:outline-none"
-      />
-      <SpeakRow
-        keys={pushKeys}
-        listening={takes.phase === 'listening'}
-        onDictate={takes.toggle}
-        {...labels}
-      />
-      <StatusLine>{takes.phase === 'working' ? t('onboarding.working') : takes.error}</StatusLine>
-      <div className={cn(!result && 'invisible')}>
-        <Actions>
-          <PosterButton onClick={onNext} disabled={!result}>
-            {t('onboarding.next')}
-          </PosterButton>
-        </Actions>
+      {/* Where to speak until the line is said; then where to go next, in the same space. */}
+      <div className="flex h-[102px] shrink-0 flex-col gap-4">
+        {result ? (
+          <Actions>
+            <PosterButton onClick={onNext} autoFocus>
+              {t('onboarding.next')}
+            </PosterButton>
+            {/* A slip or a misread line: clear it and read it again. */}
+            <PosterButton kind="ghost" onClick={() => setResult(null)}>
+              {t('onboarding.messy.sayAgain')}
+            </PosterButton>
+          </Actions>
+        ) : (
+          <>
+            <textarea
+              ref={field}
+              rows={1}
+              aria-label={t('onboarding.messy.fieldLabel')}
+              placeholder={t('onboarding.messy.fieldPlaceholder')}
+              className="max-w-[560px] shrink-0 resize-none rounded-xl border border-white/40 bg-white/10 px-3.5 py-2.5 text-sm leading-5 text-white placeholder:text-white/50 focus:border-white focus:outline-none"
+            />
+            <SpeakRow
+              keys={pushKeys}
+              listening={takes.phase === 'listening'}
+              onDictate={takes.toggle}
+              {...labels}
+            />
+          </>
+        )}
       </div>
+      <StatusLine>{takes.phase === 'working' ? t('onboarding.working') : takes.error}</StatusLine>
     </>
   );
 }
 
 const INSTRUCTION_KEYS = ['shorter', 'friendlier', 'bullets'] as const;
+// The text box and the rewritten text in its place: the same size.
+const REWRITE_BOX =
+  'block h-[126px] w-full rounded-2xl bg-white px-4 py-3.5 text-[15px] leading-relaxed text-[#1D1B19]';
 
 /**
  * Rewrite text already written: a paragraph is selected in a box, and the
@@ -371,8 +369,8 @@ export function RewriteStep({
   const [text, setText] = useState(original);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Bumped on each rewrite, to sweep a light across the new text.
-  const [rewrites, setRewrites] = useState(0);
+  // What was asked for, once the text is rewritten; then the text is final.
+  const [done, setDone] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const { held } = useHeldChord(false);
   const commandKeys = settings?.chord_command_keys ?? [];
@@ -383,7 +381,23 @@ export function RewriteStep({
     el.focus();
     el.setSelectionRange(0, el.value.length);
   }, []);
-  useEffect(() => selectAll(), [selectAll]);
+  useEffect(() => {
+    if (done === null) selectAll();
+  }, [done, selectAll]);
+
+  const finish = (selection: string, rewritten: string, instruction: string) => {
+    setText((current) =>
+      selection && current.includes(selection) ? current.replace(selection, rewritten) : rewritten,
+    );
+    setDone(instruction);
+  };
+
+  // Said with the command keys: Herga pastes the rewrite into the field too.
+  useTakes((capture: CaptureResponse) => {
+    const rewritten = (capture.transcript_refined ?? '').trim();
+    if (capture.source !== 'command' || !rewritten || done !== null) return;
+    finish(capture.command_selection ?? '', rewritten, capture.command_instruction ?? '');
+  });
 
   const run = (key: (typeof INSTRUCTION_KEYS)[number]) => {
     const el = field.current;
@@ -397,9 +411,7 @@ export function RewriteStep({
       .runCommand(selection, t(`onboarding.rewrite.instructions.${key}`))
       .then((capture) => {
         const rewritten = (capture.transcript_refined ?? '').trim();
-        if (!rewritten) return;
-        setText(text.replace(selection, rewritten));
-        setRewrites((n) => n + 1);
+        if (rewritten) finish(selection, rewritten, t(`onboarding.rewrite.instructions.${key}`));
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(null));
@@ -411,70 +423,78 @@ export function RewriteStep({
       <Lead>
         {commandKeys.length > 0 ? t('onboarding.rewrite.body') : t('onboarding.rewrite.bodyNoKeys')}
       </Lead>
-      <label htmlFor="onboarding-rewrite" className="sr-only">
-        {t('onboarding.rewrite.fieldLabel')}
-      </label>
-      <div className="relative max-w-[700px]">
-        <textarea
-          id="onboarding-rewrite"
-          ref={field}
-          rows={4}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="block w-full resize-none rounded-2xl bg-white px-4 py-3.5 text-[15px] leading-relaxed text-[#1D1B19] selection:bg-[#C9D3FF] focus:outline-none"
-        />
-        {rewrites ? (
-          <span
-            key={rewrites}
-            className="poster-sweep pointer-events-none absolute inset-0 rounded-2xl"
-            aria-hidden
+      <div className="relative max-w-[700px] shrink-0">
+        {done === null ? (
+          <textarea
+            ref={field}
+            rows={4}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label={t('onboarding.rewrite.fieldLabel')}
+            className={cn(REWRITE_BOX, 'resize-none selection:bg-[#C9D3FF] focus:outline-none')}
           />
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {commandKeys.length > 0 ? (
+        ) : (
           <>
-            <span className="text-[13px] opacity-80">{t('onboarding.hold')}</span>
-            <Keycaps keys={commandKeys} down={held === 'command'} />
-            <span className="text-[13px] opacity-80">{t('onboarding.rewrite.andSay')}</span>
+            {/* Rewritten: the text is final, with a light swept across it. */}
+            <p className={cn(REWRITE_BOX, 'm-0 overflow-hidden whitespace-pre-wrap')}>{text}</p>
+            <span
+              className="poster-sweep pointer-events-none absolute inset-0 rounded-2xl"
+              aria-hidden
+            />
           </>
-        ) : null}
-        {INSTRUCTION_KEYS.map((key) => (
-          <button
-            key={key}
-            type="button"
-            disabled={busy !== null}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => run(key)}
-            aria-busy={busy === key}
-            className={cn(
-              'h-8 rounded-full border border-white/40 px-3.5 text-[13px] text-[var(--poster-fg)] hover:border-white disabled:opacity-60',
-              busy === key && 'animate-pulse border-white',
-            )}
-          >
-            {`“${t(`onboarding.rewrite.instructions.${key}`)}”`}
-          </button>
-        ))}
-        <button
-          type="button"
-          disabled={text === original}
-          onClick={() => {
-            setText(original);
-            requestAnimationFrame(selectAll);
-          }}
-          className={cn(
-            'h-8 px-2.5 text-[13px] font-medium text-[var(--poster-fg)] underline',
-            text === original && 'invisible',
-          )}
-        >
-          {t('onboarding.rewrite.undo')}
-        </button>
+        )}
       </div>
+      {done !== null ? (
+        <div className="flex h-8 flex-wrap items-center gap-2">
+          <Check className="poster-pop h-4 w-4" strokeWidth={3} aria-hidden />
+          <span className="text-[13px]">
+            {done
+              ? t('onboarding.rewrite.did', { instruction: done })
+              : t('onboarding.rewrite.didAny')}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setText(original);
+              setDone(null);
+            }}
+            className="h-8 px-2.5 text-[13px] font-medium text-[var(--poster-fg)] underline"
+          >
+            {t('onboarding.rewrite.tryAnother')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {commandKeys.length > 0 ? (
+            <>
+              <span className="text-[13px] opacity-80">{t('onboarding.hold')}</span>
+              <Keycaps keys={commandKeys} down={held === 'command'} />
+              <span className="text-[13px] opacity-80">{t('onboarding.rewrite.andSay')}</span>
+            </>
+          ) : null}
+          {INSTRUCTION_KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              disabled={busy !== null}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => run(key)}
+              aria-busy={busy === key}
+              className={cn(
+                'h-8 rounded-full border border-white/40 px-3.5 text-[13px] text-[var(--poster-fg)] hover:border-white disabled:opacity-60',
+                busy === key && 'animate-pulse border-white',
+              )}
+            >
+              {`“${t(`onboarding.rewrite.instructions.${key}`)}”`}
+            </button>
+          ))}
+        </div>
+      )}
       <StatusLine>{busy ? t('onboarding.working') : error}</StatusLine>
       <Actions>
         <PosterButton onClick={onNext}>{t('onboarding.next')}</PosterButton>
-        <div className={cn(text !== original && 'invisible')}>
-          <PosterButton kind="ghost" onClick={onNext} disabled={text !== original}>
+        <div className={cn(done !== null && 'invisible')}>
+          <PosterButton kind="ghost" onClick={onNext} disabled={done !== null}>
             {t('onboarding.skip')}
           </PosterButton>
         </div>

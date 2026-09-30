@@ -79,6 +79,86 @@ export function RiseLetters({ text, delay = 0 }: { text: string; delay?: number 
   );
 }
 
+// Spoken words type out this fast, and never take longer than the cap.
+const TYPE_MS_PER_CHAR = 16;
+const TYPE_MAX_MS = 1000;
+
+/** How long `text` takes to type out. */
+export function typingMs(text: string): number {
+  return Math.min(text.length * TYPE_MS_PER_CHAR, TYPE_MAX_MS);
+}
+
+/** How many characters of `text` are typed so far; starts over when `text` changes. */
+function useTyped(text: string): number {
+  const reduce = useReducedMotion();
+  const [typed, setTyped] = useState(reduce ? text.length : 0);
+  useEffect(() => {
+    if (reduce || !text) {
+      setTyped(text.length);
+      return;
+    }
+    const each = typingMs(text) / text.length;
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const count = Math.min(text.length, Math.floor((now - started) / each) + 1);
+      setTyped(count);
+      if (count < text.length) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [text, reduce]);
+  return typed;
+}
+
+/**
+ * What was said, typed out quickly a character at a time. Untyped text
+ * keeps its space, so the line never reflows. Once it's typed, the dropped
+ * parts are struck: the nth at `strikeDelay(n)` ms.
+ */
+export function TypedParts({
+  parts,
+  keptClassName,
+  strikeDelay,
+}: {
+  parts: { text: string; dropped: boolean }[];
+  keptClassName?: string;
+  strikeDelay: (nth: number) => number;
+}) {
+  const text = parts.map((part) => part.text).join(' ');
+  const typed = useTyped(text);
+  const done = typingMs(text);
+  let start = 0;
+  let strikes = 0;
+  return (
+    <>
+      <span className="sr-only">{text}</span>
+      {parts.map((part, i) => {
+        const from = start + (i ? 1 : 0);
+        start = from + part.text.length;
+        const shown = Math.max(0, Math.min(part.text.length, typed - from));
+        const strike = part.dropped ? strikes++ : null;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
+          <Fragment key={i}>
+            {i ? ' ' : null}
+            <span
+              aria-hidden
+              className={part.dropped ? 'poster-strike' : keptClassName}
+              style={
+                strike === null ? undefined : { animationDelay: `${done + strikeDelay(strike)}ms` }
+              }
+            >
+              {part.text.slice(0, shown)}
+              <span className="invisible">{part.text.slice(shown)}</span>
+            </span>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
 const CONFETTI_COLORS = ['#FFFFFF', '#F6C343', '#F2542D', '#7BE39A', '#8FA2FF', '#FF9AC8'];
 
 type Burst = 'celebrate' | 'small';

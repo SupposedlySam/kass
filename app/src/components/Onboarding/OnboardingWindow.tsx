@@ -103,6 +103,8 @@ export function OnboardingWindow() {
     return () => window.removeEventListener('pointerdown', remember);
   }, []);
   const next = () => go(nextStep(progress.step));
+  // The name step opened by holding the keys: its take is already recording.
+  const [heldIntoName, setHeldIntoName] = useState(false);
 
   const downloads = useOnboardingDownloads(readiness, progress.downloadsStarted, () =>
     setAndSave({ ...progress, downloadsStarted: true }),
@@ -175,10 +177,21 @@ export function OnboardingWindow() {
         body = <MicrophoneStep onNext={next} />;
         break;
       case 'keys':
-        body = <KeysStep readiness={readiness} pushKeys={pushKeys} onNext={next} />;
+        body = (
+          <KeysStep
+            readiness={readiness}
+            pushKeys={pushKeys}
+            modelsReady={downloads.ready}
+            onNext={(holding) => {
+              // With the models ready, the keys step moves on as the keys go down.
+              setHeldIntoName(holding === true);
+              next();
+            }}
+          />
+        );
         break;
       case 'name':
-        body = <NameStep pushKeys={pushKeys} onNext={next} />;
+        body = <NameStep pushKeys={pushKeys} recording={heldIntoName} onNext={next} />;
         break;
       case 'messy':
         body = <MessyStep pushKeys={pushKeys} onNext={next} />;

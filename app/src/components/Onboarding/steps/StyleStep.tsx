@@ -2,13 +2,7 @@ import { Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
-import type {
-  CaptureResponse,
-  TeachChip,
-  TeachConversation,
-  TeachKind,
-  TeachSession,
-} from '@/lib/api/types';
+import type { CaptureResponse, TeachConversation, TeachKind, TeachSession } from '@/lib/api/types';
 import { cn } from '@/lib/utils/cn';
 import { heardParts, standardCleanup } from '../onboardingFlow';
 import { useTakes } from '../onboardingHooks';
@@ -21,8 +15,14 @@ import {
   SpeakRow,
   StatusLine,
 } from '../Poster';
+import { TypedParts } from '../PosterMotion';
 
 type Phase = 'reply' | 'check' | 'edit' | 'reveal';
+
+// Up to this many characters (quotes included), the incoming message fits two
+// lines at the biggest size, or three at the middle one; longer ones get the smallest.
+const SHORT_MESSAGE = 56;
+const MEDIUM_MESSAGE = 110;
 
 /** A reply as it moves through the step. */
 interface Take {
@@ -70,7 +70,6 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
   const [phase, setPhase] = useState<Phase>('reply');
   const [take, setTake] = useState<Take>(EMPTY);
   const [typed, setTyped] = useState('');
-  const [chips, setChips] = useState<TeachChip[]>([]);
   const [replies, setReplies] = useState(0);
   const [triedWork, setTriedWork] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -150,7 +149,6 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
       .then((next) => {
         setSession(next);
         setTake((current) => ({ ...current, written: written.trim() }));
-        setChips(next.conversations.find((c) => c.id === conversation.id)?.chips ?? []);
         setReplies((n) => n + 1);
         if (open.current) open.current.replies += 1;
         setPhase('reveal');
@@ -179,7 +177,6 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
         setTriedWork(true);
         setTake(EMPTY);
         setTyped('');
-        setChips([]);
         setPhase('reply');
       })
       .catch((err) => setError(String(err instanceof Error ? err.message : err)))
@@ -209,6 +206,7 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
   if (phase === 'reply') {
     const incoming = [...(conversation?.messages ?? [])].reverse().find((m) => !m.from_you);
     const note = conversation?.note;
+    const length = incoming ? incoming.text.length + 2 : 0;
     return (
       <>
         <span className={cn(LABEL, 'opacity-75')}>
@@ -216,8 +214,18 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
             ? `${persona} · ${t(`writingStyle.teach.kinds.${conversation.kind}.short`)}`
             : ' '}
         </span>
+        {/* Room for three lines at the smaller sizes; a short message gets the biggest. */}
         <p
-          className={`${DISPLAY_FONT} m-0 line-clamp-3 min-h-[3.15em] max-w-[720px] text-[44px] font-bold leading-[1.05] tracking-[-0.03em]`}
+          className={cn(
+            DISPLAY_FONT,
+            'm-0 h-[108px] max-w-[720px] shrink-0 font-bold tracking-[-0.03em]',
+            // Line height after the size: a size class drops an earlier one.
+            length <= SHORT_MESSAGE
+              ? 'line-clamp-2 text-[44px] leading-[1.05]'
+              : length <= MEDIUM_MESSAGE
+                ? 'line-clamp-3 text-[34px] leading-[1.05]'
+                : 'line-clamp-3 text-[28px] leading-[1.2]',
+          )}
         >
           {incoming ? `“${incoming.text}”` : null}
         </p>
@@ -231,15 +239,26 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
         <label htmlFor="onboarding-style-reply" className="sr-only">
           {t('onboarding.style.fieldLabel')}
         </label>
-        <textarea
-          id="onboarding-style-reply"
-          ref={replyField}
-          rows={1}
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder={t('onboarding.style.fieldPlaceholder')}
-          className="max-w-[640px] resize-none rounded-full border-[1.5px] border-white/60 bg-white/10 px-4 py-3 text-[15px] text-white placeholder:text-white/50 focus:border-white focus:outline-none"
-        />
+        <div className="flex max-w-[760px] shrink-0 items-center gap-2.5">
+          <textarea
+            id="onboarding-style-reply"
+            ref={replyField}
+            rows={1}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={t('onboarding.style.fieldPlaceholder')}
+            className="min-w-0 flex-1 resize-none rounded-full border-[1.5px] border-white/60 bg-white/10 px-4 py-3 text-[15px] leading-6 text-white placeholder:text-white/50 focus:border-white focus:outline-none"
+          />
+          {/* Held in place while empty, so the field keeps its width. */}
+          <div className={cn(!typed.trim() && 'invisible')}>
+            <PosterButton
+              disabled={!typed.trim()}
+              onClick={() => toCheck({ heard: '', shown: typed.trim(), written: typed.trim() })}
+            >
+              {t('onboarding.style.useTyped')}
+            </PosterButton>
+          </div>
+        </div>
         <SpeakRow
           keys={pushKeys}
           listening={takes.phase === 'listening'}
@@ -250,19 +269,14 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
           orHoldLabel={t('onboarding.orHold')}
         />
         <StatusLine>{status}</StatusLine>
-        <Actions>
-          <div className={cn(!typed.trim() && 'invisible')}>
-            <PosterButton
-              disabled={!typed.trim()}
-              onClick={() => toCheck({ heard: '', shown: typed.trim(), written: typed.trim() })}
-            >
-              {t('onboarding.style.useTyped')}
+        {/* Alone in its row, the ghost button's text lines up with the field above. */}
+        <div className="-ml-[22px]">
+          <Actions>
+            <PosterButton kind="ghost" onClick={finish}>
+              {replies > 0 ? t('onboarding.next') : t('onboarding.skip')}
             </PosterButton>
-          </div>
-          <PosterButton kind="ghost" onClick={finish}>
-            {replies > 0 ? t('onboarding.next') : t('onboarding.skip')}
-          </PosterButton>
-        </Actions>
+          </Actions>
+        </div>
       </>
     );
   }
@@ -293,7 +307,7 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
                   send(take.written);
                 }
               }}
-              className={`${DISPLAY_FONT} max-w-[700px] resize-none rounded-[18px] bg-white px-[18px] py-4 text-[28px] font-bold leading-[1.2] tracking-[-0.02em] text-[#1D1B19] focus:outline-none`}
+              className={`${DISPLAY_FONT} max-w-[700px] shrink-0 resize-none rounded-[18px] bg-white px-[18px] py-4 text-[28px] font-bold leading-[1.2] tracking-[-0.02em] text-[#1D1B19] focus:outline-none`}
             />
           </>
         ) : (
@@ -369,7 +383,6 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
   }
 
   // The reveal: what was said, standard cleanup, and the user's own way.
-  const edited = take.written !== take.shown;
   const standard = standardCleanup(take.shown);
   return (
     <>
@@ -379,18 +392,7 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
           <>
             <span className={cn(LABEL, 'opacity-75')}>{t('onboarding.style.said')}</span>
             <span className="line-clamp-2 text-[15px] leading-snug opacity-75">
-              {heardParts(take.heard, take.shown).map((part, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
-                <span key={i}>
-                  {i ? ' ' : null}
-                  <span
-                    className={part.dropped ? 'poster-strike' : undefined}
-                    style={part.dropped ? { animationDelay: '600ms' } : undefined}
-                  >
-                    {part.text}
-                  </span>
-                </span>
-              ))}
+              <TypedParts parts={heardParts(take.heard, take.shown)} strikeDelay={() => 250} />
             </span>
           </>
         ) : null}
@@ -410,24 +412,6 @@ export function StyleStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
           {take.written}
         </span>
       </div>
-      {chips.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          <span className={cn(LABEL, 'opacity-75')}>
-            {edited ? t('onboarding.style.learnedFromEdits') : t('onboarding.style.learnedFrom')}
-          </span>
-          <div className="flex max-w-[740px] flex-wrap gap-1.5">
-            {chips.map((chip, i) => (
-              <span
-                key={`${chip.code}:${chip.value ?? ''}`}
-                className="poster-pop inline-flex h-7 items-center gap-1.5 rounded-full bg-white px-3 text-[13px] text-[var(--poster-bg)]"
-                style={{ animationDelay: `${1200 + i * 90}ms` }}
-              >
-                {t(`writingStyle.teach.chips.${chip.code}`, { value: chip.value ?? '' })}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
       <StatusLine>{status}</StatusLine>
       <Actions>
         <PosterButton onClick={finish} autoFocus>

@@ -1481,23 +1481,11 @@
     },
     "messy": {
       "title": "Say it the way you talk.",
-      "body": "Read one of these out loud, “um” and all.",
+      "body": "Read this out loud, “um” and all.",
+      "line": "“Um, can we move lunch to noon? No, actually, one. At the usual place.”",
+      "sayAgain": "Say it again",
       "fieldLabel": "Where your words land",
-      "fieldPlaceholder": "Your words land here",
-      "scripts": {
-        "lunch": {
-          "title": "Lunch plans",
-          "line": "“Um, can we move lunch to noon? No, actually, one. At the usual place.”"
-        },
-        "work": {
-          "title": "A work update",
-          "line": "“So the report is, uh, done on Tuesday. No wait, Wednesday. I’ll send it then.”"
-        },
-        "friend": {
-          "title": "Text a friend",
-          "line": "“Heading out now, be there in ten. No, fifteen minutes.”"
-        }
-      }
+      "fieldPlaceholder": "Your words land here"
     },
     "style": {
       "body": "Text {{persona}} back. Say it exactly how you would.",
@@ -1521,8 +1509,6 @@
       "said": "What you said",
       "standard": "Standard cleanup",
       "yourWay": "Your way",
-      "learnedFrom": "From your reply",
-      "learnedFromEdits": "From your reply and your edits",
       "tryWork": "Try a work message",
       "more": "The more you reply, the more Herga sounds like you. Try a work message too: you probably write differently there.",
       "moreLater": "The more you reply, the more Herga sounds like you. Keep teaching it any time in Settings › Writing style."
@@ -1533,7 +1519,9 @@
       "bodyNoKeys": "This is selected. Pick what to do with it.",
       "fieldLabel": "Text to rewrite",
       "andSay": "and say",
-      "undo": "Undo",
+      "did": "Rewritten: “{{instruction}}”",
+      "didAny": "Rewritten",
+      "tryAnother": "Try another",
       "paragraph": "Hi team, I wanted to give a quick update on where things stand with the onboarding work. We have picked a direction for the flow and the next step is to design the screens, which should happen this week if nothing else comes up.",
       "instructions": {
         "shorter": "make this shorter",
