@@ -2,6 +2,7 @@
 # Set the app version everywhere it's written down.
 #
 #   ./scripts/set-version.sh 0.6.0     write 0.6.0 into every file
+#   ./scripts/set-version.sh 0.7.0-beta.1   a beta works the same way
 #   ./scripts/set-version.sh --check   fail unless every file has the same version
 #
 # GitHub releases are the source of truth: scripts/release.sh calls this
@@ -38,8 +39,8 @@ if [ "${1:-}" = "--check" ]; then
 fi
 
 version="${1:-}"
-if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Usage: $0 <major.minor.patch> | --check [version]" >&2
+if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+  echo "Usage: $0 <major.minor.patch[-beta.N]> | --check [version]" >&2
   exit 1
 fi
 

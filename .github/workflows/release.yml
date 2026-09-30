@@ -3,12 +3,21 @@ name: Release
 # Pushing a version tag (v0.6.0) builds the Apple Silicon app, packs it in a
 # DMG and publishes a GitHub release. The website's Download button links to
 # the latest release.
+#
+# A beta tag (v0.7.0-beta.1) is published as a prerelease instead, which the
+# website and the public update skip. Only copies on the beta channel
+# (Settings › General › Beta updates) install it.
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
+
+# Releases update the shared beta.json one at a time.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -167,6 +176,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$GITHUB_REF_NAME" == *-beta.* ]]; then
+            flags=(--prerelease --latest=false)
+          else
+            flags=(--latest)
+          fi
           gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.file }}" \
             "${{ steps.updater.outputs.archive }}" latest.json \
-            --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md
+            --title "Herga ${GITHUB_REF_NAME#v}" --notes-file notes.md "${flags[@]}"
+
+      # What the beta channel reads: releases/download/channels/beta.json
+      # names the newest release, beta or not. A stable hotfix older than
+      # the current beta leaves it alone, so beta users keep the beta.
+      - name: Beta channel manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! gh release view channels >/dev/null 2>&1; then
+            gh release create channels --prerelease --latest=false --title "Update channels" \
+              --notes "Where Herga's beta channel looks for updates. Not a release to download."
+          fi
+          current=$(gh release download channels --pattern beta.json --output - 2>/dev/null \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])' || true)
+          if [ -n "$current" ] && [ "$(./scripts/newest-version.py "$current" "$version")" != "$version" ]; then
+            echo "beta.json stays on $current, newer than $version."
+            exit 0
+          fi
+          cp latest.json beta.json
+          gh release upload channels beta.json --clobber

@@ -63,6 +63,8 @@ You'll need [Bun](https://bun.sh), [Rust](https://rustup.rs), [Python 3.12](http
 
 To release, move the Unreleased notes in [CHANGELOG.md](CHANGELOG.md) under the new version, commit, and run `./scripts/release.sh <version>` from a clean `main`.
 
+To try a feature before it's public, run `./scripts/release.sh 0.7.0-beta.1` from any clean branch. Betas are published as prereleases: the website and the public update skip them, and only copies with **Settings › General › Beta updates** on install them. Betas keep their notes under Unreleased until the public release.
+
 | Path       | What                                               |
 | ---------- | -------------------------------------------------- |
 | `app/`     | React frontend                                     |
