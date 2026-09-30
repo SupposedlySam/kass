@@ -1,7 +1,8 @@
 """The user's dictionaries: words dictation should get right (docs/plans/DICTIONARIES.md).
 
-An entry is a term ("Kubernetes"), which Whisper is prompted with and whose
-capitals are fixed after cleanup, or a replacement, which writes ``written``
+An entry is a term ("Kubernetes"), which Whisper is prompted with and which
+is written the user's way after cleanup, even where Whisper heard it a little
+wrong ("Kubernetis", "cuber netes"), or a replacement, which writes ``written``
 wherever ``spoken`` was said. Entries belong to every app ("global"), to a
 writing style, or to one app; a dictation merges its app's, its style's and
 the global ones, and the most specific wins.
@@ -15,6 +16,7 @@ import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
+from difflib import SequenceMatcher
 
 SCOPES = ("app", "style", "global")
 MAX_ENTRIES = 1000
@@ -27,6 +29,15 @@ PROMPT_TOKENS = 64
 _WORD = re.compile(r"\w+(?:['\u2019-]\w+)*", re.UNICODE)
 # Between the words of a phrase: Whisper writes "voice box" and "voice-box".
 _BETWEEN = r"[\s-]+"
+# Spellings that sound the same, for matching what Whisper heard to a term.
+_SOUNDS = (("ph", "f"), ("ck", "k"), ("q", "k"), ("c", "k"), ("z", "s"), ("y", "i"))
+# How close one uncommon word must be to a term's letters to be that term
+# misheard ("Kubernetis"): one letter in six may differ, so a five-letter
+# name ("Helga") is not another ("Herga"). Below the shortest term that
+# counts, only a word that sounds the same does ("Sagar" for "Saggar").
+_HEARD_RATIO = 0.82
+_HEARD_MIN = 5
+_MEMO = 4096
 
 
 class DuplicateEntryError(ValueError):
@@ -85,6 +96,126 @@ def _normal(text: str) -> str:
     return " ".join(re.split(_BETWEEN, text.strip())).casefold()
 
 
+def _sound(text: str) -> str:
+    """``text``'s letters as they sound: no spaces or marks, one of each doubled letter.
+
+    Digits are kept as they are: "7" and "77" are different words.
+    """
+    key = re.sub(r"[\W_]+", "", text.casefold())
+    for spelled, sounds in _SOUNDS:
+        key = key.replace(spelled, sounds)
+    return re.sub(r"([^\W\d_])\1+", r"\1", key)
+
+
+@dataclass
+class _Heard:
+    """The terms a transcript may have heard wrong, keyed by how they sound."""
+
+    by_sound: dict[str, str]
+    # Every term as written, lowercased: a word that is one is already right.
+    exact: frozenset[str]
+    # Terms long enough to match approximately, by first sound.
+    by_start: dict[str, list[tuple[str, str]]]
+    lengths: frozenset[int]
+    words: int
+    common: Callable[[str], bool]
+    sounds: dict[str, str] = field(default_factory=dict)
+    single: dict[str, str | None] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, terms: Iterable[str], common: Callable[[str], bool]) -> "_Heard | None":
+        by_sound: dict[str, str] = {}
+        by_start: dict[str, list[tuple[str, str]]] = {}
+        terms = list(terms)
+        words = 0
+        for term in terms:
+            key = _sound(term)
+            if not key or key in by_sound:
+                continue
+            by_sound[key] = term
+            words = max(words, len(_WORD.findall(term)))
+            if len(key) >= _HEARD_MIN:
+                by_start.setdefault(key[0], []).append((key, term))
+        if not by_sound:
+            return None
+        exact = frozenset(_normal(term) for term in terms)
+        # Whisper splits a word it doesn't know: "cuber netes".
+        return cls(by_sound, exact, by_start, frozenset(len(key) for key in by_sound), words + 1, common)
+
+    def sound(self, word: str) -> str:
+        if (key := self.sounds.get(word)) is None:
+            if len(self.sounds) >= _MEMO:
+                self.sounds.clear()
+            key = self.sounds[word] = _sound(word)
+        return key
+
+    def one(self, word: str) -> str | None:
+        """The term one word is, heard wrong; never a common word, which the user likely said."""
+        if word in self.single:
+            return self.single[word]
+        found = None
+        key = self.sound(word)
+        if key and word.casefold() not in self.exact and not self.common(word):
+            found = self.by_sound.get(key)
+            if found is None and len(key) >= _HEARD_MIN - 1:
+                # The closest; the first, most specific, of equally close ones.
+                best = _HEARD_RATIO
+                for term_key, term in self.by_start.get(key[0], ()):
+                    matcher = SequenceMatcher(None, key, term_key, autojunk=False)
+                    if (
+                        matcher.real_quick_ratio() >= best
+                        and (ratio := matcher.ratio()) >= best
+                        and (found is None or ratio > best)
+                    ):
+                        found, best = term, ratio
+        if len(self.single) >= _MEMO:
+            self.single.clear()
+        self.single[word] = found
+        return found
+
+    def fix(self, text: str) -> str:
+        found = list(_WORD.finditer(text))
+        parts: list[str] = []
+        last = i = 0
+        while i < len(found):
+            term, width = self.at(text, found, i)
+            if term is not None:
+                start, end = found[i].start(), found[i + width - 1].end()
+                parts += [text[last:start], term]
+                last, i = end, i + width
+            else:
+                i += 1
+        return "".join([*parts, text[last:]]) if parts else text
+
+    def at(self, text: str, found: list[re.Match], i: int) -> tuple[str | None, int]:
+        """The term the words from ``found[i]`` are, longest first, and how many words."""
+        key = ""
+        joined: list[tuple[str, int]] = []
+        for n in range(min(self.words, len(found) - i)):
+            word = found[i + n]
+            # Words of one phrase: only spaces between, and no "tail's scale".
+            if n and text[found[i + n - 1].end() : word.start()].strip(" "):
+                break
+            if "'" in word.group() or "\u2019" in word.group():
+                break
+            part = self.sound(word.group())
+            key += part[1:] if key and part and key[-1] == part[0] and part[0].isalpha() else part
+            joined.append((key, n + 1))
+        for key, width in reversed(joined):
+            if width == 1:
+                word = found[i].group()
+                term = self.one(word)
+                if term is not None and word != term:
+                    return term, 1
+            elif (
+                len(key) in self.lengths
+                and (term := self.by_sound.get(key)) is not None
+                and _normal(text[found[i].start() : found[i + width - 1].end()]) not in self.exact
+            ):
+                return term, width
+        return None, 0
+
+
 @dataclass
 class Dictionary:
     """One app's merged dictionary, as dictation uses it."""
@@ -115,22 +246,30 @@ class Dictionary:
                 _bounded(_phrase(spoken) for spoken in self.replacements),
                 _bounded(_phrase(term) for term in recased.values()),
                 recased,
+                # Every term: only the heard word must not be a common one.
+                _Heard.of(self.spellings.values(), _common_word),
             )
         return self._compiled
 
     def apply(self, text: str) -> str:
-        """Replacements, then terms written with their own capitals.
+        """Replacements, then terms written the user's way.
 
+        A term is fixed where Whisper wrote it in other capitals, and where
+        it heard it a little wrong: an uncommon word spelled or sounding
+        close ("Kubernetis"), or the term split into words ("cuber netes").
         A term that is a common word ("Mark", "Slack") keeps whatever case
         the text gave it: it may be the word ("mark this") and not the name.
+        A common word is never taken for a term.
         """
         if not text or not (self.replacements or self.spellings):
             return text
-        replace, recase, recased = self._patterns()
+        replace, recase, recased, heard = self._patterns()
         if replace is not None:
             text = replace.sub(lambda m: self.replacements.get(_normal(m.group()), m.group()), text)
         if recase is not None:
             text = recase.sub(lambda m: recased.get(_normal(m.group()), m.group()), text)
+        if heard is not None:
+            text = heard.fix(text)
         return text
 
 
@@ -179,7 +318,14 @@ def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
         spellings[_normal(written)] = written
         terms.append(written)
     names = frozenset(word for term in terms for word in _WORD.findall(term) if word[:1].isupper())
-    span = max(len(re.split(_BETWEEN, text)) for text in [*replacements, *spellings])
+    # A term may be heard as one word more than it has ("cuber netes").
+    span = max(
+        [
+            *(len(re.split(_BETWEEN, text)) for text in replacements),
+            *(len(re.split(_BETWEEN, text)) + 1 for text in spellings),
+        ],
+        default=0,
+    )
     return Dictionary(tuple(terms), names, replacements, spellings, span)
 
 

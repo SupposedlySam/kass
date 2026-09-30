@@ -102,6 +102,56 @@ def test_terms_get_their_own_capitals_unless_they_are_common_words():
     assert "Mark" in found.names
 
 
+def test_terms_are_fixed_where_whisper_heard_them_a_little_wrong():
+    found = merged(
+        entry("global", "Kubernetes"),
+        entry("global", "Saggar"),
+        entry("global", "Tailscale"),
+        entry("global", "Anthropic"),
+    )
+
+    # Spelled close, or sounding the same.
+    assert found.apply("Deploy it on Kubernetis.") == "Deploy it on Kubernetes."
+    assert found.apply("Ask Sagar about the Anthropik docs.") == "Ask Saggar about the Anthropic docs."
+    # Split into words Whisper knows.
+    assert found.apply("Open cuber netes and tail scale.") == "Open Kubernetes and Tailscale."
+    assert found.apply("Open cuber-netes.") == "Open Kubernetes."
+
+
+def test_heard_terms_never_take_common_words_or_cross_punctuation():
+    found = merged(entry("global", "Voxbox"), entry("global", "Tailscale"), entry("global", "Mark"))
+
+    # "box" is a common word: the user said it.
+    assert found.apply("a box") == "a box"
+    # Not one phrase: a sentence ends, or a possessive.
+    assert found.apply("the tail. Scale it") == "the tail. Scale it"
+    assert found.apply("the tail's scale") == "the tail's scale"
+    # A term that is a common word is only ever recased where it is exact.
+    assert found.apply("mack this") == "mack this"
+
+
+def test_a_term_that_is_a_common_word_is_still_fixed_where_misheard():
+    found = merged(entry("global", "Slack"))
+
+    # "slack" is the word; "Slak" can only be the term.
+    assert found.apply("some slack in Slak") == "some slack in Slack"
+
+
+def test_short_names_need_to_sound_the_same():
+    found = merged(entry("global", "Herga"), entry("global", "Morgan"))
+
+    assert found.apply("Helga met Morgen") == "Helga met Morgan"
+    assert found.apply("Herrga") == "Herga"
+
+
+def test_a_term_heard_like_another_term_stays_itself():
+    found = merged(entry("global", "Saggar", minutes=1), entry("global", "Sagar"))
+
+    assert found.apply("Sagar and Saggar") == "Sagar and Saggar"
+    # A near miss goes to the closest, most specific term.
+    assert found.apply("Saggarr") == "Saggar"
+
+
 def test_an_empty_dictionary_leaves_text_alone():
     assert dictionary.EMPTY.apply("anything at all") == "anything at all"
     assert merged().terms == ()
@@ -123,6 +173,8 @@ def test_terms_fill_the_prompt_budget_in_order():
 def test_span_covers_the_longest_match():
     found = merged(entry("global", "Voicebox app", "the voice box app"), entry("global", "Visual Studio Code"))
     assert found.span == 4
+    # A term may be heard as one word more than it has.
+    assert merged(entry("global", "Kubernetes")).span == 2
 
 
 def test_a_large_dictionary_stays_under_five_milliseconds():
@@ -140,6 +192,7 @@ def test_a_large_dictionary_stays_under_five_milliseconds():
 
     assert statistics.median(timings) <= 5
     assert "Term42x" in found.apply("spoken phrase 42")
+    assert "Product7q" in found.apply("prodduct 7q")
 
 
 # -- storage and API -----------------------------------------------------------

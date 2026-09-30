@@ -7,7 +7,7 @@ Whisper has never heard your coworker's name or your product's code name. The di
 
 ## Two kinds of entries
 
-- **Terms.** Just type the word the way it should be spelled, like `Kubernetes`, `Anaïs` or `mrgnhnt`. Leave **When I say** empty. Herga gives these to Whisper as hints, so it recognizes them in the first place.
+- **Terms.** Just type the word the way it should be spelled, like `Kubernetes`, `Anaïs` or `mrgnhnt`. Leave **When I say** empty. Herga gives these to Whisper as hints, so it recognizes them in the first place. When Whisper still gets one a little wrong, like `Kubernetis` or `cuber netes`, Herga spells it your way after cleanup. It never changes an everyday word you actually said.
 - **Replacements.** Fill in **When I say** and **Write**. When you say "my email", Herga can write your email address. Use this for spoken shortcuts and for words Whisper keeps getting wrong in the same way.
 
 Whisper can only take so many hints at once. Terms that don't fit are still fixed after cleanup.

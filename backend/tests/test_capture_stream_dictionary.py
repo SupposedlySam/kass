@@ -71,8 +71,9 @@ async def test_without_an_app_only_the_global_entries_apply(tmp_path, monkeypatc
 def test_provisional_text_holds_back_a_dictionary_match(tmp_path, monkeypatch, database):
     monkeypatch.setattr(capture_stream, "_has_corrections", lambda: False)
     session, _ = make_session(tmp_path, monkeypatch)
-    # The global term "Kubernetes": one word, and the word after it.
-    assert session.holdback(1) == 2
+    # The global term "Kubernetes", which may be heard as two words ("cuber
+    # netes"), and the word after them.
+    assert session.holdback(1) == 3
     session.set_app(ZED, "Zed")
     # "voice box" is two words, and the one after decides the match.
     assert session.holdback(1) == 3

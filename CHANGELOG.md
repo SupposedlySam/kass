@@ -2,6 +2,12 @@
 
 Notable changes to Herga for users. Each release gets a section here, newest first. The website shows this file at [herga.mrgnhnt.com/changelog](https://herga.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### Fixed
+
+- **Dictionary words are spelled right from the start.** A word in your dictionary used to be fixed only where Whisper already heard it right, so a misheard one stayed wrong until you'd corrected it. Now Herga also fixes near misses like `Kubernetis` or `cuber netes`, and leaves everyday words you actually said alone.
+
 ## 0.6.1 — September 30, 2026
 
 ### Improved
