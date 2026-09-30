@@ -146,13 +146,7 @@ To install [just](https://github.com/casey/just), run `brew install just`. Run `
 Download the latest DMG from [Releases](https://github.com/mrgnhnt96/herga/releases/latest), or read the docs at [herga.mrgnhnt.com](https://herga.mrgnhnt.com/docs/). To build and install from this checkout instead:
 
 ```bash
-./scripts/install.sh
-```
-
-On a Mac without a checkout yet, this clones one into `~/herga` first:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/herga/main/scripts/install.sh)
+./scripts/install.sh   # or: just install
 ```
 
 The script checks for everything the build needs and prints the command to install anything missing. It then pulls the latest code, builds the server (only when the backend changed) and the app, and replaces `/Applications/Herga.app`. Run it again to update.
