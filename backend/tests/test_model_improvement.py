@@ -344,6 +344,14 @@ async def test_adapter_switches_are_serialized_and_general_generation_returns_to
     assert loaded == ["/adapter-one", "/adapter-two", None]
 
 
+def plenty_of_memory(monkeypatch):
+    """Let training start on machines with less free memory than it asks for, such as CI."""
+    import psutil
+
+    memory = psutil.virtual_memory()
+    monkeypatch.setattr(psutil, "virtual_memory", lambda: memory._replace(available=16 * 1024**3))
+
+
 def test_supervisor_runs_isolated_worker_and_promotes_only_complete_results(storage, monkeypatch):
     import sys
 
@@ -352,6 +360,7 @@ def test_supervisor_runs_isolated_worker_and_promotes_only_complete_results(stor
     monkeypatch.setattr(manager, "_prepare", lambda: (manager_plan, "supervised", True))
     monkeypatch.setattr(manager.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(manager.platform, "machine", lambda: "arm64")
+    plenty_of_memory(monkeypatch)
 
     def command(plan_path):
         script = """import json,sys
@@ -388,6 +397,7 @@ def test_real_child_is_killed_on_recording_and_never_promoted(storage, monkeypat
     monkeypatch.setattr(manager, "_prepare", lambda: (manager_plan, "interrupted", True))
     monkeypatch.setattr(manager.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(manager.platform, "machine", lambda: "arm64")
+    plenty_of_memory(monkeypatch)
     monkeypatch.setattr(manager, "_command", lambda _: [sys.executable, "-c", "import time; time.sleep(60)"])
     manager.start()
     deadline = time.monotonic() + 5
