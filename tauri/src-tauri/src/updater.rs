@@ -6,19 +6,39 @@
 //! Releases publish `latest.json` next to a signed `.app.tar.gz`
 //! (.github/workflows/release.yml); the plugin checks the signature against
 //! the public key in tauri.conf.json.
+//!
+//! Stable copies read the newest public release's `latest.json` (the
+//! endpoint in tauri.conf.json). Copies on the beta channel read
+//! `beta.json` on the `channels` release instead, which always names the
+//! newest release, beta or not, so beta users also get stable releases
+//! once they're newer.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use serde::Serialize;
-use tauri::{command, AppHandle, Emitter, Manager, Runtime, State};
+use serde::{Deserialize, Serialize};
+use tauri::{command, AppHandle, Emitter, Manager, Runtime, State, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
+use tokio::sync::Notify;
 
 /// After launch, so the first check doesn't compete with starting up.
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATUS_EVENT: &str = "update:status";
+const BETA_ENDPOINT: &str = "https://github.com/mrgnhnt96/herga/releases/download/channels/beta.json";
+/// Present (containing `beta`) while this copy is on the beta channel.
+const CHANNEL_FILE: &str = "update-channel";
+
+/// Which releases this copy updates to.
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Channel {
+    /// Public releases only.
+    Stable,
+    /// `-beta` releases too, as soon as they're tagged.
+    Beta,
+}
 
 #[derive(Clone, Serialize, PartialEq, Eq, Debug)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -38,6 +58,8 @@ struct Pending {
 pub struct UpdaterState {
     status: Mutex<UpdateStatus>,
     pending: Mutex<Option<Pending>>,
+    /// Checks right away instead of waiting out the interval.
+    wake: Notify,
 }
 
 impl Default for UpdaterState {
@@ -45,7 +67,24 @@ impl Default for UpdaterState {
         Self {
             status: Mutex::new(UpdateStatus::Current),
             pending: Mutex::new(None),
+            wake: Notify::new(),
         }
+    }
+}
+
+fn channel_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join(CHANNEL_FILE))
+}
+
+fn channel<R: Runtime>(app: &AppHandle<R>) -> Channel {
+    let beta = channel_path(app)
+        .and_then(|path| std::fs::read_to_string(path).map_err(|e| e.to_string()))
+        .is_ok_and(|text| text.trim() == "beta");
+    if beta {
+        Channel::Beta
+    } else {
+        Channel::Stable
     }
 }
 
@@ -72,13 +111,25 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
                     set_status(&app, UpdateStatus::Current);
                 }
             }
-            tokio::time::sleep(CHECK_INTERVAL).await;
+            let state = app.state::<UpdaterState>();
+            tokio::select! {
+                _ = tokio::time::sleep(CHECK_INTERVAL) => {}
+                _ = state.wake.notified() => {}
+            }
         }
     });
 }
 
 async fn check_and_download<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let updater = app.updater().map_err(|e| e.to_string())?;
+    let checked_channel = channel(app);
+    let updater = match checked_channel {
+        Channel::Stable => app.updater(),
+        Channel::Beta => app
+            .updater_builder()
+            .endpoints(vec![Url::parse(BETA_ENDPOINT).expect("valid beta endpoint")])
+            .and_then(|builder| builder.build()),
+    }
+    .map_err(|e| e.to_string())?;
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
         return Ok(());
     };
@@ -101,6 +152,15 @@ async fn check_and_download<R: Runtime>(app: &AppHandle<R>) -> Result<(), String
     let path = dir.join("update.app.tar.gz");
     std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
     drop(bytes);
+    // The user switched channels while this downloaded; the next check
+    // (woken by the switch) finds what the new channel offers. Any earlier
+    // download went to the same file, so it's gone too.
+    if channel(app) != checked_channel {
+        let _ = std::fs::remove_file(&path);
+        *app.state::<UpdaterState>().pending.lock().unwrap() = None;
+        set_status(app, UpdateStatus::Current);
+        return Ok(());
+    }
     *app.state::<UpdaterState>().pending.lock().unwrap() = Some(Pending { update, path });
     set_status(app, UpdateStatus::Ready { version });
     Ok(())
@@ -116,6 +176,47 @@ pub fn install_pending<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
     let installed = pending.update.install(bytes).map_err(|e| e.to_string());
     let _ = std::fs::remove_file(&pending.path);
     installed.map(|_| true)
+}
+
+/// Drop a downloaded beta, so leaving the beta channel doesn't install one.
+fn discard_pending_beta<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<UpdaterState>();
+    let mut pending = state.pending.lock().unwrap();
+    if pending.as_ref().is_some_and(|p| p.update.version.contains('-')) {
+        if let Some(p) = pending.take() {
+            let _ = std::fs::remove_file(&p.path);
+        }
+        drop(pending);
+        set_status(app, UpdateStatus::Current);
+    }
+}
+
+#[command]
+pub fn update_channel(app: AppHandle) -> Channel {
+    channel(&app)
+}
+
+/// Switch channels and check again right away. Leaving beta keeps the
+/// beta that's installed; Herga moves on once a public release is newer.
+#[command]
+pub fn set_update_channel(app: AppHandle, channel: Channel) -> Result<Channel, String> {
+    let path = channel_path(&app)?;
+    match channel {
+        Channel::Beta => {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&path, "beta").map_err(|e| e.to_string())?;
+        }
+        Channel::Stable => {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+            discard_pending_beta(&app);
+        }
+    }
+    app.state::<UpdaterState>().wake.notify_one();
+    Ok(channel)
 }
 
 #[command]

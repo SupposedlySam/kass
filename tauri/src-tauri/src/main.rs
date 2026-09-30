@@ -1550,6 +1550,8 @@ pub fn run() {
             login_item::open_login_items_settings,
             deep_link::take_deep_link,
             updater::update_status,
+            updater::update_channel,
+            updater::set_update_channel,
             updater::restart_to_update
         ])
         .on_window_event({

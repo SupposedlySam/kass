@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn';
 import { serverStats } from '@/lib/utils/serverStats';
 import { usePlatform } from '@/platform/PlatformContext';
 import { SERVER_URL } from '@/stores/serverStore';
+import { BetaUpdatesRow } from './BetaUpdatesRow';
 import { HistoryRetentionRow } from './HistoryRetentionRow';
 import { LaunchAtLoginRow } from './LaunchAtLoginRow';
 import { SettingRow, SettingSection } from './SettingRow';
@@ -26,6 +27,8 @@ export function GeneralPage() {
     <>
       <SettingSection title={t('settings.general.sectionApp')}>
         <VersionRow />
+
+        {platform.metadata.isTauri && <BetaUpdatesRow />}
 
         <SettingRow
           title={t('settings.general.server.title')}

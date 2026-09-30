@@ -4,6 +4,10 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 
 ## Unreleased
 
+### New
+
+- **Try new features early with beta updates.** Turn on **Beta updates** in Settings › General to get new features before they're public. Turn it off to go back to public releases; you stay on your beta until the next public one is newer.
+
 ### Fixed
 
 - **⌘H keeps Herga out of the way.** Dictating after hiding Herga with ⌘H used to bring its window back along with the pill. Now only the pill shows, and the window returns when you click Herga in the Dock or ⌘Tab to it.
