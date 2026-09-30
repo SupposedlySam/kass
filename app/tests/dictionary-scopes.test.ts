@@ -4,6 +4,7 @@ import {
   EVERYWHERE,
   entriesIn,
   entryAge,
+  entryNote,
   entryPlaceKeys,
   inheritedForApp,
   inheritedForStyle,
@@ -37,7 +38,7 @@ function entry(
   created_at = '2026-09-28T10:00:00',
   spoken: string | null = null,
 ): DictionaryEntry {
-  return { id: written, written, spoken, places, created_at };
+  return { id: written, written, spoken, places, created_at, match_sound: true, source: 'user' };
 }
 
 function resolved(
@@ -53,6 +54,7 @@ function resolved(
     scope_id,
     app_name: null,
     created_at: '2026-09-28T10:00:00',
+    match_sound: true,
     overridden: false,
   };
 }
@@ -267,5 +269,16 @@ describe('entry age', () => {
     expect(age.unit === 'date' && age.sameYear).toBe(true);
     const old = entryAge('2025-09-01T12:00:00Z', now);
     expect(old.unit === 'date' && old.sameYear).toBe(false);
+  });
+});
+
+describe('entry note', () => {
+  test('a word added by a spoken fix says so, and one fixed only as spelled says that', () => {
+    const word = entry('Meghan');
+    expect(entryNote(word)).toBeNull();
+    expect(entryNote({ ...word, match_sound: false })).toBe('exact');
+    expect(entryNote({ ...word, match_sound: false, source: 'spoken_fix' })).toBe('spokenFix');
+    // Inherited rows carry no flags.
+    expect(entryNote({})).toBeNull();
   });
 });

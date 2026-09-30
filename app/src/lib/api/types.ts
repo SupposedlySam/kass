@@ -130,7 +130,13 @@ export interface DictionaryEntry {
   spoken: string | null;
   places: DictionaryPlace[];
   created_at: string;
+  /** Off: only fixed where spelled exactly, never swapped in for a word that sounds like it. */
+  match_sound: boolean;
+  source: DictionarySource;
 }
+
+/** Who added an entry: the user, or a word they spelled aloud to fix it. Editing makes it the user's. */
+export type DictionarySource = 'user' | 'spoken_fix';
 
 export interface DictionaryListResponse {
   /** Newest first. */
@@ -142,12 +148,14 @@ export interface DictionaryEntryCreate {
   spoken?: string | null;
   /** At least one; with `global`, the server keeps only that. */
   places: DictionaryPlaceInput[];
+  match_sound?: boolean;
 }
 
 export interface DictionaryEntryUpdate {
   written?: string;
   spoken?: string | null;
   places?: DictionaryPlaceInput[];
+  match_sound?: boolean;
 }
 
 /** One place of an entry that applies in an app; `overridden` when a more specific entry wins. */
@@ -159,6 +167,7 @@ export interface ResolvedDictionaryEntry {
   scope_id: string | null;
   app_name: string | null;
   created_at: string;
+  match_sound: boolean;
   overridden: boolean;
 }
 

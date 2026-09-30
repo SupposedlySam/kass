@@ -3,7 +3,9 @@
 An entry is a term ("Kubernetes"), which Whisper is prompted with and which
 is written the user's way after cleanup, even where Whisper heard it a little
 wrong ("Kubernetis", "cuber netes"), or a replacement, which writes ``written``
-wherever ``spoken`` was said. Entries belong to every app ("global"), to a
+wherever ``spoken`` was said. An entry with ``match_sound`` off is only
+prompted and recased where it is spelled exactly: a name spelled aloud to fix
+it ("Meghan") never respells another that sounds like it ("Megan"). Entries belong to every app ("global"), to a
 writing style, or to one app; a dictation merges its app's, its style's and
 the global ones, and the most specific wins.
 
@@ -11,6 +13,7 @@ Dictation never reads the database: entries are read once per change, and
 each app's merged dictionary is kept until the next one.
 """
 
+import logging
 import re
 import threading
 from collections.abc import Callable, Iterable
@@ -18,7 +21,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
 
+logger = logging.getLogger(__name__)
+
 SCOPES = ("app", "style", "global")
+# Who added an entry: the user, or a word spelled aloud to fix it.
+SOURCES = ("user", "spoken_fix")
 MAX_ENTRIES = 1000
 MAX_LENGTH = 200
 # Whisper keeps the last 223 tokens of its prompt; terms take at most this
@@ -55,6 +62,8 @@ class Entry:
     created_at: datetime | None
     # The entry this row is one place of (its own id when it applies in one).
     group_id: str | None = None
+    # Off: never swapped in for a word that only sounds like it.
+    match_sound: bool = True
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,8 @@ class Group:
     spoken: str | None
     places: tuple[Place, ...]
     created_at: datetime | None
+    match_sound: bool = True
+    source: str = "user"
 
 
 def _key(written: str, spoken: str | None) -> str:
@@ -123,7 +134,8 @@ class _Heard:
     single: dict[str, str | None] = field(default_factory=dict)
 
     @classmethod
-    def of(cls, terms: Iterable[str], common: Callable[[str], bool]) -> "_Heard | None":
+    def of(cls, terms: Iterable[str], common: Callable[[str], bool], exact: Iterable[str] = ()) -> "_Heard | None":
+        """``exact``: more terms, only ever kept as they are, never matched to."""
         by_sound: dict[str, str] = {}
         by_start: dict[str, list[tuple[str, str]]] = {}
         terms = list(terms)
@@ -138,7 +150,7 @@ class _Heard:
                 by_start.setdefault(key[0], []).append((key, term))
         if not by_sound:
             return None
-        exact = frozenset(_normal(term) for term in terms)
+        exact = frozenset(_normal(term) for term in (*terms, *exact))
         # Whisper splits a word it doesn't know: "cuber netes".
         return cls(by_sound, exact, by_start, frozenset(len(key) for key in by_sound), words + 1, common)
 
@@ -227,6 +239,8 @@ class Dictionary:
     replacements: dict[str, str] = field(default_factory=dict)
     # Terms whose case is fixed after cleanup, by lowercased form.
     spellings: dict[str, str] = field(default_factory=dict)
+    # Of those, the ones never matched by sound, by lowercased form.
+    exact: frozenset[str] = frozenset()
     # The most words a match covers, which provisional text holds back.
     span: int = 0
     _compiled: tuple | None = field(default=None, repr=False)
@@ -247,7 +261,11 @@ class Dictionary:
                 _bounded(_phrase(term) for term in recased.values()),
                 recased,
                 # Every term: only the heard word must not be a common one.
-                _Heard.of(self.spellings.values(), _common_word),
+                _Heard.of(
+                    (term for key, term in self.spellings.items() if key not in self.exact),
+                    _common_word,
+                    (self.spellings[key] for key in self.exact),
+                ),
             )
         return self._compiled
 
@@ -259,7 +277,8 @@ class Dictionary:
         close ("Kubernetis"), or the term split into words ("cuber netes").
         A term that is a common word ("Mark", "Slack") keeps whatever case
         the text gave it: it may be the word ("mark this") and not the name.
-        A common word is never taken for a term.
+        A common word is never taken for a term, and a term with
+        ``match_sound`` off is only ever recased, never matched by sound.
         """
         if not text or not (self.replacements or self.spellings):
             return text
@@ -305,6 +324,7 @@ def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
         return EMPTY
     terms: list[str] = []
     spellings: dict[str, str] = {}
+    exact: set[str] = set()
     replacements: dict[str, str] = {}
     for entry in active:
         if entry.spoken:
@@ -316,6 +336,9 @@ def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
         if _normal(written) in spellings:
             continue
         spellings[_normal(written)] = written
+        # The most specific entry that writes it decides.
+        if not entry.match_sound:
+            exact.add(_normal(written))
         terms.append(written)
     names = frozenset(word for term in terms for word in _WORD.findall(term) if word[:1].isupper())
     # A term may be heard as one word more than it has ("cuber netes").
@@ -326,7 +349,7 @@ def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
         ],
         default=0,
     )
-    return Dictionary(tuple(terms), names, replacements, spellings, span)
+    return Dictionary(tuple(terms), names, replacements, spellings, frozenset(exact), span)
 
 
 def fit_terms(
@@ -373,6 +396,7 @@ def _entry(row) -> Entry:
         spoken=row.spoken,
         created_at=row.created_at,
         group_id=row.group_id or row.id,
+        match_sound=row.match_sound is not False,
     )
 
 
@@ -527,10 +551,21 @@ def _group(rows) -> Group:
         spoken=first.spoken,
         places=tuple(Place(row.scope, row.scope_id or None, row.app_name) for row in rows),
         created_at=min((row.created_at for row in rows if row.created_at), default=None),
+        match_sound=first.match_sound is not False,
+        source=first.source or "user",
     )
 
 
-def _row(group_id: str, place: Place, written: str, spoken: str | None, key: str, created_at=None):
+def _row(
+    group_id: str,
+    place: Place,
+    written: str,
+    spoken: str | None,
+    key: str,
+    created_at=None,
+    match_sound: bool = True,
+    source: str | None = None,
+):
     from ..database.models import DictionaryEntry
 
     return DictionaryEntry(
@@ -541,6 +576,8 @@ def _row(group_id: str, place: Place, written: str, spoken: str | None, key: str
         spoken=spoken,
         key=key,
         group_id=group_id,
+        match_sound=match_sound,
+        source=source,
         created_at=created_at or datetime.utcnow(),
     )
 
@@ -557,7 +594,7 @@ def list_groups(db) -> list[Group]:
     return groups
 
 
-def add_group(db, written: str, spoken: str | None, places) -> Group:
+def add_group(db, written: str, spoken: str | None, places, match_sound: bool = True, source: str = "user") -> Group:
     import uuid
 
     written, spoken, places = _clean(written, "What to write"), _clean_spoken(spoken), _places(places)
@@ -566,16 +603,21 @@ def add_group(db, written: str, spoken: str | None, places) -> Group:
     key = _key(written, spoken)
     for place in places:
         _check_unique(db, place, key)
+    if source not in SOURCES:
+        raise ValueError("Unknown dictionary source")
     group_id, now = str(uuid.uuid4()), datetime.utcnow()
     for place in places:
-        db.add(_row(group_id, place, written, spoken, key, now))
+        db.add(
+            _row(group_id, place, written, spoken, key, now, bool(match_sound), None if source == "user" else source)
+        )
     db.commit()
     invalidate()
     return _group(_rows(db, group_id))
 
 
 def update_group(db, group_id: str, patch: dict) -> Group | None:
-    """Change an entry's words everywhere it applies, and where it applies."""
+    """Change an entry's words everywhere it applies, where it applies, and
+    whether it matches by sound. An entry the user edits is theirs from then on."""
     rows = _rows(db, group_id)
     if not rows:
         return None
@@ -583,6 +625,7 @@ def update_group(db, group_id: str, patch: dict) -> Group | None:
     written = _clean(patch["written"], "What to write") if patch.get("written") is not None else current.written
     spoken = _clean_spoken(patch["spoken"]) if "spoken" in patch else current.spoken
     places = _places(patch["places"]) if patch.get("places") is not None else list(current.places)
+    match_sound = bool(patch["match_sound"]) if patch.get("match_sound") is not None else current.match_sound
     key = _key(written, spoken)
     for place in places:
         _check_unique(db, place, key, group_id)
@@ -593,9 +636,10 @@ def update_group(db, group_id: str, patch: dict) -> Group | None:
             db.delete(row)
             continue
         row.written, row.spoken, row.key, row.group_id = written, spoken, key, group_id
+        row.match_sound, row.source = match_sound, None
         row.app_name = place.app_name or row.app_name
     for place in wanted.values():
-        db.add(_row(group_id, place, written, spoken, key, current.created_at))
+        db.add(_row(group_id, place, written, spoken, key, current.created_at, match_sound))
     db.commit()
     invalidate()
     return _group(_rows(db, group_id))
@@ -639,3 +683,66 @@ def move_style(db, style_id: str, to_style_id: str) -> None:
             taken.add(row.key)
     db.commit()
     invalidate()
+
+
+# -- words spelled aloud to fix them -----------------------------------------------
+
+
+def spelled_word(letters: str, heard: str | None = None) -> str:
+    """How to write a word spelled aloud, from its joined letters (``join_spelling``).
+
+    Whisper's case for spelled letters is arbitrary ("M-E-G-H-A-N", "m-r-g-n"),
+    so letters all in one case are written as a name ("Meghan"), unless the
+    word heard alongside them is the same letters in capitals of its own
+    ("NASA", "iPhone"). Letters in mixed case were spelled that way ("capital
+    C"), and a word with digits or marks ("mrgnhnt96") is left as spelled.
+    """
+    word = " ".join(letters.split()).rstrip(".,;:?!")
+    heard = " ".join((heard or "").split()).strip(".,;:?!\"'“”")
+    if heard and heard.casefold() == word.casefold() and heard != heard.lower():
+        return heard
+    if word.isalpha() and (word.isupper() or word.islower()):
+        return word[:1].upper() + word[1:].lower()
+    return word
+
+
+def add_spelled_word(letters: str, bundle_id: str | None = None, heard: str | None = None, db=None) -> Group | None:
+    """Keep a word the user spelled aloud to fix it, with no confirmation.
+
+    ``letters`` are the spelled letters as ``join_spelling`` joined them
+    ("MEGHAN"); ``heard`` is the word the fix was for, when known. The word is
+    added everywhere, since a name is the same name in every app, spelling
+    only: it is prompted to Whisper, recased where spelled exactly and counts
+    as a known name, but never replaces a word that sounds like it (a real
+    "Megan"). ``bundle_id`` is the app it was spelled in: nothing is added
+    when that app's dictionary already writes the word, and an entry the
+    user made is never changed. Returns the entry that now has the word, or
+    None when there's no word, the dictionary is full, or there's no database.
+    """
+    from ..database import session as database_session
+
+    if db is None:
+        if database_session.SessionLocal is None:
+            return None
+        with database_session.SessionLocal() as own:
+            return add_spelled_word(letters, bundle_id, heard, own)
+    from .styles import snapshot as styles_snapshot
+
+    try:
+        written = _clean(spelled_word(letters, heard), "What to write")
+    except ValueError:
+        return None
+    wanted = _normal(written)
+    style_id = styles_snapshot().for_app(bundle_id).id
+    for entry, overridden in resolve(list_entries(db), bundle_id, style_id):
+        if not overridden and _normal(entry.written) == wanted:
+            return _group(_rows(db, entry.group_id or entry.id))
+    try:
+        return add_group(db, written, None, [Place("global")], match_sound=False, source="spoken_fix")
+    except DuplicateEntryError:
+        # Everywhere already has an entry said this way that writes something
+        # else; it's the user's, so it stays.
+        return None
+    except ValueError:
+        logger.warning("Could not add the spelled word %r to the dictionary", written, exc_info=True)
+        return None

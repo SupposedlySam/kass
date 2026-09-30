@@ -106,8 +106,14 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
     # One entry can apply in several places (docs/plans/DICTIONARIES.md).
     if "dictionary_entries" not in tables:
         return
-    if "group_id" not in _get_columns(inspector, "dictionary_entries"):
+    columns = _get_columns(inspector, "dictionary_entries")
+    if "group_id" not in columns:
         _add_column(engine, "dictionary_entries", "group_id VARCHAR", "group_id")
+    # Existing entries keep matching by sound, as they always have.
+    if "match_sound" not in columns:
+        _add_column(engine, "dictionary_entries", "match_sound BOOLEAN NOT NULL DEFAULT 1", "match_sound")
+    if "source" not in columns:
+        _add_column(engine, "dictionary_entries", "source VARCHAR", "source")
 
 
 # Herga was Voicebox, with bundle id sh.voicebox.app and then, briefly,

@@ -12,6 +12,10 @@ Whisper has never heard your coworker's name or your product's code name. The di
 
 Whisper can only take so many hints at once. Terms that don't fit are still fixed after cleanup.
 
+## Only the exact spelling
+
+Fixing near misses is usually what you want, but not for names that have close cousins: a `Meghan` term would also turn a real `Megan` or `Meagan` into `Meghan`. To stop that, click the pencil on the entry and turn off **Also fix words that sound like it**. The word is still given to Whisper as a hint and still gets its capitals fixed, but words that only sound like it are left alone. The entry shows **exact spelling**.
+
 You can have up to 1,000 entries of up to 200 characters each.
 
 ## Where an entry applies
