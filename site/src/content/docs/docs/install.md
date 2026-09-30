@@ -43,7 +43,7 @@ Updates are signed with the same Developer ID, so Herga keeps its Microphone, Ac
 
 ## Coming from Voicebox
 
-Herga used to be called Voicebox. The first time Herga opens, it brings over your captures, writing styles, dictionary and settings. macOS sees Herga as a new app, so it asks for Microphone, Accessibility and Input Monitoring once more. After that you can move the old Voicebox.app to the Trash. If you install with the [install script](/docs/build-from-source/), it removes the old app for you.
+Herga used to be called Voicebox. The first time Herga opens, it brings over your captures, writing styles, dictionary and settings. macOS sees Herga as a new app, so it asks for Microphone, Accessibility and Input Monitoring once more. After that, move the old Voicebox.app to the Trash so it doesn't start at login and answer the same hotkey.
 
 ## Uninstalling
 

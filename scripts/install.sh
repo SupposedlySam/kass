@@ -1,25 +1,20 @@
 #!/bin/bash
-# Install or update Herga on this Mac.
+# Build Herga from this checkout and install it to /Applications.
 #
-#   ./scripts/install.sh                  from a checkout
-#   bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/herga/main/scripts/install.sh)
+#   ./scripts/install.sh
 #
-# Checks what the build needs and says how to install anything missing,
-# pulls the latest code, builds the server (only when it changed) and the
-# app, and replaces /Applications/Herga.app. It removes the Herga
-# Input input method that earlier versions installed. Every build is signed with the same identity, so updates keep the app's
-# privacy permissions.
+# For working on Herga. Everyone else installs the DMG from GitHub
+# Releases. Checks what the build needs and says how to install anything
+# missing, pulls the latest code, builds the server (only when it changed)
+# and the app, and replaces /Applications/Herga.app. Every build is signed
+# with the same identity, so updates keep the app's privacy permissions.
 #
 # Options:
 #   --no-pull          build the checkout as it is
 #   --rebuild-server   rebuild the Python server even if it hasn't changed
 #   --no-launch        don't open Herga afterwards
-#
-# Run from outside a checkout, it clones into $HERGA_DIR (default
-# ~/herga), on $HERGA_BRANCH (default the repo's default branch).
 set -euo pipefail
 
-repo_url="${HERGA_REPO:-https://github.com/mrgnhnt96/herga.git}"
 # Always /Applications: macOS privacy permissions (Input Monitoring,
 # Accessibility, Microphone) don't work reliably for an app anywhere else.
 app=/Applications/Herga.app
@@ -34,7 +29,7 @@ for arg in "$@"; do
   --rebuild-server) rebuild_server=1 ;;
   --no-launch) launch=0 ;;
   -h | --help)
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
   *)
@@ -61,33 +56,7 @@ die() {
 # shell may not have them on PATH yet.
 export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
 
-# ─── Find the checkout ────────────────────────────────────────────────
-
-script_dir=""
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-fi
-if [ -n "$script_dir" ] && [ -f "$script_dir/../tauri/src-tauri/tauri.conf.json" ]; then
-  root="$(cd "$script_dir/.." && pwd)"
-else
-  # Run from curl: get a checkout, then run its own copy of this script.
-  dir="${HERGA_DIR:-$HOME/herga}"
-  # Herga was Voicebox; keep using a checkout made under the old name.
-  if [ -z "${HERGA_DIR:-}" ] && [ ! -d "$dir/.git" ] && [ -d "$HOME/voicebox/.git" ]; then
-    dir="$HOME/voicebox"
-  fi
-  command -v git >/dev/null 2>&1 ||
-    die "git is missing. Install the Xcode Command Line Tools: xcode-select --install"
-  if [ ! -d "$dir/.git" ]; then
-    step "Cloning Herga into $dir"
-    if [ -n "${HERGA_BRANCH:-}" ]; then
-      git clone --branch "$HERGA_BRANCH" "$repo_url" "$dir"
-    else
-      git clone "$repo_url" "$dir"
-    fi
-  fi
-  exec "$dir/scripts/install.sh" "$@"
-fi
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
 # ─── Check what the build needs ───────────────────────────────────────
@@ -241,6 +210,9 @@ ditto "$built" "$app"
 codesign --verify --deep --strict "$app"
 ok "Installed"
 
+# TODO(2026-10-13): remove the Voicebox-era cleanup below (the ~/Applications
+# copy, Voicebox.app and the Voicebox Input input method). By then anyone
+# building from source has run this at least once since the rename to Herga.
 # Earlier versions could install to ~/Applications. Only the copy in
 # /Applications gets working permissions, so don't leave another one to
 # open by mistake.

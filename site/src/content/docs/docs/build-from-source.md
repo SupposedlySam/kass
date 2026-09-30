@@ -3,7 +3,7 @@ title: Build from source
 description: Build and install Herga yourself, and keep permissions across updates.
 ---
 
-Building Herga yourself gets you the newest code, and builds that keep their permissions across updates.
+Building Herga yourself is for working on it. To just use Herga, [download the DMG](/docs/install/).
 
 ## Requirements
 
@@ -12,13 +12,15 @@ Building Herga yourself gets you the newest code, and builds that keep their per
 - [Bun](https://bun.sh), [Rust](https://rustup.rs) and [Python 3.12](https://python.org)
 - The [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-## Install with one command
+## Build and install
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/herga/main/scripts/install.sh)
+git clone https://github.com/mrgnhnt96/herga.git
+cd herga
+./scripts/install.sh
 ```
 
-This clones Herga into `~/herga`, checks for everything the build needs and prints how to install anything missing. It then builds the app and installs it to `/Applications/Herga.app`. Run `./scripts/install.sh` from the checkout again to update.
+The script checks for everything the build needs and prints how to install anything missing. It then builds the app and installs it to `/Applications/Herga.app`. Run it again to pull the latest code and update. A first build needs about 15 GB of free space.
 
 Every build is signed with the same identity, so updates keep your Microphone, Accessibility and Input Monitoring permissions. That identity is your Apple Development certificate if you have one. Otherwise the first install creates a self-signed "Herga Local Signing" certificate, and macOS asks for your password once to trust it.
 
