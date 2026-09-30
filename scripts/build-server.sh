@@ -6,7 +6,7 @@ set -e
 # Determine platform
 PLATFORM=$(rustc --print host-tuple 2>/dev/null || echo "unknown")
 
-echo "Building Voicebox server sidecar for platform: $PLATFORM"
+echo "Building Herga server sidecar for platform: $PLATFORM"
 
 # Build Python binary
 # Resolve PATH to absolute paths before changing directory
@@ -23,15 +23,15 @@ fi
 mkdir -p ../tauri/src-tauri/binaries
 
 # The server is a PyInstaller folder (executable plus _internal/). Tauri copies
-# it into Voicebox.app/Contents/Resources (see bundle.macOS.files).
+# it into Herga.app/Contents/Resources (see bundle.macOS.files).
 python build_binary.py
-rm -rf ../tauri/src-tauri/binaries/voicebox-server ../tauri/src-tauri/binaries/voicebox-server-*
-if [ ! -x dist/voicebox-server/voicebox-server ]; then
-    echo "Error: dist/voicebox-server/voicebox-server not found"
+rm -rf ../tauri/src-tauri/binaries/herga-server ../tauri/src-tauri/binaries/herga-server-*
+if [ ! -x dist/herga-server/herga-server ]; then
+    echo "Error: dist/herga-server/herga-server not found"
     exit 1
 fi
 # ditto keeps the symlinks PyInstaller creates between bundled libraries.
-ditto dist/voicebox-server ../tauri/src-tauri/binaries/voicebox-server
-echo "Built voicebox-server for ${PLATFORM}"
+ditto dist/herga-server ../tauri/src-tauri/binaries/herga-server
+echo "Built herga-server for ${PLATFORM}"
 
 echo "Build complete!"

@@ -2,7 +2,7 @@
 //!
 //! macOS ties privacy grants (Microphone, Accessibility, Input Monitoring)
 //! to the app it recorded them for. Run from somewhere else — the build
-//! folder, Downloads, a disk image — Voicebox can be missing from the
+//! folder, Downloads, a disk image — Herga can be missing from the
 //! Privacy panes, or its switches are on but don't work. So the app asks to
 //! be moved when it isn't in `/Applications`, and can move itself.
 //!
@@ -23,7 +23,7 @@ use crate::focus_capture::{ns_string_to_rust, AutoreleasePool};
 type Id = *mut Object;
 
 pub const APPLICATIONS: &str = "/Applications";
-pub const INSTALLED_APP: &str = "/Applications/Voicebox.app";
+pub const INSTALLED_APP: &str = "/Applications/Herga.app";
 
 /// The `.app` bundle whose `Contents/MacOS/` holds `exe`, if any.
 fn bundle_of(exe: &Path) -> Option<&Path> {
@@ -54,7 +54,7 @@ pub struct AppLocation {
     pub needs_move: bool,
     /// Where the running bundle is.
     pub path: Option<String>,
-    /// Moving would put an existing `/Applications/Voicebox.app` in the Trash.
+    /// Moving would put an existing `/Applications/Herga.app` in the Trash.
     pub replaces_existing: bool,
 }
 
@@ -68,26 +68,26 @@ pub fn location() -> AppLocation {
     }
 }
 
-/// Copy the running bundle to `/Applications/Voicebox.app`, putting any app
+/// Copy the running bundle to `/Applications/Herga.app`, putting any app
 /// already there in the Trash, then put the old copy in the Trash too.
 /// Returns the new bundle's path; the caller relaunches from it.
 pub fn copy_into_applications() -> Result<PathBuf, String> {
-    let source = running_bundle().ok_or("Voicebox isn't running from an app bundle")?;
+    let source = running_bundle().ok_or("Herga isn't running from an app bundle")?;
     let dest = PathBuf::from(INSTALLED_APP);
     if source == dest {
-        return Err("Voicebox is already in Applications".into());
+        return Err("Herga is already in Applications".into());
     }
     if dest.exists() {
-        trash(&dest).map_err(|e| format!("Couldn't move the Voicebox in Applications to the Trash: {e}"))?;
+        trash(&dest).map_err(|e| format!("Couldn't move the Herga in Applications to the Trash: {e}"))?;
     }
     // ditto keeps the code signature and extended attributes intact.
     let status = Command::new("/usr/bin/ditto")
         .arg(&source)
         .arg(&dest)
         .status()
-        .map_err(|e| format!("Couldn't copy Voicebox into Applications: {e}"))?;
+        .map_err(|e| format!("Couldn't copy Herga into Applications: {e}"))?;
     if !status.success() {
-        return Err(format!("Couldn't copy Voicebox into Applications (ditto {status})"));
+        return Err(format!("Couldn't copy Herga into Applications (ditto {status})"));
     }
     // A copy on a disk image or in a read-only location stays where it is.
     if let Err(e) = trash(&source) {
@@ -140,27 +140,27 @@ mod tests {
     #[test]
     fn only_a_bundle_in_applications_counts() {
         let installed = |p: &str| is_installed_executable(Path::new(p));
-        assert!(installed("/Applications/Voicebox.app/Contents/MacOS/voicebox"));
-        assert!(!installed("/Users/me/Applications/Voicebox.app/Contents/MacOS/voicebox"));
-        assert!(!installed("/Users/me/Downloads/Voicebox.app/Contents/MacOS/voicebox"));
+        assert!(installed("/Applications/Herga.app/Contents/MacOS/herga"));
+        assert!(!installed("/Users/me/Applications/Herga.app/Contents/MacOS/herga"));
+        assert!(!installed("/Users/me/Downloads/Herga.app/Contents/MacOS/herga"));
         assert!(!installed(
-            "/Users/me/voicebox/tauri/src-tauri/target/release/bundle/macos/Voicebox.app/Contents/MacOS/voicebox"
+            "/Users/me/herga/tauri/src-tauri/target/release/bundle/macos/Herga.app/Contents/MacOS/herga"
         ));
-        assert!(!installed("/Users/me/voicebox/tauri/src-tauri/target/debug/voicebox"));
-        assert!(!installed("/Applications/Voicebox.app/Contents/Resources/voicebox"));
-        assert!(!installed("/Applications/Voicebox/Contents/MacOS/voicebox"));
-        assert!(!installed("/voicebox"));
+        assert!(!installed("/Users/me/herga/tauri/src-tauri/target/debug/herga"));
+        assert!(!installed("/Applications/Herga.app/Contents/Resources/herga"));
+        assert!(!installed("/Applications/Herga/Contents/MacOS/herga"));
+        assert!(!installed("/herga"));
     }
 
     #[test]
     fn a_dev_binary_has_no_bundle() {
         assert_eq!(
-            bundle_of(Path::new("/Users/me/voicebox/tauri/src-tauri/target/debug/voicebox")),
+            bundle_of(Path::new("/Users/me/herga/tauri/src-tauri/target/debug/herga")),
             None
         );
         assert_eq!(
-            bundle_of(Path::new("/Users/me/Downloads/Voicebox.app/Contents/MacOS/voicebox")),
-            Some(Path::new("/Users/me/Downloads/Voicebox.app"))
+            bundle_of(Path::new("/Users/me/Downloads/Herga.app/Contents/MacOS/herga")),
+            Some(Path::new("/Users/me/Downloads/Herga.app"))
         );
     }
 }

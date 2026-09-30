@@ -27,10 +27,10 @@ def build_server():
     which cost several seconds of app startup. The folder build runs in place.
     """
     if not is_apple_silicon():
-        raise SystemExit("voicebox-server builds on Apple Silicon (arm64 macOS) only.")
+        raise SystemExit("herga-server builds on Apple Silicon (arm64 macOS) only.")
 
     backend_dir = Path(__file__).parent
-    binary_name = "voicebox-server"
+    binary_name = "herga-server"
 
     args = [
         "server.py",  # Use server.py as entry point instead of main.py
@@ -145,7 +145,7 @@ def build_server():
     if sys.version_info >= (3, 13):
         args.extend(["--hidden-import", "audioop"])
 
-    # mlx_audio ships TTS/STS models that depend on torch. Voicebox never loads
+    # mlx_audio ships TTS/STS models that depend on torch. Herga never loads
     # them, so keep torch out even when the build venv still has it.
     for module in ("torch", "torchaudio", "torchvision"):
         args.extend(["--exclude-module", module])

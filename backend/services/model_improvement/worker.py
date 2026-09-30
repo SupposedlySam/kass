@@ -89,7 +89,7 @@ def train_adapter(plan, directory):
             "fine_tune_type": "lora",
             "num_layers": 4,
             "lora_parameters": parameters,
-            "voicebox_base_path": plan["model_path"],
+            "herga_base_path": plan["model_path"],
         },
     )
     steps = plan.get("iterations", min(200, max(40, len(training) * 2)))

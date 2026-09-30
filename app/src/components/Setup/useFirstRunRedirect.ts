@@ -5,11 +5,11 @@ import { apiClient } from '@/lib/api/client';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 
 /**
- * Set while setup is the open screen. macOS makes the user quit Voicebox for
+ * Set while setup is the open screen. macOS makes the user quit Herga for
  * some permissions to take effect, and after that relaunch dictation may
  * already be able to record, so readiness alone would never bring them back.
  */
-const SETUP_OPEN_KEY = 'voicebox.setup.open';
+const SETUP_OPEN_KEY = 'herga.setup.open';
 
 function readSetupOpen(): boolean {
   try {

@@ -19,7 +19,7 @@ import { defaultStyle, useConfirmApps, WRITING_STYLES_KEY } from '@/lib/hooks/us
 import { cn } from '@/lib/utils/cn';
 import { useMoveApp } from './MoveAppDialog';
 
-const DRAG_TYPE = 'application/x-voicebox-app';
+const DRAG_TYPE = 'application/x-herga-app';
 
 /** App icons a style's card shows before "+N more". */
 const PREVIEW_APPS = 3;

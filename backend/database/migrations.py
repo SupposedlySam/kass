@@ -1,6 +1,6 @@
-"""Column-level migrations for the voicebox SQLite database.
+"""Column-level migrations for the herga SQLite database.
 
-Why not Alembic?  voicebox is a single-user desktop app shipping as a
+Why not Alembic?  herga is a single-user desktop app shipping as a
 PyInstaller binary.  Every user has exactly one SQLite file.  Alembic's
 strengths -- migration tracking across environments, rollback, team
 coordination -- don't apply here and would add bundling complexity
@@ -46,6 +46,7 @@ def run_migrations(engine) -> None:
     _migrate_capture_feedback(engine, inspector, tables)
     _migrate_dictionary_entries(engine, inspector, tables)
     _migrate_writing_styles(engine, inspector, tables)
+    _rename_own_bundle_id(engine, inspector, tables)
 
 
 # -- helpers ---------------------------------------------------------------
@@ -107,6 +108,45 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
         return
     if "group_id" not in _get_columns(inspector, "dictionary_entries"):
         _add_column(engine, "dictionary_entries", "group_id VARCHAR", "group_id")
+
+
+# Herga was Voicebox, with bundle id sh.voicebox.app and then, briefly,
+# com.mrgnhnt.voicebox. Data recorded against its own window keeps meaning
+# Herga under the new one.
+_OLD_BUNDLES = ("sh.voicebox.app", "com.mrgnhnt.voicebox")
+_BUNDLE = "com.mrgnhnt.herga"
+
+
+def _rename_own_bundle_id(engine, inspector, tables: set[str]) -> None:
+    with engine.connect() as conn:
+        for old in _OLD_BUNDLES:
+            params = {"old": old, "new": _BUNDLE}
+            for table in ("captures", "capture_feedback", "retired_captures"):
+                if table in tables and "app_bundle_id" in _get_columns(inspector, table):
+                    conn.execute(
+                        text(f"UPDATE {table} SET app_bundle_id = :new WHERE app_bundle_id = :old"),
+                        params,
+                    )
+            # Keyed tables: a row already under the new id wins over the old one.
+            if "app_styles" in tables:
+                conn.execute(
+                    text("UPDATE OR IGNORE app_styles SET bundle_id = :new WHERE bundle_id = :old"),
+                    params,
+                )
+                conn.execute(text("DELETE FROM app_styles WHERE bundle_id = :old"), params)
+            if "dictionary_entries" in tables:
+                conn.execute(
+                    text(
+                        "UPDATE OR IGNORE dictionary_entries SET scope_id = :new"
+                        " WHERE scope = 'app' AND scope_id = :old"
+                    ),
+                    params,
+                )
+                conn.execute(
+                    text("DELETE FROM dictionary_entries WHERE scope = 'app' AND scope_id = :old"),
+                    params,
+                )
+        conn.commit()
 
 
 def _sql_literal(value: str) -> str:

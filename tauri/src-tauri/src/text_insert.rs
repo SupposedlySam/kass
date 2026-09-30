@@ -825,7 +825,7 @@ pub fn wake_electron(pid: i32) {
         return;
     }
     let result = macos::set_manual_accessibility(pid);
-    eprintln!("[voicebox] AXManualAccessibility on {path}: {result:?}");
+    eprintln!("[herga] AXManualAccessibility on {path}: {result:?}");
     if result.is_ok() {
         woken.insert(pid);
     }
@@ -1035,7 +1035,7 @@ mod macos {
 
     impl FocusedElement {
         /// The focused element of the app with `pid`, if it exposes one.
-        /// Asking the app (not the system-wide element) means the Voicebox
+        /// Asking the app (not the system-wide element) means the Herga
         /// pill holding key focus cannot redirect the insertion.
         pub fn of_app(pid: i32) -> Option<Self> {
             let app = unsafe { AXUIElementCreateApplication(pid) };
@@ -1189,7 +1189,7 @@ mod tests {
 
     #[test]
     fn gecko_bundles_are_found_by_their_engine() {
-        let root = std::env::temp_dir().join(format!("voicebox-gecko-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("herga-gecko-{}", std::process::id()));
         let gecko = root.join("Zen.app");
         let other = root.join("TextEdit.app");
         std::fs::create_dir_all(gecko.join("Contents/MacOS")).unwrap();

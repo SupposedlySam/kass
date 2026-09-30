@@ -1,5 +1,5 @@
-//! `voicebox://` links: open a screen in the main window from outside the
-//! app, e.g. `voicebox://captures?capture=<id>` from a review doc.
+//! `herga://` links: open a screen in the main window from outside the
+//! app, e.g. `herga://captures?capture=<id>` from a review doc.
 //!
 //! macOS delivers the link as `RunEvent::Opened` (the scheme is registered by
 //! `CFBundleURLTypes` in Info.plist, so only an installed build receives
@@ -11,7 +11,7 @@ use std::sync::Mutex;
 
 use tauri::{command, AppHandle, Emitter, Manager, State};
 
-pub const SCHEME: &str = "voicebox";
+pub const SCHEME: &str = "herga";
 const EVENT: &str = "deep-link";
 const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -20,7 +20,7 @@ pub struct DeepLinkState {
     pending: Mutex<Option<String>>,
 }
 
-/// The in-app route for a `voicebox://` link: `voicebox://captures?capture=x`
+/// The in-app route for a `herga://` link: `herga://captures?capture=x`
 /// is `/captures?capture=x`. None for other schemes.
 pub fn route(url: &str) -> Option<String> {
     let rest = url.strip_prefix(SCHEME)?.strip_prefix("://")?;
@@ -54,12 +54,12 @@ mod tests {
     #[test]
     fn maps_a_link_to_its_route() {
         assert_eq!(
-            route("voicebox://captures?capture=abc").as_deref(),
+            route("herga://captures?capture=abc").as_deref(),
             Some("/captures?capture=abc")
         );
-        assert_eq!(route("voicebox:///settings/dictation").as_deref(), Some("/settings/dictation"));
-        assert_eq!(route("voicebox://").as_deref(), Some("/"));
+        assert_eq!(route("herga:///settings/dictation").as_deref(), Some("/settings/dictation"));
+        assert_eq!(route("herga://").as_deref(), Some("/"));
         assert_eq!(route("https://example.com"), None);
-        assert_eq!(route("voiceboxx://captures"), None);
+        assert_eq!(route("hergax://captures"), None);
     }
 }

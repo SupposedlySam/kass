@@ -89,7 +89,7 @@ export function CopyButton({
 /**
  * The text the capture delivered: the refined transcript, or the raw one
  * when there's no refinement. Clicking it (or Alter) edits it in place to
- * teach Voicebox; after saving, it shows the correction with its changes.
+ * teach Herga; after saving, it shows the correction with its changes.
  */
 export function TranscriptCard({ refined, teach }: { refined: boolean; teach: TeachState }) {
   const { t } = useTranslation();

@@ -148,7 +148,7 @@ mod tests {
             app_category("com.apple.TextEdit").as_deref(),
             Some("public.app-category.productivity")
         );
-        assert_eq!(app_category("sh.voicebox.no-such-app"), None);
+        assert_eq!(app_category("sh.herga.no-such-app"), None);
     }
 
     #[test]
@@ -159,6 +159,6 @@ mod tests {
 
     #[test]
     fn unknown_bundle_ids_have_no_icon() {
-        assert_eq!(icon_data_url("sh.voicebox.no-such-app"), None);
+        assert_eq!(icon_data_url("sh.herga.no-such-app"), None);
     }
 }

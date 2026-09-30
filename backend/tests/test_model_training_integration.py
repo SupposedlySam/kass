@@ -1,6 +1,6 @@
 """Opt-in real MLX gradient update and production adapter loading.
 
-VOICEBOX_RUN_MLX_TRAINING_TESTS=1 backend/venv/bin/python -m pytest \
+HERGA_RUN_MLX_TRAINING_TESTS=1 backend/venv/bin/python -m pytest \
     backend/tests/test_model_training_integration.py -q
 Requires an already-cached Qwen3-0.6B MLX model. Never downloads or deploys.
 """
@@ -10,7 +10,7 @@ import os
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VOICEBOX_RUN_MLX_TRAINING_TESTS") != "1", reason="Opt-in local MLX integration test"
+    os.environ.get("HERGA_RUN_MLX_TRAINING_TESTS") != "1", reason="Opt-in local MLX integration test"
 )
 
 

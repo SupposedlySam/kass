@@ -346,7 +346,7 @@ pub fn restore_pending() {
     std::thread::sleep(PASTE_CONSUME.saturating_sub(p.pasted_at.elapsed()));
     if current_change_count().ok() == Some(p.staged_count) {
         if let Err(e) = restore_clipboard(&p.original) {
-            eprintln!("[voicebox] clipboard restore failed: {e}");
+            eprintln!("[herga] clipboard restore failed: {e}");
         }
     }
 }
@@ -409,13 +409,13 @@ impl Inserter for Paste {
             if should_restore(latest, staged_count, current_change_count().ok()) {
                 if let Some(p) = pending.take() {
                     if let Err(e) = restore_clipboard(&p.original) {
-                        eprintln!("[voicebox] clipboard restore failed: {e}");
+                        eprintln!("[herga] clipboard restore failed: {e}");
                     }
                 }
             } else if latest == Some(staged_count) {
                 // Someone copied during the window: keep their content.
                 pending.take();
-                eprintln!("[voicebox] clipboard changed during paste — not restoring");
+                eprintln!("[herga] clipboard changed during paste — not restoring");
             }
         });
         Attempt::Inserted { verified: false }

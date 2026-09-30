@@ -2,7 +2,7 @@
 
 ## Problem
 
-Voicebox has one writing style for every app. A Slack message and an email come out the same, and a correction made in Mail teaches the style used in Slack. The approved design ("Concept C") has named styles that apps are assigned to: each style has its own settings, calibration, learned habits, examples and rules, and a correction teaches only the style of the app it was made in.
+Herga has one writing style for every app. A Slack message and an email come out the same, and a correction made in Mail teaches the style used in Slack. The approved design ("Concept C") has named styles that apps are assigned to: each style has its own settings, calibration, learned habits, examples and rules, and a correction teaches only the style of the app it was made in.
 
 ## Styles
 

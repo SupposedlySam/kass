@@ -29,7 +29,7 @@ function getTargetTriple() {
     const triple = execSync('rustc --print host-tuple', { encoding: 'utf-8' }).trim();
     return triple;
   } catch {
-    // Fallback detection. Voicebox runs on Apple Silicon only.
+    // Fallback detection. Herga runs on Apple Silicon only.
     const platform = process.platform;
     const arch = process.arch;
 
@@ -43,7 +43,7 @@ function getTargetTriple() {
 
 // Create a minimal placeholder executable. ``baseName`` is the
 // sidecar identifier as declared in tauri.conf.json's ``externalBin``
-// (e.g. "voicebox-server"). Tauri appends the target
+// (e.g. "herga-server"). Tauri appends the target
 // triple to that name at compile time.
 function createPlaceholderBinary(targetTriple, baseName) {
   const binaryName = `${baseName}-${targetTriple}`;
@@ -82,7 +82,7 @@ exit 1
 // Every sidecar listed in tauri.conf.json's ``externalBin`` needs a
 // file on disk at compile time, even in dev. Add to this list whenever
 // a new sidecar is introduced.
-const SIDECAR_BASE_NAMES = ['voicebox-server'];
+const SIDECAR_BASE_NAMES = ['herga-server'];
 
 function main() {
   const targetTriple = getTargetTriple();

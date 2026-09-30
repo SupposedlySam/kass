@@ -33,7 +33,7 @@ pub fn is_trusted() -> bool {
 }
 
 /// Fire the Accessibility prompt if not already trusted, which also lists
-/// Voicebox in the Accessibility pane so the user has a toggle to flip.
+/// Herga in the Accessibility pane so the user has a toggle to flip.
 /// Returns the current trust state. macOS shows the prompt at most once per
 /// grant, so calling this repeatedly is harmless.
 pub fn request() -> bool {

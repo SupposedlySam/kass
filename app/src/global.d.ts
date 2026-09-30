@@ -1,3 +1,3 @@
 interface Window {
-  __voiceboxServerStartedByApp?: boolean;
+  __hergaServerStartedByApp?: boolean;
 }

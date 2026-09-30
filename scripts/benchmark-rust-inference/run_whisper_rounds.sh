@@ -4,7 +4,7 @@
 # usage: run_whisper_rounds.sh <scratch> <rounds> <runs_per_fixture>
 #   <scratch>/fx/*.wav         16 kHz mono fixtures
 #   <scratch>/models/ggml-*.bin
-#   <scratch>/data             copy of the Voicebox data dir
+#   <scratch>/data             copy of the Herga data dir
 #   $WRBENCH                   path to the built wrbench binary
 # Output: <scratch>/whisper.jsonl (appended), one JSON object per line.
 set -u

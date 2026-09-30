@@ -12,7 +12,7 @@ import { usePlatform } from '@/platform/PlatformContext';
 
 /**
  * The always-on status line at the bottom of the window: server,
- * microphone, permissions and what Voicebox has learned. Each item opens
+ * microphone, permissions and what Herga has learned. Each item opens
  * where it is configured, and says more on hover.
  */
 export function StatusBar() {
@@ -62,13 +62,13 @@ export function StatusBar() {
           <Permission
             label="accessibility"
             granted={readiness.accessibility}
-            purpose="Lets Voicebox type the text into the app you're using."
+            purpose="Lets Herga type the text into the app you're using."
             onClick={readiness.openAccessibilitySettings}
           />
           <Permission
             label="input monitoring"
             granted={readiness.inputMonitoring}
-            purpose="Lets Voicebox hear the dictation shortcut in any app."
+            purpose="Lets Herga hear the dictation shortcut in any app."
             onClick={readiness.openInputMonitoringSettings}
           />
         </>

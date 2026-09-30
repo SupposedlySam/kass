@@ -23,6 +23,7 @@ def init_db() -> None:
 
     _db_path = config.get_db_path()
     _db_path.parent.mkdir(parents=True, exist_ok=True)
+    _rename_old_db(_db_path)
 
     engine = create_engine(
         f"sqlite:///{_db_path}",
@@ -39,6 +40,20 @@ def init_db() -> None:
 
     with SessionLocal() as db:
         ensure_styles(db)
+
+
+def _rename_old_db(db_path) -> None:
+    """Herga was Voicebox, whose database was voicebox.db; carry it over once."""
+    old = db_path.with_name("voicebox.db")
+    if db_path.exists() or not old.exists():
+        return
+    # SQLite's journal files travel with the database they belong to.
+    for suffix in ("-wal", "-shm"):
+        journal = old.with_name(old.name + suffix)
+        if journal.exists():
+            journal.rename(db_path.with_name(db_path.name + suffix))
+    old.rename(db_path)
+    logger.info("Renamed %s to %s", old, db_path)
 
 
 def get_db():

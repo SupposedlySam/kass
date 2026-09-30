@@ -1,7 +1,7 @@
 """Pick the user's real dictation captures closest to 2, 5, 9 and 14 s and convert them to 16 kHz mono PCM16.
 
 usage: make_real_fixtures.py <captures_copy_dir> <out_dir> [per_length=2]
-Work on a *copy* of ~/Library/Application Support/sh.voicebox.app/captures, never the original.
+Work on a *copy* of ~/Library/Application Support/com.mrgnhnt.herga/captures, never the original.
 Writes real<LL><a|b>.wav (no .txt reference: MLX output is used as the reference transcript).
 """
 import subprocess, sys, wave

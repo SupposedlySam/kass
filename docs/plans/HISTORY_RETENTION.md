@@ -2,7 +2,7 @@
 
 ## Problem
 
-Captures pile up forever: every dictation keeps its audio and transcripts. The user wants old history deleted after a window they choose, 30 days by default, without Voicebox getting worse or its stats dropping when it goes.
+Captures pile up forever: every dictation keeps its audio and transcripts. The user wants old history deleted after a window they choose, 30 days by default, without Herga getting worse or its stats dropping when it goes.
 
 ## Setting
 

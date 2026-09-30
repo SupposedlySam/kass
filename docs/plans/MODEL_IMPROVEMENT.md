@@ -109,7 +109,7 @@ Unit tests: `backend/tests/test_model_improvement.py` plus existing capture,
 refinement and MLX thread-affinity tests. Real hardware integration:
 
 ```sh
-VOICEBOX_RUN_MLX_TRAINING_TESTS=1 backend/venv/bin/python -m pytest \
+HERGA_RUN_MLX_TRAINING_TESTS=1 backend/venv/bin/python -m pytest \
   backend/tests/test_model_training_integration.py -q
 ```
 

@@ -18,7 +18,7 @@
 //!
 //! PID + bundle id + role are all captured for diagnostics — the bundle
 //! id lets step 6 (internal direct injection) detect "focus was inside
-//! Voicebox itself" and short-circuit the synthetic-paste path. The bundle
+//! Herga itself" and short-circuit the synthetic-paste path. The bundle
 //! id and app name are also saved with the capture, so Captures can show
 //! which app each dictation went to.
 
@@ -314,11 +314,11 @@ pub fn capture_focus() -> Result<FocusSnapshot, String> {
     }
 }
 
-/// The app whose window is frontmost apart from Voicebox's own: where the
-/// user was before opening Voicebox's window (Command Mode's palette runs
+/// The app whose window is frontmost apart from Herga's own: where the
+/// user was before opening Herga's window (Command Mode's palette runs
 /// there). Reads the on-screen window list front to back and takes the first
 /// normal-level window another process owns.
-pub fn app_behind_voicebox() -> Option<FocusSnapshot> {
+pub fn app_behind_herga() -> Option<FocusSnapshot> {
     use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
     use core_foundation_sys::dictionary::{CFDictionaryGetValue, CFDictionaryRef};
     use core_foundation_sys::number::{kCFNumberSInt32Type, CFNumberGetValue, CFNumberRef};

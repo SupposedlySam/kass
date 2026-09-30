@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ "$(uname)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-  echo "Voicebox requires an Apple Silicon Mac (arm64 macOS)." >&2
+  echo "Herga requires an Apple Silicon Mac (arm64 macOS)." >&2
   exit 1
 fi
 

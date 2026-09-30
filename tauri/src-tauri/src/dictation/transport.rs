@@ -235,21 +235,21 @@ mod tests {
         assert_eq!(sequences, vec![0, 1, 2, 3]);
     }
 
-    /// Opt-in smoke test against a real Voicebox server. Streams a mono
+    /// Opt-in smoke test against a real Herga server. Streams a mono
     /// 16-bit WAV in real time, as the microphone would, and reports the
     /// release-to-final time. Never point it at a server holding real data:
     /// it saves a capture.
     ///
-    /// VOICEBOX_SMOKE_SERVER=http://127.0.0.1:17593 VOICEBOX_SMOKE_WAV=/path.wav \
-    ///   cargo test --bin voicebox real_server_smoke -- --ignored --nocapture
+    /// HERGA_SMOKE_SERVER=http://127.0.0.1:17593 HERGA_SMOKE_WAV=/path.wav \
+    ///   cargo test --bin herga real_server_smoke -- --ignored --nocapture
     #[tokio::test]
     #[ignore]
     async fn real_server_smoke() {
         use crate::dictation::client::{Outcome, StreamClient};
         use crate::dictation::stream::{drive, AudioMsg, Timeouts};
 
-        let server = std::env::var("VOICEBOX_SMOKE_SERVER").expect("VOICEBOX_SMOKE_SERVER");
-        let wav = std::env::var("VOICEBOX_SMOKE_WAV").expect("VOICEBOX_SMOKE_WAV");
+        let server = std::env::var("HERGA_SMOKE_SERVER").expect("HERGA_SMOKE_SERVER");
+        let wav = std::env::var("HERGA_SMOKE_WAV").expect("HERGA_SMOKE_WAV");
         let mut reader = hound::WavReader::open(wav).unwrap();
         let rate = reader.spec().sample_rate;
         assert_eq!(reader.spec().channels, 1);

@@ -150,7 +150,7 @@ pub fn init(app: &AppHandle) {
     }
     let (tx, rx) = mpsc::channel();
     let spawned = thread::Builder::new()
-        .name("voicebox-sound-cues".into())
+        .name("herga-sound-cues".into())
         .spawn(move || run_player(rx));
     match spawned {
         Ok(_) => {
@@ -180,7 +180,7 @@ pub fn play_after(
     };
     let volume = volume * cue.gain();
     thread::Builder::new()
-        .name("voicebox-sound-cue-delay".into())
+        .name("herga-sound-cue-delay".into())
         .spawn(move || {
             thread::sleep(delay);
             if still_wanted() {
@@ -452,7 +452,7 @@ mod tests {
 
     fn temp_dir() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "voicebox-sound-cues-test-{}-{}",
+            "herga-sound-cues-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

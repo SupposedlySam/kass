@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>voicebox</string>
+	<string>herga</string>
 	<key>CFBundleIconName</key>
-	<string>voicebox</string>
+	<string>herga</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>sh.voicebox.app</string>
+			<string>com.mrgnhnt.herga</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>voicebox</string>
+				<string>herga</string>
 			</array>
 		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Voicebox needs microphone access to transcribe your dictation.</string>
+	<string>Herga needs microphone access to transcribe your dictation.</string>
 </dict>
 </plist>

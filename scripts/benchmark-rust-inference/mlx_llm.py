@@ -1,4 +1,4 @@
-"""Current Voicebox cleanup path: MLXQwenLLMBackend.generate (mlx-lm, Qwen3 4B 4-bit) with its KV-cache reuse.
+"""Current Herga cleanup path: MLXQwenLLMBackend.generate (mlx-lm, Qwen3 4B 4-bit) with its KV-cache reuse.
 
 usage: mlx_llm.py <repo_root> <scratch_data_dir> <prompts.json> <passes>   -> JSON lines on stdout
 The first call prefills the whole prompt (cold); every later call reuses the cached

@@ -10,8 +10,8 @@ identity=$(./scripts/signing-identity.sh)
 # The server folder is copied into the app as-is, so sign its code first:
 # every library, then the executable with the app's hardened-runtime
 # entitlements. Tauri then seals the folder into the app signature.
-server=tauri/src-tauri/binaries/voicebox-server
-if [ ! -x "$server/voicebox-server" ]; then
+server=tauri/src-tauri/binaries/herga-server
+if [ ! -x "$server/herga-server" ]; then
   echo "Server not built at $server. Run scripts/build-server.sh first." >&2
   exit 1
 fi
@@ -20,7 +20,7 @@ find "$server/_internal" -type f -print0 | xargs -0 file | grep 'Mach-O' | cut -
 codesign --force --timestamp=none --options runtime --entitlements tauri/src-tauri/Entitlements.plist \
   --sign "$identity" "$server/voicebox-server"
 
-config=$(mktemp /tmp/voicebox-local-signing.XXXXXX)
+config=$(mktemp /tmp/herga-local-signing.XXXXXX)
 trap 'rm -f "$config"' EXIT
 python3 - "$config" "$identity" <<'PY'
 import json, sys
@@ -33,4 +33,4 @@ else
   bun=(npx --yes bun@1.3.8)
 fi
 "${bun[@]}" run --cwd tauri tauri build --bundles app --config "$config"
-codesign --verify --deep --strict tauri/src-tauri/target/release/bundle/macos/Voicebox.app
+codesign --verify --deep --strict tauri/src-tauri/target/release/bundle/macos/Herga.app

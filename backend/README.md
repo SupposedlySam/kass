@@ -1,6 +1,6 @@
-# Voicebox Backend
+# Herga Backend
 
-FastAPI server powering Voicebox dictation: Whisper speech-to-text followed by a local LLM cleanup pass. Runs locally as a Tauri sidecar or standalone via `python -m backend.main`.
+FastAPI server powering Herga dictation: Whisper speech-to-text followed by a local LLM cleanup pass. Runs locally as a Tauri sidecar or standalone via `python -m backend.main`.
 
 ## Running
 
@@ -82,11 +82,11 @@ Full interactive documentation is available at `http://localhost:17493/docs` whe
 
 ```
 {data_dir}/
-  voicebox.db             # SQLite database
+  herga.db             # SQLite database
   captures/               # Recorded dictation audio
 ```
 
-Default location is the OS-specific app data directory. Override with `--data-dir` or the `VOICEBOX_DATA_DIR` environment variable.
+Default location is the OS-specific app data directory. Override with `--data-dir` or the `HERGA_DATA_DIR` environment variable.
 
 ## Code quality
 

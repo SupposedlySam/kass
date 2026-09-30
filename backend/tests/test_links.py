@@ -1,4 +1,4 @@
-"""Web links redirect to the app's voicebox:// scheme."""
+"""Web links redirect to the app's herga:// scheme."""
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,9 +15,9 @@ def client():
 def test_a_web_link_redirects_to_the_app():
     response = client().get("/open/captures?capture=abc-123", follow_redirects=False)
     assert response.status_code == 302
-    assert response.headers["location"] == "voicebox://captures?capture=abc-123"
+    assert response.headers["location"] == "herga://captures?capture=abc-123"
 
 
 def test_a_link_without_a_query_keeps_its_path():
     response = client().get("/open/settings/dictation", follow_redirects=False)
-    assert response.headers["location"] == "voicebox://settings/dictation"
+    assert response.headers["location"] == "herga://settings/dictation"

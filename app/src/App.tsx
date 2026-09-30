@@ -1,6 +1,6 @@
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import voiceboxLogo from '@/assets/voicebox-logo.png';
+import hergaLogo from '@/assets/herga-logo.png';
 import { DictateWindow } from '@/components/DictateWindow/DictateWindow';
 import ShinyText from '@/components/ShinyText';
 import { TitleBarDragRegion } from '@/components/TitleBarDragRegion';
@@ -24,10 +24,10 @@ function isDictateView(): boolean {
 }
 
 /**
- * Validate that a health response has the expected Voicebox-specific shape.
+ * Validate that a health response has the expected Herga-specific shape.
  * Prevents misidentifying an unrelated service on the same port.
  */
-function isVoiceboxHealthResponse(health: HealthResponse): boolean {
+function isHergaHealthResponse(health: HealthResponse): boolean {
   return (
     health?.status === 'healthy' &&
     typeof health.model_loaded === 'boolean' &&
@@ -88,7 +88,7 @@ function MainApp() {
   useInAppDictationInsert();
   // Rust plays the dictation chimes; it needs their saved settings.
   useSoundCueSync();
-  // voicebox:// links open their screen once the router is showing.
+  // herga:// links open their screen once the router is showing.
   useDeepLinks(serverReady);
 
   // Setup lifecycle callbacks
@@ -126,7 +126,7 @@ function MainApp() {
       console.log('Dev mode: Skipping auto-start of server (run it separately)');
       setServerReady(true); // Mark as ready so UI doesn't show loading screen
       // Mark that server was not started by app (so we don't try to stop it on close)
-      window.__voiceboxServerStartedByApp = false;
+      window.__hergaServerStartedByApp = false;
       return;
     }
 
@@ -145,12 +145,12 @@ function MainApp() {
         console.log('Server is ready at:', serverUrl);
         setServerReady(true);
         // Mark that we started the server (so we know to stop it on close)
-        window.__voiceboxServerStartedByApp = true;
+        window.__hergaServerStartedByApp = true;
       })
       .catch((error) => {
         console.error('Failed to auto-start server:', error);
         serverStartingRef.current = false;
-        window.__voiceboxServerStartedByApp = false;
+        window.__hergaServerStartedByApp = false;
 
         // Only fall back to health-check polling when the error indicates the
         // port is occupied (likely an external server). For real failures
@@ -164,17 +164,17 @@ function MainApp() {
 
         // Fall back to polling: a local server may already be running on the
         // port (e.g. started by hand via python/uvicorn). Poll the health endpoint
-        // until it responds with a valid Voicebox payload, then transition to
+        // until it responds with a valid Herga payload, then transition to
         // the main UI.
         console.log('Falling back to health-check polling...');
         const pollInterval = setInterval(async () => {
           try {
             const health = await apiClient.getHealth();
-            if (!isVoiceboxHealthResponse(health)) {
-              console.log('Health response is not from a Voicebox server, keep polling...');
+            if (!isHergaHealthResponse(health)) {
+              console.log('Health response is not from a Herga server, keep polling...');
               return;
             }
-            console.log('Running local Voicebox server detected via health check');
+            console.log('Running local Herga server detected via health check');
             clearInterval(pollInterval);
             setServerReady(true);
           } catch {
@@ -187,7 +187,7 @@ function MainApp() {
           clearInterval(pollInterval);
           serverStartingRef.current = false;
           setStartupError(
-            'Could not connect to a Voicebox server within 2 minutes. ' +
+            'Could not connect to a Herga server within 2 minutes. ' +
               'Please check that the server is running and try again.',
           );
         }, 120_000);
@@ -230,8 +230,8 @@ function MainApp() {
               <div className="w-48 h-48 rounded-full bg-accent/20 blur-3xl" />
             </div>
             <img
-              src={voiceboxLogo}
-              alt="Voicebox"
+              src={hergaLogo}
+              alt="Herga"
               className="w-48 h-48 object-contain animate-fade-in-scale relative z-10"
             />
           </div>

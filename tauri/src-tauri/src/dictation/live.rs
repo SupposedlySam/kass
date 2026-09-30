@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use crate::text_insert::{LiveError, LiveStart, Owned};
 
 pub const EDITED_MESSAGE: &str =
-    "The field changed while Voicebox was typing, so the rest was not inserted.";
+    "The field changed while Herga was typing, so the rest was not inserted.";
 
 /// Least time between live writes after the first. Tokens arrive every
 /// ~15 ms; rewriting the field that often adds undo steps and flicker for

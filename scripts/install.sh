@@ -1,29 +1,29 @@
 #!/bin/bash
-# Install or update Voicebox on this Mac.
+# Install or update Herga on this Mac.
 #
 #   ./scripts/install.sh                  from a checkout
-#   bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/voicebox/main/scripts/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/herga/main/scripts/install.sh)
 #
 # Checks what the build needs and says how to install anything missing,
 # pulls the latest code, builds the server (only when it changed) and the
-# app, and replaces /Applications/Voicebox.app. It removes the Voicebox
+# app, and replaces /Applications/Herga.app. It removes the Herga
 # Input input method that earlier versions installed. Every build is signed with the same identity, so updates keep the app's
 # privacy permissions.
 #
 # Options:
 #   --no-pull          build the checkout as it is
 #   --rebuild-server   rebuild the Python server even if it hasn't changed
-#   --no-launch        don't open Voicebox afterwards
+#   --no-launch        don't open Herga afterwards
 #
-# Run from outside a checkout, it clones into $VOICEBOX_DIR (default
-# ~/voicebox), on $VOICEBOX_BRANCH (default the repo's default branch).
+# Run from outside a checkout, it clones into $HERGA_DIR (default
+# ~/herga), on $HERGA_BRANCH (default the repo's default branch).
 set -euo pipefail
 
-repo_url="${VOICEBOX_REPO:-https://github.com/mrgnhnt96/voicebox.git}"
+repo_url="${HERGA_REPO:-https://github.com/mrgnhnt96/herga.git}"
 # Always /Applications: macOS privacy permissions (Input Monitoring,
 # Accessibility, Microphone) don't work reliably for an app anywhere else.
-app=/Applications/Voicebox.app
-bundle_id="sh.voicebox.app"
+app=/Applications/Herga.app
+bundle_id="com.mrgnhnt.herga"
 
 pull=1
 rebuild_server=0
@@ -71,13 +71,17 @@ if [ -n "$script_dir" ] && [ -f "$script_dir/../tauri/src-tauri/tauri.conf.json"
   root="$(cd "$script_dir/.." && pwd)"
 else
   # Run from curl: get a checkout, then run its own copy of this script.
-  dir="${VOICEBOX_DIR:-$HOME/voicebox}"
+  dir="${HERGA_DIR:-$HOME/herga}"
+  # Herga was Voicebox; keep using a checkout made under the old name.
+  if [ -z "${HERGA_DIR:-}" ] && [ ! -d "$dir/.git" ] && [ -d "$HOME/voicebox/.git" ]; then
+    dir="$HOME/voicebox"
+  fi
   command -v git >/dev/null 2>&1 ||
     die "git is missing. Install the Xcode Command Line Tools: xcode-select --install"
   if [ ! -d "$dir/.git" ]; then
-    step "Cloning Voicebox into $dir"
-    if [ -n "${VOICEBOX_BRANCH:-}" ]; then
-      git clone --branch "$VOICEBOX_BRANCH" "$repo_url" "$dir"
+    step "Cloning Herga into $dir"
+    if [ -n "${HERGA_BRANCH:-}" ]; then
+      git clone --branch "$HERGA_BRANCH" "$repo_url" "$dir"
     else
       git clone "$repo_url" "$dir"
     fi
@@ -91,7 +95,7 @@ cd "$root"
 step "Checking requirements"
 
 if [ "$(uname)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-  die "Voicebox only runs on Apple Silicon Macs."
+  die "Herga only runs on Apple Silicon Macs."
 fi
 
 missing=()
@@ -138,7 +142,7 @@ fi
 
 if [ ${#missing[@]} -gt 0 ]; then
   echo
-  echo "${red}${bold}Some things Voicebox needs to build are missing.${reset} Install them, then run this again:"
+  echo "${red}${bold}Some things Herga needs to build are missing.${reset} Install them, then run this again:"
   for item in "${missing[@]}"; do
     echo
     echo "  ${bold}${item%%|*}${reset}"
@@ -177,7 +181,7 @@ ok "JavaScript packages"
 
 step "Setting up the Python environment"
 python_stamp=$(stamp_of cat backend/requirements.txt scripts/setup-python.sh)
-python_stamp_file=backend/venv/.voicebox-install-stamp
+python_stamp_file=backend/venv/.herga-install-stamp
 if [ -f "$python_stamp_file" ] && [ "$(cat "$python_stamp_file")" = "$python_stamp" ]; then
   ok "Up to date"
 else
@@ -196,8 +200,8 @@ server_inputs() {
   cat scripts/build-server.sh "$python_stamp_file"
 }
 server_stamp=$(stamp_of server_inputs)
-server_stamp_file=tauri/src-tauri/binaries/.voicebox-server-stamp
-if [ "$rebuild_server" = 0 ] && [ -x tauri/src-tauri/binaries/voicebox-server/voicebox-server ] &&
+server_stamp_file=tauri/src-tauri/binaries/.herga-server-stamp
+if [ "$rebuild_server" = 0 ] && [ -x tauri/src-tauri/binaries/herga-server/herga-server ] &&
   [ -f "$server_stamp_file" ] && [ "$(cat "$server_stamp_file")" = "$server_stamp" ]; then
   ok "Unchanged since the last build"
 else
@@ -210,7 +214,7 @@ fi
 step "Building the app"
 echo "  ${dim}The first build compiles the Rust app shell and takes a while.${reset}"
 ./scripts/build-local-app.sh
-built=tauri/src-tauri/target/release/bundle/macos/Voicebox.app
+built=tauri/src-tauri/target/release/bundle/macos/Herga.app
 ok "Built and signed with \"$(codesign -dvv "$built" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)\""
 
 # ─── Install ──────────────────────────────────────────────────────────
@@ -248,6 +252,37 @@ if [ -d "$old_app" ]; then
   else
     rm -rf "$old_app"
     ok "Removed the old copy in ~/Applications"
+  fi
+fi
+
+# Herga was Voicebox. Retire the old app, or it would still start at login
+# and answer the same hotkey. Upstream Voicebox, the text-to-speech app,
+# shares the old bundle id, so only a copy whose data folder holds a file
+# only this app writes counts as ours.
+voicebox_app=/Applications/Voicebox.app
+if [ -d "$voicebox_app" ]; then
+  voicebox_id=$(plutil -extract CFBundleIdentifier raw "$voicebox_app/Contents/Info.plist" 2>/dev/null || true)
+  ours=false
+  [ "$voicebox_id" = com.mrgnhnt.voicebox ] && ours=true
+  if [ "$voicebox_id" = sh.voicebox.app ]; then
+    for file in writing-style.json correction-learning.json launch-at-login-defaulted dictation-device.txt; do
+      [ -e "$HOME/Library/Application Support/sh.voicebox.app/$file" ] && ours=true
+    done
+  fi
+  if $ours; then
+    osascript -e 'quit app id "'"$voicebox_id"'"' >/dev/null 2>&1 || true
+    pkill -f "$voicebox_app/Contents/MacOS/" 2>/dev/null || true
+    for service in Microphone Accessibility ListenEvent PostEvent; do
+      tccutil reset "$service" "$voicebox_id" >/dev/null 2>&1 || true
+    done
+    if mv "$voicebox_app" "$HOME/.Trash/Voicebox $(date '+%Y-%m-%d %H.%M.%S').app" 2>/dev/null; then
+      ok "Moved Voicebox.app, Herga's old name, to the Trash"
+    else
+      rm -rf "$voicebox_app"
+      ok "Removed Voicebox.app, Herga's old name"
+    fi
+    warn "Herga keeps your captures and settings, but macOS will ask for"
+    warn "Microphone, Accessibility and Input Monitoring again under the new name."
   fi
 fi
 
@@ -292,8 +327,8 @@ fi
 
 if [ "$launch" = 1 ]; then
   open "$app"
-  ok "Opened Voicebox"
+  ok "Opened Herga"
 fi
 
 echo
-echo "${green}${bold}Voicebox is installed.${reset} Run this script again to update."
+echo "${green}${bold}Herga is installed.${reset} Run this script again to update."

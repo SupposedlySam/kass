@@ -1,4 +1,4 @@
-"""ORM model definitions for the voicebox SQLite database."""
+"""ORM model definitions for the herga SQLite database."""
 
 from datetime import datetime
 import uuid
@@ -46,7 +46,7 @@ class CaptureSettings(Base):
     # Default OFF — opting in is what triggers the macOS Input Monitoring TCC
     # prompt. We deliberately don't spawn the global keyboard tap until the
     # user flips this on so a fresh-install user doesn't see a scary
-    # "Voicebox would like to receive keystrokes from any application" dialog
+    # "Herga would like to receive keystrokes from any application" dialog
     # before they've even opened the Captures tab.
     hotkey_enabled = Column(Boolean, nullable=False, default=False)
     # Lists of keytap key names (e.g. "MetaRight", "ControlRight"). Right-hand
@@ -93,7 +93,7 @@ class Capture(Base):
     # JSON: what the content check found when cleanup may have added or lost content.
     refinement_review = Column(Text, nullable=True)
     # The app that had focus when dictation started (None for uploads and
-    # for dictation inside Voicebox itself).
+    # for dictation inside Herga itself).
     app_bundle_id = Column(String, nullable=True)
     app_name = Column(String, nullable=True)
     # Command captures: the text that was selected, the instruction that ran

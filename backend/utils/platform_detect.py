@@ -1,5 +1,5 @@
 """
-Platform check. Voicebox runs on Apple Silicon only, with MLX as its sole backend.
+Platform check. Herga runs on Apple Silicon only, with MLX as its sole backend.
 """
 
 import platform
@@ -21,7 +21,7 @@ def require_apple_silicon() -> None:
     """
     if not is_apple_silicon():
         raise RuntimeError(
-            "Voicebox requires an Apple Silicon Mac (arm64 macOS); "
+            "Herga requires an Apple Silicon Mac (arm64 macOS); "
             f"this is {platform.system()} {platform.machine()}."
         )
     try:

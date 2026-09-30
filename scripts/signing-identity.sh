@@ -1,5 +1,5 @@
 #!/bin/bash
-# Print the SHA-1 of the code-signing identity to sign Voicebox with on this
+# Print the SHA-1 of the code-signing identity to sign Herga with on this
 # Mac, creating a local one the first time there is none.
 #
 # macOS keeps an app's privacy grants (Microphone, Accessibility, Input
@@ -13,16 +13,25 @@
 # made once and kept in its own keychain.
 set -euo pipefail
 
-app=/Applications/Voicebox.app
-state="$HOME/Library/Application Support/Voicebox Installer"
-keychain="$HOME/Library/Keychains/voicebox-signing.keychain-db"
-local_name="Voicebox Local Signing"
+app=/Applications/Herga.app
+state="$HOME/Library/Application Support/Herga Installer"
+keychain="$HOME/Library/Keychains/herga-signing.keychain-db"
+local_name="Herga Local Signing"
+# Herga was Voicebox: keep using what an earlier install set up, so the
+# signature (and with it the app's privacy grants) stays the same.
+old_state="$HOME/Library/Application Support/Voicebox Installer"
+[ -d "$old_state" ] && [ ! -e "$state" ] && mv "$old_state" "$state"
+old_keychain="$HOME/Library/Keychains/voicebox-signing.keychain-db"
+if [ -f "$old_keychain" ] && [ ! -f "$keychain" ]; then
+  keychain="$old_keychain"
+  local_name="Voicebox Local Signing"
+fi
 mkdir -p "$state"
 
 log() { echo "$@" >&2; }
 
-if [ -n "${VOICEBOX_SIGNING_IDENTITY:-}" ]; then
-  echo "$VOICEBOX_SIGNING_IDENTITY"
+if [ -n "${HERGA_SIGNING_IDENTITY:-}" ]; then
+  echo "$HERGA_SIGNING_IDENTITY"
   exit 0
 fi
 
@@ -79,7 +88,7 @@ EOF
     /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 7300 -config "$tmp/cert.cnf" \
       -keyout "$tmp/key.pem" -out "$tmp/cert.pem" 2>/dev/null
     /usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
-      -name "$local_name" -out "$tmp/identity.p12" -passout pass:voicebox
+      -name "$local_name" -out "$tmp/identity.p12" -passout pass:herga
     if [ ! -f "$keychain" ]; then
       password=$(/usr/bin/openssl rand -hex 24)
       (umask 077 && echo "$password" >"$state/keychain-password")
@@ -89,7 +98,7 @@ EOF
     fi
     password=$(cat "$state/keychain-password")
     open_keychain
-    security import "$tmp/identity.p12" -k "$keychain" -P voicebox -T /usr/bin/codesign >/dev/null
+    security import "$tmp/identity.p12" -k "$keychain" -P herga -T /usr/bin/codesign >/dev/null
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
     cp "$tmp/cert.pem" "$state/local-signing.pem"
   fi
@@ -110,6 +119,6 @@ if [ -n "$apple" ] && pick "$apple"; then exit 0; fi
 create_local_identity
 if pick "$local_name"; then exit 0; fi
 log "Could not set up \"$local_name\" for code signing."
-log "Open Keychain Access, find it in the voicebox-signing keychain, and set"
+log "Open Keychain Access, find it in the herga-signing keychain, and set"
 log "Trust > Code Signing to Always Trust, then run the install again."
 exit 1

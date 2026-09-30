@@ -57,8 +57,8 @@ that doesn't beat the baseline is not merged.
   you intend to commit (check `git diff --cached`), and never use
   `git stash`.
 - For realistic benchmarks, copy the user's data directory
-  (`~/Library/Application Support/sh.voicebox.app`) into a scratch folder
+  (`~/Library/Application Support/com.mrgnhnt.herga`) into a scratch folder
   and work on the copy. Never write to the original, never install into
-  `/Applications`, and never quit or restart the running Voicebox app.
+  `/Applications`, and never quit or restart the running Herga app.
 - Other agents share the GPU. Interleave A/B runs, repeat them, and note
   any contention.

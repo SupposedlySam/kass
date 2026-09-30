@@ -252,7 +252,7 @@ class MLXQwenLLMBackend:
             import json
             from pathlib import Path
             adapter_config = json.loads((Path(self._adapter_path) / 'adapter_config.json').read_text())
-            repo = adapter_config['voicebox_base_path']
+            repo = adapter_config['herga_base_path']
 
         with model_load_progress(progress_model_name, is_cached):
             logger.info("Loading Qwen3 %s via MLX...", model_size)
@@ -352,9 +352,9 @@ class MLXQwenLLMBackend:
         """
         for _, module in self.model.named_modules():
             if hasattr(module, "lora_a") and hasattr(module, "scale"):
-                if not hasattr(module, "voicebox_scale"):
-                    module.voicebox_scale = module.scale
-                module.scale = module.voicebox_scale if enabled else 0.0
+                if not hasattr(module, "herga_scale"):
+                    module.herga_scale = module.scale
+                module.scale = module.herga_scale if enabled else 0.0
 
     def _generate_sync(
         self,

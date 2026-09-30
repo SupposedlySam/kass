@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Voicebox",
+  "productName": "Herga",
   "version": "0.5.0",
-  "identifier": "sh.voicebox.app",
+  "identifier": "com.mrgnhnt.herga",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -21,7 +21,7 @@
     "macOS": {
       "frameworks": [],
       "files": {
-        "Resources/voicebox-server": "binaries/voicebox-server"
+        "Resources/herga-server": "binaries/herga-server"
       },
       "minimumSystemVersion": "11.0",
       "infoPlist": "Info.plist",
@@ -29,7 +29,7 @@
     },
     "resources": {
       "gen/Assets.car": "./",
-      "gen/voicebox.icns": "./",
+      "gen/herga.icns": "./",
       "gen/partial.plist": "./"
     }
   },

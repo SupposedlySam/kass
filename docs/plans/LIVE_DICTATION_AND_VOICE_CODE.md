@@ -13,7 +13,7 @@ Date: 2026-09-17.
 4. Show code changing in the target application while the user is speaking. An audio → transcript → code pipeline is acceptable; an end-to-end audio model is not required.
 5. Require neither an IDE nor an editor extension. Syntax highlighting is outside scope.
 
-The visible outcome is central: a transcript in Voicebox's overlay alone does not satisfy live voice-to-code. A supported ordinary text field must show code appearing and being revised before recording stops.
+The visible outcome is central: a transcript in Herga's overlay alone does not satisfy live voice-to-code. A supported ordinary text field must show code appearing and being revised before recording stops.
 
 ## Current foundation
 
@@ -36,7 +36,7 @@ Use independently testable stages:
 
 Keep ordinary dictation and code mode distinct. Existing prose cleanup must not silently reformat or paraphrase source code. Live insertion is an independent setting: either mode can process continuously while delivering only once at the end.
 
-Initial implementation targets macOS desktop. Define portable interfaces and document Windows/Linux gaps; do not claim support without native validation. Web-only Voicebox cannot be assumed to have desktop-wide editing capabilities.
+Initial implementation targets macOS desktop. Define portable interfaces and document Windows/Linux gaps; do not claim support without native validation. Web-only Herga cannot be assumed to have desktop-wide editing capabilities.
 
 Recognition distinguishes an accepted prefix from a provisional ending. Accepted recognition is not necessarily immutable output: an explicit later correction can request a revision of earlier session text. Ordinary inference updates should revise only the provisional region. Intentional corrections use a separate, explicit revision operation.
 

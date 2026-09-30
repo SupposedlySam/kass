@@ -100,7 +100,7 @@ If the user fixes a join that came out wrong, the difference between refined and
 
 ## Order
 
-1. `join.rs` plus reading the context at insertion. This fixes all the spacing and doubled punctuation, needs no backend change, and ships by itself. **Done.** `text_insert::fit_to_focused` runs once before the insertion chain in `run_insert_chain`, and live insertion reads the context in `begin_live` and keeps it on `Owned`. Insertion into Voicebox's own window, which goes through the DOM, is not fitted yet. `insert_bench::caret_context_bench` measures the extra AX read in TextEdit.
+1. `join.rs` plus reading the context at insertion. This fixes all the spacing and doubled punctuation, needs no backend change, and ships by itself. **Done.** `text_insert::fit_to_focused` runs once before the insertion chain in `run_insert_chain`, and live insertion reads the context in `begin_live` and keeps it on `Owned`. Insertion into Herga's own window, which goes through the DOM, is not fitted yet. `insert_bench::caret_context_bench` measures the extra AX read in TextEdit.
 2. Reading the context at key-down, and the first word's case. This fixes capitals. **Done** (section 2).
 3. Capture fields and the correction and learning changes.
 

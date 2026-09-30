@@ -1,4 +1,4 @@
-"""Current Voicebox path: MLXSTTBackend (mlx-audio Whisper turbo). Load once, transcribe each fixture N times.
+"""Current Herga path: MLXSTTBackend (mlx-audio Whisper turbo). Load once, transcribe each fixture N times.
 usage: mlxbench.py <repo_root> <data_dir> <runs> <wav>...   -> JSON lines on stdout
 """
 import asyncio, json, os, resource, sys, time

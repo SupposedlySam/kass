@@ -16,7 +16,7 @@ export const useServerStore = create<ServerStore>()(
       setCustomModelsDir: (dir) => set({ customModelsDir: dir }),
     }),
     {
-      name: 'voicebox-server',
+      name: 'herga-server',
       partialize: (state) => ({ customModelsDir: state.customModelsDir }),
     },
   ),

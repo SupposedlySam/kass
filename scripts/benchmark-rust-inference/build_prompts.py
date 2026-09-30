@@ -1,7 +1,7 @@
 """Build the exact cleanup prompts production sends, for recent real dictations.
 
 usage: build_prompts.py <repo_root> <scratch_data_dir> <n> <out.json>
-<scratch_data_dir> is a COPY of the Voicebox data dir (voicebox.db, writing-style.json,
+<scratch_data_dir> is a COPY of the Herga data dir (herga.db, writing-style.json,
 correction-learning.json). It runs refine_transcript with a capturing backend, so the
 system prompt, few-shot examples, personal examples and notes match the user's settings.
 Each entry holds the generate() arguments and the chat-templated prompt text (Qwen3,
@@ -42,7 +42,7 @@ with session.SessionLocal() as db:
     flags = refinement.RefinementFlags(s.smart_cleanup, s.self_correction, s.preserve_technical, s.punctuation_style)
     print("settings:", s.stt_model, s.llm_model, flags, file=sys.stderr)
 
-con = sqlite3.connect(f"file:{data_dir}/voicebox.db?mode=ro", uri=True)
+con = sqlite3.connect(f"file:{data_dir}/herga.db?mode=ro", uri=True)
 rows = con.execute(
     "select transcript_raw from captures where length(transcript_raw) > 0 order by created_at desc limit ?", (n * 3,)
 ).fetchall()

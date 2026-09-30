@@ -31,7 +31,7 @@ interface ChordPickerProps {
  * before clicking Save (otherwise they'd be saving while still holding
  * the shortcut, which is awkward).
  *
- * Browser limitation: we can only capture keys while Voicebox has key
+ * Browser limitation: we can only capture keys while Herga has key
  * focus, so the picker pulls focus to a hidden capture surface inside
  * the dialog. The actual chord runs through the Rust global hook —
  * this picker only writes the configuration the hook reads.
@@ -116,7 +116,7 @@ export function ChordPicker({
     });
   }, []);
 
-  // Wire global listeners only while open. Capture phase so Voicebox's
+  // Wire global listeners only while open. Capture phase so Herga's
   // own command palette / global shortcuts don't swallow the chord first.
   useEffect(() => {
     if (!open) return;

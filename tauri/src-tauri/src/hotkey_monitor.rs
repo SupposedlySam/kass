@@ -7,7 +7,7 @@
 //!
 //!   1. Build a `ChordMatcher` from the user's saved PTT, Toggle and
 //!      Command chords.
-//!   2. Translate `ChordEvent` → voicebox's [`Effect`] on a dispatcher
+//!   2. Translate `ChordEvent` → herga's [`Effect`] on a dispatcher
 //!      thread.
 //!   3. Fan [`Effect`]s out into native dictation (microphone + streaming,
 //!      see `dictation/`) and dictate-window show.
@@ -159,7 +159,7 @@ impl HotkeyMonitor {
         let shutdown_for_thread = shutdown.clone();
         let app = self.app.clone();
         let dispatcher = thread::Builder::new()
-            .name("voicebox-hotkey-dispatcher".into())
+            .name("herga-hotkey-dispatcher".into())
             .spawn(move || dispatcher_loop(app, bindings, matcher, shutdown_for_thread, cancelled))
             .expect("spawn hotkey dispatcher thread");
 
@@ -205,7 +205,7 @@ fn spawn_escape_watcher(
     let shutdown = shutdown.clone();
     let cancelled = cancelled.clone();
     let spawned = thread::Builder::new()
-        .name("voicebox-escape-watcher".into())
+        .name("herga-escape-watcher".into())
         .spawn(move || {
             while !shutdown.load(Ordering::Relaxed) {
                 match tap.recv_timeout(Duration::from_millis(100)) {

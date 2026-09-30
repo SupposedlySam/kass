@@ -40,9 +40,9 @@ MAX_STYLES = 6
 MIGRATED_STYLE = "personal"
 MIGRATED_NAME = "Personal"
 
-# Voicebox's own window. Dictation there follows the style being taught while
+# Herga's own window. Dictation there follows the style being taught while
 # a teach session is open (docs/plans/TEACH_BY_REPLYING.md).
-VOICEBOX_BUNDLE = "sh.voicebox.app"
+HERGA_BUNDLE = "com.mrgnhnt.herga"
 
 SETTINGS = ("punctuation_style", "preserve_technical")
 MAX_DESCRIPTION_CHARS = 600
@@ -81,9 +81,9 @@ class Snapshot:
     def for_app(self, bundle_id: str | None) -> Style:
         """The style ``bundle_id`` is assigned to, or the default.
 
-        Voicebox's own window uses the style being taught, while one is.
+        Herga's own window uses the style being taught, while one is.
         """
-        if bundle_id == VOICEBOX_BUNDLE and (taught := self.get(teaching_style())):
+        if bundle_id == HERGA_BUNDLE and (taught := self.get(teaching_style())):
             return taught
         return self.get(self.apps.get(bundle_id or "")) or self.default
 
@@ -98,8 +98,8 @@ _snapshot: Snapshot | None = None
 _teaching: tuple[str, float] | None = None
 
 
-def teach_in_voicebox(style_id: str | None, ttl_seconds: float) -> None:
-    """Clean up dictation in Voicebox's window in ``style_id`` for the next
+def teach_in_herga(style_id: str | None, ttl_seconds: float) -> None:
+    """Clean up dictation in Herga's window in ``style_id`` for the next
     ``ttl_seconds``; None stops."""
     global _teaching
     with _lock:
@@ -349,7 +349,7 @@ def _clean_description(text: object) -> str:
 def create_style(db: Session, name: str) -> Style:
     """A new style, starting from the default's settings with nothing learned."""
     if db.query(WritingStyle).count() >= MAX_STYLES:
-        raise ValueError(f"Voicebox keeps at most {MAX_STYLES} styles, one cached prompt each")
+        raise ValueError(f"Herga keeps at most {MAX_STYLES} styles, one cached prompt each")
     base = snapshot().default
     last = db.query(WritingStyle).order_by(WritingStyle.position.desc()).first()
     row = WritingStyle(

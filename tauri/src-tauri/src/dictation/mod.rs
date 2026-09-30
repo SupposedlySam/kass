@@ -52,7 +52,7 @@ pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:17493";
 /// server's own pending-audio bound. Beyond it the take uses the batch path.
 const MAX_PENDING_BYTES: usize = 48_000 * 2 * 60;
 const LEARNING_PAUSE_INTERVAL: Duration = Duration::from_secs(30);
-/// Label of Voicebox's main window (Tauri's default for the configured one).
+/// Label of Herga's main window (Tauri's default for the configured one).
 const MAIN_WINDOW_LABEL: &str = "main";
 /// How long the main window has to report an in-app insertion.
 const IN_APP_INSERT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -134,7 +134,7 @@ impl DictationState {
 pub enum TakeOrigin {
     /// The global shortcut: paste into the app focused at chord start.
     Shortcut,
-    /// Voicebox's own Dictate button: the text stays in Captures.
+    /// Herga's own Dictate button: the text stays in Captures.
     App,
 }
 
@@ -371,7 +371,7 @@ async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bo
             .ok()
             .and_then(Result::ok)
             .unwrap_or(false)),
-        Err(e) => Err(format!("Could not reach the Voicebox window: {e}")),
+        Err(e) => Err(format!("Could not reach the Herga window: {e}")),
     };
     app.unlisten(listener);
     result
@@ -414,7 +414,7 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
         read_selection(take, focus.clone());
     } else if let Some(focus) = focus.as_ref() {
         let (pid, bundle_id) = (focus.pid, focus.bundle_id.clone());
-        let in_voicebox = bundle_id.as_deref() == Some(crate::VOICEBOX_BUNDLE_ID);
+        let in_herga = bundle_id.as_deref() == Some(crate::HERGA_BUNDLE_ID);
         let field_before = take.field_before.clone();
         tauri::async_runtime::spawn_blocking(move || {
             // Turn on an Electron target's accessibility tree now, while the
@@ -422,7 +422,7 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
             crate::text_insert::wake_electron(pid);
             // Whether the take continues a sentence already in the field
             // (docs/plans/MID_SENTENCE_DICTATION.md).
-            if in_voicebox {
+            if in_herga {
                 return;
             }
             let before = crate::text_insert::sentence_before_focused(pid, bundle_id.as_deref());
@@ -548,7 +548,7 @@ struct AppEnv {
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
     /// Clipboard saved at key-down so paste needn't read it after release.
     clipboard: Arc<Mutex<Option<crate::clipboard::ClipboardSnapshot>>>,
-    /// False for takes started from Voicebox's own window: nothing to paste into.
+    /// False for takes started from Herga's own window: nothing to paste into.
     pastes: bool,
     live: Arc<Live<AxLive>>,
     mode: TakeMode,
@@ -620,7 +620,7 @@ impl LiveTarget for AxLive {
         let Some((pid, bundle)) = self.target() else {
             return false;
         };
-        bundle.as_deref() != Some(crate::VOICEBOX_BUNDLE_ID)
+        bundle.as_deref() != Some(crate::HERGA_BUNDLE_ID)
             && crate::accessibility::is_trusted()
             && crate::focus_capture::frontmost_pid() == Some(pid)
             // Last: live text is insertion, so from here Escape does nothing.
@@ -747,7 +747,7 @@ impl TakeEnv for AppEnv {
         let take_id = self.take_id;
         async move {
             if !pastes {
-                // Started from Voicebox itself: the capture is the result.
+                // Started from Herga itself: the capture is the result.
                 return Ok(true);
             }
             let text = match paste_command::plan(&text) {
@@ -772,7 +772,7 @@ impl TakeEnv for AppEnv {
                 return result;
             }
             match focus {
-                Some(focus) if focus.bundle_id.as_deref() == Some(crate::VOICEBOX_BUNDLE_ID) => {
+                Some(focus) if focus.bundle_id.as_deref() == Some(crate::HERGA_BUNDLE_ID) => {
                     insert_in_app(&app, take_id, text).await
                 }
                 Some(focus) => crate::paste_final_text_with(text, focus, prepared).await,
@@ -903,7 +903,7 @@ pub fn dictation_stop(app: AppHandle) {
     stop(&app);
 }
 
-/// Start a take from Voicebox's own Dictate button. The text lands in
+/// Start a take from Herga's own Dictate button. The text lands in
 /// Captures instead of being pasted. Returns the take id, or `None` when a
 /// take is already recording.
 #[tauri::command]
@@ -916,10 +916,10 @@ pub fn dictation_start(app: AppHandle) -> Option<u64> {
 }
 
 /// Run an instruction, or a transform by name, on the text selected in the
-/// app the user came to Voicebox from (the ⌘K palette's transforms).
+/// app the user came to Herga from (the ⌘K palette's transforms).
 #[tauri::command]
 pub async fn command_run(app: AppHandle, instruction: String) -> Result<(), String> {
-    command::run_from_voicebox(&app, instruction).await
+    command::run_from_herga(&app, instruction).await
 }
 
 /// Bring the HUD up bottom-center without taking key focus from the app
@@ -991,7 +991,7 @@ mod saved_device_tests {
 
     fn tempfile_dir() -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "voicebox-device-test-{}-{}",
+            "herga-device-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

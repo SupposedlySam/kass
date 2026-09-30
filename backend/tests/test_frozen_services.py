@@ -7,9 +7,9 @@ import pytest
 
 
 def test_frozen_server_contains_service_modules():
-    binary = os.environ.get("VOICEBOX_TEST_BINARY")
+    binary = os.environ.get("HERGA_TEST_BINARY")
     if not binary:
-        pytest.skip("Set VOICEBOX_TEST_BINARY to a built voicebox-server")
+        pytest.skip("Set HERGA_TEST_BINARY to a built herga-server")
 
     from PyInstaller.archive.readers import CArchiveReader
 

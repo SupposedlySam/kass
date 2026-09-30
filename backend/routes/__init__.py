@@ -1,4 +1,4 @@
-"""Route registration for the voicebox API."""
+"""Route registration for the herga API."""
 
 from fastapi import FastAPI
 

@@ -23,13 +23,13 @@
 //! [`KeySource`] posts the text-carrying key events of the keystroke
 //! inserter (`crate::keystroke_insert`). Every event it posts is tagged with
 //! [`SYNTHETIC_EVENT_TAG`] in `kCGEventSourceUserData`, so an event tap can
-//! tell Voicebox's typing apart from the user's.
+//! tell Herga's typing apart from the user's.
 
 use std::ffi::c_void;
 
 /// Value written to `kCGEventSourceUserData` (field 42) on every event
-/// [`KeySource`] posts: ASCII "Voicebox". An event tap that reads the field
-/// can skip Voicebox's own typing.
+/// [`KeySource`] posts: ASCII "Herga". An event tap that reads the field
+/// can skip Herga's own typing.
 pub const SYNTHETIC_EVENT_TAG: i64 = 0x566F_6963_6562_6F78;
 
 mod ffi {

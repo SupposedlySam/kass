@@ -23,8 +23,8 @@ function insertIntoFocusedField(text: string): boolean {
 }
 
 /**
- * Receive dictation aimed at Voicebox's own window. When the shortcut fires
- * while a Voicebox field has focus (writing a correction, say), Rust can't
+ * Receive dictation aimed at Herga's own window. When the shortcut fires
+ * while a Herga field has focus (writing a correction, say), Rust can't
  * paste into its own webview, so it sends the text here and waits for the
  * reply to decide whether the pill shows an error.
  *

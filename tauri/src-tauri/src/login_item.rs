@@ -1,6 +1,6 @@
 //! Launch at login, through `SMAppService.mainAppService` (macOS 13+).
 //!
-//! The system's registration is the only record of whether Voicebox starts
+//! The system's registration is the only record of whether Herga starts
 //! at login: the Settings toggle reads `status` and writes with
 //! `register` / `unregister`, and the user can also turn it off in System
 //! Settings › General › Login Items, which shows up here as
@@ -76,7 +76,7 @@ pub fn status() -> Status {
 }
 
 /// Register or unregister, then report the status the system settled on.
-/// Registering while the user has Voicebox turned off in Login Items fails
+/// Registering while the user has Herga turned off in Login Items fails
 /// and leaves it at `RequiresApproval`, which is reported, not an error.
 pub fn set_enabled(enabled: bool) -> Result<Status, String> {
     unsafe {
@@ -114,7 +114,7 @@ fn is_login_launch_event(event_id: u32, launch_kind: u32) -> bool {
     event_id == K_AE_OPEN_APPLICATION && launch_kind == K_AE_LAUNCHED_AS_LOG_IN_ITEM
 }
 
-/// Whether macOS launched Voicebox as a login item. Reads the "open
+/// Whether macOS launched Herga as a login item. Reads the "open
 /// application" Apple event that is current only while
 /// `applicationDidFinishLaunching` runs, so call it from Tauri's setup hook,
 /// which runs inside it.
@@ -172,7 +172,7 @@ pub fn set_launch_at_login(enabled: bool) -> Result<Status, String> {
 }
 
 /// Open System Settings › General › Login Items, where the user approves
-/// Voicebox after turning it off there.
+/// Herga after turning it off there.
 #[command]
 pub fn open_login_items_settings() -> Result<(), String> {
     unsafe {

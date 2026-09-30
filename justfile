@@ -1,4 +1,4 @@
-# Voicebox development commands (macOS, Apple Silicon)
+# Herga development commands (macOS, Apple Silicon)
 # Install: brew install just (or cargo install just)
 # Usage: just --list
 
@@ -76,7 +76,7 @@ build-server: _ensure-venv
 build-tauri:
     ./scripts/build-local-app.sh
 
-# Check requirements, build, and install or update /Applications/Voicebox.app
+# Check requirements, build, and install or update /Applications/Herga.app
 install:
     ./scripts/install.sh
 
@@ -135,7 +135,7 @@ db-init: _ensure-venv
 
 # Reset database (delete + reinit)
 db-reset:
-    rm -f {{ backend_dir }}/data/voicebox.db
+    rm -f {{ backend_dir }}/data/herga.db
     just db-init
 
 # ─── Utilities ────────────────────────────────────────────────────────

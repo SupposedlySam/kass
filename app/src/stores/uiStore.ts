@@ -51,7 +51,7 @@ export const useUIStore = create<UIStore>()(
       setInsightsPeriod: (insightsPeriod) => set({ insightsPeriod }),
     }),
     {
-      name: 'voicebox-ui',
+      name: 'herga-ui',
       // Version 1 starts Captures with the app list collapsed, once, over
       // the expanded list version 0 saved by default.
       version: 1,

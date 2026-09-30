@@ -8,6 +8,7 @@ mod dictation;
 mod focus_capture;
 #[cfg(desktop)]
 mod hotkey_monitor;
+mod identifier_move;
 mod input_monitoring;
 mod insert_chain;
 #[cfg(test)]
@@ -52,7 +53,7 @@ fn build_dictate_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewW
         DICTATE_WINDOW_LABEL,
         WebviewUrl::App("?view=dictate".into()),
     )
-    .title("Voicebox Dictate")
+    .title("Herga Dictate")
     .inner_size(DICTATE_WINDOW_WIDTH, DICTATE_WINDOW_HEIGHT)
     .decorations(false)
     .transparent(true)
@@ -213,7 +214,7 @@ fn pill_panel_class() -> &'static objc::runtime::Class {
     INIT.call_once(|| {
         let superclass = class!(NSPanel);
         let mut decl =
-            ClassDecl::new("VoiceboxPillPanel", superclass).expect("register VoiceboxPillPanel");
+            ClassDecl::new("HergaPillPanel", superclass).expect("register HergaPillPanel");
         unsafe {
             decl.add_method(
                 sel!(canBecomeKeyWindow),
@@ -222,7 +223,7 @@ fn pill_panel_class() -> &'static objc::runtime::Class {
         }
         decl.register();
     });
-    Class::get("VoiceboxPillPanel").expect("VoiceboxPillPanel registered")
+    Class::get("HergaPillPanel").expect("HergaPillPanel registered")
 }
 
 /// Convert the dictate pill's NSWindow into a never-key NSPanel and set the
@@ -320,7 +321,7 @@ pub fn ensure_dictate_window(app: &tauri::AppHandle) {
 
 pub(crate) const SERVER_PORT: u16 = 17493;
 
-/// Check if a Voicebox server is responding on the given port.
+/// Check if a Herga server is responding on the given port.
 ///
 /// Sends an HTTP GET to `/health` and returns `true` only if the response
 /// is valid JSON with `status == "healthy"`, which filters out unrelated
@@ -336,7 +337,7 @@ fn check_health(port: u16) -> bool {
                 if !resp.status().is_success() {
                     return false;
                 }
-                // Parse as JSON and validate Voicebox-specific fields
+                // Parse as JSON and validate Herga-specific fields
                 match resp.json::<serde_json::Value>() {
                     Ok(body) => body.get("status").and_then(|v| v.as_str()) == Some("healthy"),
                     Err(_) => false,
@@ -373,7 +374,7 @@ async fn start_server(
         return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
     }
 
-    // Check if a voicebox server is already running on our port (e.g. one left
+    // Check if a herga server is already running on our port (e.g. one left
     // over from a previous session, or started by hand via `python`/`uvicorn`)
     {
         use std::process::Command;
@@ -387,10 +388,10 @@ async fn start_server(
                 if parts.len() >= 2 {
                     let command = parts[0];
                     let pid_str = parts[1];
-                    if command.contains("voicebox") {
+                    if command.contains("herga") {
                         if let Ok(pid) = pid_str.parse::<u32>() {
                             println!(
-                                "Found existing voicebox-server on port {} (PID: {}), reusing it",
+                                "Found existing herga-server on port {} (PID: {}), reusing it",
                                 SERVER_PORT, pid
                             );
                             // Store the PID so we can kill it on exit if needed
@@ -398,9 +399,9 @@ async fn start_server(
                             return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                         }
                     } else {
-                        // Process name doesn't contain "voicebox" — could be an external
+                        // Process name doesn't contain "herga" — could be an external
                         // Python/uvicorn/Docker server. Verify via HTTP health check.
-                        println!("Port {} in use by '{}' (PID: {}), checking if it's a Voicebox server...", SERVER_PORT, command, pid_str);
+                        println!("Port {} in use by '{}' (PID: {}), checking if it's a Herga server...", SERVER_PORT, command, pid_str);
                         if check_health(SERVER_PORT) {
                             println!(
                                 "Health check passed — reusing external server on port {}",
@@ -409,11 +410,11 @@ async fn start_server(
                             return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                         }
                         println!(
-                            "Health check failed — port is occupied by a non-Voicebox process"
+                            "Health check failed — port is occupied by a non-Herga process"
                         );
                         return Err(format!(
                             "Port {} is already in use by another application ({}). \
-                             Close it or change the Voicebox server port.",
+                             Close it or change the Herga server port.",
                             SERVER_PORT, command
                         ));
                     }
@@ -432,7 +433,7 @@ async fn start_server(
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
 
     println!("=================================================================");
-    println!("Starting voicebox-server sidecar");
+    println!("Starting herga-server sidecar");
     println!("Data directory: {:?}", data_dir);
 
     let sidecar_result = app
@@ -505,7 +506,7 @@ async fn start_server(
         &parent_pid_str,
     ]);
     if let Some(ref dir) = effective_models_dir {
-        sidecar = sidecar.env("VOICEBOX_MODELS_DIR", dir);
+        sidecar = sidecar.env("HERGA_MODELS_DIR", dir);
     }
     println!("Spawning bundled server process...");
     let spawn_result = sidecar.spawn();
@@ -686,7 +687,7 @@ async fn start_server(
                 {
                     eprintln!("Server process ended unexpectedly during startup!");
                     eprintln!("The server binary may have crashed or exited with an error.");
-                    eprintln!("Check Console.app logs for more details (search for 'voicebox')");
+                    eprintln!("Check Console.app logs for more details (search for 'herga')");
                     return Err("Server process ended unexpectedly".to_string());
                 }
             }
@@ -821,14 +822,14 @@ async fn restart_server(
     start_server(app, state.clone(), None).await
 }
 
-/// Identifier of the Voicebox app itself — used to short-circuit auto-paste
+/// Identifier of the Herga app itself — used to short-circuit auto-paste
 /// when the user fires a chord while focus was inside one of our own
-/// windows. Dictation into Voicebox goes through the main window's DOM
+/// windows. Dictation into Herga goes through the main window's DOM
 /// instead (`dictation::insert_in_app`).
 ///
 /// Value matches the reverse-DNS bundle id `focus_capture::capture_focus`
-/// writes into `FocusSnapshot::bundle_id`.
-const VOICEBOX_BUNDLE_ID: &str = "sh.voicebox.app";
+/// writes into `FocusSnapshot::bundle_id`, and `identifier` in tauri.conf.json.
+const HERGA_BUNDLE_ID: &str = "com.mrgnhnt.herga";
 
 /// The icon of the app with `bundle_id` as a PNG data URL, for Captures.
 #[command]
@@ -908,7 +909,7 @@ fn build_chord_bindings(
 /// frontend invokes this both at startup (when `capture_settings.hotkey_enabled`
 /// is true) and from the settings toggle.
 ///
-/// On macOS this is the call that triggers the "Voicebox would like to receive
+/// On macOS this is the call that triggers the "Herga would like to receive
 /// keystrokes from any application" TCC prompt, since keytap's `Tap` creates
 /// the CGEventTap inside `HotkeyMonitor::spawn`.
 #[cfg(desktop)]
@@ -998,7 +999,7 @@ fn update_chord_bindings(
 /// the user can grant the permission. The URL scheme is stable across
 /// macOS 10.14–15.
 ///
-/// Asks for the permission first: a pane that doesn't list Voicebox leaves
+/// Asks for the permission first: a pane that doesn't list Herga leaves
 /// the user nothing to switch on, and only the request adds the entry.
 #[command]
 fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
@@ -1014,7 +1015,7 @@ fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
 /// Used by the Captures settings UI when the toggle is on but the grant
 /// is missing, so the user can flip the system toggle without hunting.
 ///
-/// Asks for the permission first: a pane that doesn't list Voicebox leaves
+/// Asks for the permission first: a pane that doesn't list Herga leaves
 /// the user nothing to switch on, and only the request adds the entry.
 #[command]
 fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
@@ -1034,7 +1035,7 @@ fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
 /// the log line shows what every step did and how long it took.
 ///
 /// Skips (returns `false`) without touching anything when `focus.bundle_id`
-/// is Voicebox itself — native dictation inserts into our own webview
+/// is Herga itself — native dictation inserts into our own webview
 /// through the DOM (`dictation::insert_in_app`). Errors when Accessibility
 /// is not trusted: every step needs it.
 #[command]
@@ -1052,7 +1053,7 @@ pub(crate) async fn paste_final_text_with(
     focus: focus_capture::FocusSnapshot,
     prepared: Option<clipboard::ClipboardSnapshot>,
 ) -> Result<bool, String> {
-    if focus.bundle_id.as_deref() == Some(VOICEBOX_BUNDLE_ID) {
+    if focus.bundle_id.as_deref() == Some(HERGA_BUNDLE_ID) {
         return Ok(false);
     }
     if !accessibility::is_trusted() {
@@ -1081,7 +1082,7 @@ pub(crate) async fn paste_final_text_with(
     })?;
 
     let app = focus.bundle_id.as_deref().unwrap_or("unknown app");
-    eprintln!("[voicebox] insert into {app}: {}", report.summary());
+    eprintln!("[herga] insert into {app}: {}", report.summary());
     match report.delivery() {
         insert_chain::Delivery::Inserted { method, .. } => {
             // Accessibility writes without activating; bring the user back
@@ -1098,7 +1099,7 @@ pub(crate) async fn paste_final_text_with(
     }
 }
 
-const ACCESSIBILITY_REQUIRED: &str = "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Voicebox.";
+const ACCESSIBILITY_REQUIRED: &str = "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Herga.";
 
 /// Paste the clipboard as it is (every format, not just text) into the
 /// target focused at chord start: the "paste from clipboard" command.
@@ -1209,7 +1210,7 @@ async fn debug_focus_roundtrip(
 ) -> Result<serde_json::Value, String> {
     if !accessibility::is_trusted() {
         return Err(
-            "Accessibility permission not granted. Open System Settings → Privacy & Security → Accessibility and enable Voicebox."
+            "Accessibility permission not granted. Open System Settings → Privacy & Security → Accessibility and enable Herga."
                 .into(),
         );
     }
@@ -1256,7 +1257,7 @@ async fn debug_paste_text(
 ) -> Result<serde_json::Value, String> {
     if !accessibility::is_trusted() {
         return Err(
-            "Accessibility permission not granted. Open System Settings → Privacy & Security → Accessibility and enable Voicebox, then try again."
+            "Accessibility permission not granted. Open System Settings → Privacy & Security → Accessibility and enable Herga, then try again."
                 .into(),
         );
     }
@@ -1359,7 +1360,7 @@ pub fn run() {
                 // finishes (rest-fade → hidden). `hide()` alone has been
                 // unreliable for transparent always-on-top windows on macOS
                 // — the NSWindow lingers as an invisible click target that
-                // steals focus to the Voicebox app when the user clicks
+                // steals focus to the Herga app when the user clicks
                 // where it used to be. Park the window off-screen and mark
                 // it click-through as well, so even if `hide()` no-ops the
                 // user sees and interacts with nothing.
@@ -1435,6 +1436,7 @@ pub fn run() {
                     }
 
                     // Set up listener for frontend response
+    identifier_move::move_from_old_identifier(HERGA_BUNDLE_ID);
                     let window_for_close = window.clone();
                     let closing_for_timeout = closing.clone();
                     let (tx, mut rx) = mpsc::unbounded_channel::<()>();

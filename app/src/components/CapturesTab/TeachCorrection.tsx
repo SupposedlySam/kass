@@ -236,7 +236,7 @@ export function EditableTranscript({
 
 /**
  * Under an edited transcript: what changed, an optional note and Save. Shown
- * only once the text differs from what Voicebox wrote.
+ * only once the text differs from what Herga wrote.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();

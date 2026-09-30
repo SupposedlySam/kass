@@ -37,8 +37,8 @@ fn main() {
     // Compile macOS Liquid Glass icon
     #[cfg(target_os = "macos")]
     {
-        // voicebox.icon is in tauri/assets/voicebox.icon (one level up from src-tauri)
-        let icon_source = format!("{}/../assets/voicebox.icon", project_root);
+        // herga.icon is in tauri/assets/herga.icon (one level up from src-tauri)
+        let icon_source = format!("{}/../assets/herga.icon", project_root);
 
         if std::path::Path::new(&icon_source).exists() {
             println!("cargo:rerun-if-changed={}", icon_source);
@@ -56,7 +56,7 @@ fn main() {
                     "--output-partial-info-plist",
                     &partial_plist,
                     "--app-icon",
-                    "voicebox",
+                    "herga",
                     "--include-all-app-icons",
                     "--target-device",
                     "mac",
@@ -84,12 +84,12 @@ fn main() {
                 }
             }
 
-            // Generate voicebox.icns from the source PNG via sips + iconutil
-            let icns_path = format!("{}/voicebox.icns", gen_dir);
+            // Generate herga.icns from the source PNG via sips + iconutil
+            let icns_path = format!("{}/herga.icns", gen_dir);
             if !std::path::Path::new(&icns_path).exists() {
-                let source_png = format!("{}/Assets/Voicebox.png", icon_source);
+                let source_png = format!("{}/Assets/Herga.png", icon_source);
                 if std::path::Path::new(&source_png).exists() {
-                    let iconset_dir = format!("{}/voicebox.iconset", gen_dir);
+                    let iconset_dir = format!("{}/herga.iconset", gen_dir);
                     std::fs::create_dir_all(&iconset_dir).ok();
 
                     let sizes: &[(u32, &str)] = &[
@@ -134,7 +134,7 @@ fn main() {
 
                     match iconutil_output {
                         Ok(out) if out.status.success() => {
-                            println!("Generated voicebox.icns");
+                            println!("Generated herga.icns");
                         }
                         Ok(out) => {
                             eprintln!("iconutil failed: {}", String::from_utf8_lossy(&out.stderr));
@@ -160,7 +160,7 @@ fn main() {
     // On non-macOS these are always stubs. On macOS, actool may not produce
     // Assets.car if the Xcode version doesn't support the .icon format.
     {
-        let required = ["Assets.car", "voicebox.icns", "partial.plist"];
+        let required = ["Assets.car", "herga.icns", "partial.plist"];
         for name in required {
             let path = format!("{}/{}", gen_dir, name);
             if !std::path::Path::new(&path).exists() {

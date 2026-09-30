@@ -350,7 +350,7 @@ class ApiClient {
     );
   }
 
-  /** The cleanup of what was dictated in Voicebox's window this turn. */
+  /** The cleanup of what was dictated in Herga's window this turn. */
   async teachDictated(sessionId: string, conversationId: string): Promise<TeachDictated> {
     return this.request<TeachDictated>(
       `/writing-style/teach/${sessionId}/conversations/${conversationId}/dictated`,

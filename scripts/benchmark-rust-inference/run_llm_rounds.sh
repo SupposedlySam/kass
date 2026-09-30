@@ -3,7 +3,7 @@
 # usage: run_llm_rounds.sh <scratch> <rounds> <passes>
 #   <scratch>/prompts.json      from build_prompts.py
 #   <scratch>/models/*.gguf
-#   <scratch>/data              copy of the Voicebox data dir
+#   <scratch>/data              copy of the Herga data dir
 #   $LLBENCH                    built llbench binary (llama-cpp-2, in process)
 #   $LLAMA_SERVER               built llama-server binary
 # Output: <scratch>/llm.jsonl (appended)

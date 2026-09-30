@@ -17,7 +17,7 @@ word. WhisperKit does win in two places:
   Engine (ANE).
 - **Its process memory is much smaller.**
 
-Neither advantage matters for Voicebox today. The Qwen cleanup runs after
+Neither advantage matters for Herga today. The Qwen cleanup runs after
 Whisper on the same MLX worker, so the two never compete for the GPU.
 
 Revisit only if one of these becomes true (see "When to revisit"):
@@ -43,7 +43,7 @@ Revisit only if one of these becomes true (see "When to revisit"):
       Engine, and the mel spectrogram runs on the GPU.
     - `gpu`: everything on the GPU.
     - `mixed`: the encoder on the GPU and the decoder on the Neural Engine.
-- **MLX (current Voicebox path):** `backend.services.transcribe.get_whisper_model()`
+- **MLX (current Herga path):** `backend.services.transcribe.get_whisper_model()`
   → `MLXSTTBackend.transcribe(path, language="en", model_size="turbo")`, the
   production call.
   - Environment: `HF_HUB_OFFLINE=1`, with `config.set_data_dir` pointed at a
@@ -119,7 +119,7 @@ relatively stronger. A Max-class GPU changes that balance.
 
 This is WhisperKit's real strength: the Neural Engine is effectively
 private. This test is a worst case, with the GPU saturated by another
-process. Within Voicebox, Whisper and the Qwen cleanup run one after the
+process. Within Herga, Whisper and the Qwen cleanup run one after the
 other on one MLX worker, so they don't compete. Contention only happens when
 another app is using the GPU heavily (games, video export, local LLMs) during
 dictation.
@@ -179,17 +179,17 @@ decide anything here. It would matter more on 8–16 GB machines.
   626 MB variant had WER 0 on the prose, but it was slower than the full
   turbo model on this Mac.
 
-## WhisperKit capabilities, and how they fit Voicebox
+## WhisperKit capabilities, and how they fit Herga
 
 - **Streaming.** The open-source `AudioStreamTranscriber` records from the
   microphone itself (AVAudioEngine). It re-transcribes the growing buffer
   from the last confirmed segment whenever at least 1 s of new audio with
   voice has arrived. It confirms all but the last 2 segments and clips
   decoding at the last confirmed timestamp. This is the same
-  rolling-window approach Voicebox's `capture_stream.py` already uses, with
+  rolling-window approach Herga's `capture_stream.py` already uses, with
   no streaming encoder. Each step still pays the full 30 s encoder
   (0.387 s here). So it would bring no new latency trick. It would also mean
-  giving up Voicebox's phrase-seam guards, which were tuned for correctness
+  giving up Herga's phrase-seam guards, which were tuned for correctness
   (see STREAMING_BENCHMARK.md).
 - **True low-latency streaming is paid.** Argmax's documentation lists
   real-time transcription as a Pro SDK feature. Pro is closed source and
@@ -218,7 +218,7 @@ decide anything here. It would matter more on 8–16 GB machines.
   shell through a `swift-rs`/C-ABI bridge. The library needs macOS 14 or
   later.
 
-## Integration cost and risk if Voicebox switched anyway
+## Integration cost and risk if Herga switched anyway
 
 1. **Two inference stacks instead of one.** The Qwen cleanup LLM stays on
    MLX in Python. So switching Whisper adds a Swift engine without removing
@@ -257,12 +257,12 @@ Not recommended now.
 
 - **The pipeline starts overlapping Whisper and the LLM.** For example, the
   last phrase's recognition runs while cleanup of the earlier phrases is
-  still running. Then GPU contention inside Voicebox becomes real, and
+  still running. Then GPU contention inside Herga becomes real, and
   WhisperKit's flat latency under load (0.55–0.57 s whether the GPU is idle
   or busy) could beat MLX's contended latency (1.4 s or more).
 - **Real-world logs show release-to-final spikes that line up with other
   apps' GPU load.** Item 1's per-take logging could show this.
-- **Voicebox targets smaller Macs (8–16 GB, base chips).** Measure again
+- **Herga targets smaller Macs (8–16 GB, base chips).** Measure again
   there first.
 - **Argmax Pro (Parakeet streaming) or Apple's own on-device speech APIs are
   evaluated as a different class of engine.** These are true streaming

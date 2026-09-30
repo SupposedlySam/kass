@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/assets/icon-dark.webp" alt="Voicebox" width="120" height="120" />
+  <img src="docs/assets/icon-dark.webp" alt="Herga" width="120" height="120" />
 </p>
 
-<h1 align="center">Voicebox</h1>
+<h1 align="center">Herga</h1>
 
 <p align="center">
   <strong>Local dictation for macOS.</strong><br/>
@@ -12,11 +12,13 @@
 
 <br/>
 
-## What is Voicebox?
+## What is Herga?
 
-Voicebox is a local-first dictation app for Apple Silicon Macs. Hold a global hotkey anywhere on your system and speak. When you let go, Whisper transcribes what you said, a local LLM cleans it up, and the result is pasted into the text field you were typing in.
+Herga is a local-first dictation app for Apple Silicon Macs. Hold a global hotkey anywhere on your system and speak. When you let go, Whisper transcribes what you said, a local LLM cleans it up, and the result is pasted into the text field you were typing in.
 
-The goal is text you could send as-is while keeping what you meant, in your own words. Refinement removes filler, stutters, false starts and self-corrections. It does not summarize or add anything. Voicebox also learns from the corrections you make.
+The goal is text you could send as-is while keeping what you meant, in your own words. Refinement removes filler, stutters, false starts and self-corrections. It does not summarize or add anything. Herga also learns from the corrections you make.
+
+The name comes from *jerga*, Spanish for slang: the way you actually talk. Herga started as a fork of [Voicebox](https://github.com/jamiepine/voicebox) by Jamie Pine.
 
 - **Private.** Audio, transcripts, models and everything learned from your corrections stay on your machine. Nothing is hosted.
 - **Native.** Built with Tauri (Rust), not Electron. Audio capture, the hotkey, focus tracking and paste run in native code, so they are fast.
@@ -30,8 +32,8 @@ The goal is text you could send as-is while keeping what you meant, in your own 
 
 - **Configurable chords.** Hold-to-speak and tap-to-toggle chords can each be rebound in the in-app chord picker. If you tap `Space` while holding push-to-talk, the session switches to toggle mode without dropping any audio.
 - **Native audio capture.** The microphone is captured in Rust and streamed to the local server while you speak. You can choose which input device to use.
-- **Target-aware paste.** Text is pasted into the field that had focus when you started. Voicebox checks that field through Accessibility and saves and restores your clipboard, so the paste does not overwrite what you had copied.
-- **On-screen pill.** A floating overlay shows whether Voicebox is recording, transcribing or refining.
+- **Target-aware paste.** Text is pasted into the field that had focus when you started. Herga checks that field through Accessibility and saves and restores your clipboard, so the paste does not overwrite what you had copied.
+- **On-screen pill.** A floating overlay shows whether Herga is recording, transcribing or refining.
 - **Permission setup.** On first run, in-app screens guide you through granting Accessibility and Input Monitoring, with links straight to the right pages in System Settings.
 
 ### Speech-to-text
@@ -53,7 +55,7 @@ Every dictation and uploaded audio file is saved in the Captures tab, with the o
 
 - **Replay, re-transcribe, refine.** You can run speech-to-text again with a different Whisper size, or run the raw transcript through the LLM again with different options.
 - **Edit and report.** You can fix a transcript in place, or report a wrong transcription or refinement.
-- **Local storage.** Audio and transcripts stay in your Voicebox data directory. Settings has a shortcut that opens that folder.
+- **Local storage.** Audio and transcripts stay in your Herga data directory. Settings has a shortcut that opens that folder.
 
 ### Correction learning
 
@@ -61,12 +63,12 @@ The corrections you report become examples and rules. A periodic job builds thos
 
 ### Writing style
 
-"Match my writing" learns how you punctuate. A short calibration step asks you to rewrite a few refined paragraphs the way you would type them. Voicebox counts what you do at sentence breaks, with capitalization and with commas, and adds evidence from your later corrections. The refinement prompt and a final pass follow those habits. The final pass only changes punctuation and capitalization, never your words.
+"Match my writing" learns how you punctuate. A short calibration step asks you to rewrite a few refined paragraphs the way you would type them. Herga counts what you do at sentence breaks, with capitalization and with commas, and adds evidence from your later corrections. The refinement prompt and a final pass follow those habits. The final pass only changes punctuation and capitalization, never your words.
 
 ### Model management
 
 - You can download, unload and delete models from the Models tab.
-- Set `VOICEBOX_MODELS_DIR` to use a custom models directory. You can also move your models to another folder in the app, with progress shown.
+- Set `HERGA_MODELS_DIR` to use a custom models directory. You can also move your models to another folder in the app, with progress shown.
 
 ---
 
@@ -126,22 +128,22 @@ Voicebox is built and installed from this checkout. There are no hosted releases
 ./scripts/install.sh
 ```
 
-On a Mac without a checkout yet, this clones one into `~/voicebox` first:
+On a Mac without a checkout yet, this clones one into `~/herga` first:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/voicebox/main/scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/mrgnhnt96/herga/main/scripts/install.sh)
 ```
 
-The script checks for everything the build needs and prints the command to install anything missing. It then pulls the latest code, builds the server (only when the backend changed) and the app, and replaces `/Applications/Voicebox.app`. Run it again to update.
+The script checks for everything the build needs and prints the command to install anything missing. It then pulls the latest code, builds the server (only when the backend changed) and the app, and replaces `/Applications/Herga.app`. Run it again to update.
 
-Every build is signed with the same identity, so updates keep Voicebox's Microphone, Accessibility and Input Monitoring permissions. That identity is your Apple Development certificate if you have one. Otherwise the first install creates a self-signed "Voicebox Local Signing" certificate, and macOS asks for your password once to trust it for code signing. If a Mac's current install was signed another way, macOS asks for the permissions once more after the switch.
+Every build is signed with the same identity, so updates keep Herga's Microphone, Accessibility and Input Monitoring permissions. That identity is your Apple Development certificate if you have one. Otherwise the first install creates a self-signed "Herga Local Signing" certificate, and macOS asks for your password once to trust it for code signing. If a Mac's current install was signed another way, macOS asks for the permissions once more after the switch.
 
 `just build` builds the same signed app without installing it. The bundle is written to `tauri/src-tauri/target/release/bundle/`.
 
 ### Project Structure
 
 ```
-voicebox/
+herga/
 ├── app/              # React frontend
 ├── tauri/            # Desktop shell (Tauri + Rust native dictation code)
 ├── backend/          # Python FastAPI server (STT, refinement, captures, learning)

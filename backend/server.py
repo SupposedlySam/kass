@@ -1,5 +1,5 @@
 """
-Entry point for PyInstaller-bundled voicebox server.
+Entry point for PyInstaller-bundled herga server.
 
 This module provides an entry point that works with PyInstaller by using
 absolute imports instead of relative imports.
@@ -31,7 +31,7 @@ if "--improve-model" in sys.argv:
 if "--version" in sys.argv:
     from backend import __version__
 
-    print(f"voicebox-server {__version__}")
+    print(f"herga-server {__version__}")
     sys.exit(0)
 
 import logging
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 # Log startup immediately to confirm binary execution
 logger.info("=" * 60)
-logger.info("voicebox-server starting up...")
+logger.info("herga-server starting up...")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Executable: {sys.executable}")
 logger.info(f"Arguments: {sys.argv}")
@@ -145,7 +145,7 @@ def _start_parent_watchdog(parent_pid, data_dir=None):
 
 if __name__ == "__main__":
     try:
-        parser = argparse.ArgumentParser(description="voicebox backend server")
+        parser = argparse.ArgumentParser(description="herga backend server")
         parser.add_argument(
             "--host",
             type=str,

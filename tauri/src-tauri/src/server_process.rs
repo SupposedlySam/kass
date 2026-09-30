@@ -5,7 +5,7 @@ use std::process::Command;
 /// The server ships as a PyInstaller folder in the app's resources, so it
 /// starts in place instead of unpacking itself to a temp dir on every launch.
 pub fn bundled_executable(resource_dir: &Path) -> Result<PathBuf, String> {
-    let executable = resource_dir.join("voicebox-server").join("voicebox-server");
+    let executable = resource_dir.join("herga-server").join("herga-server");
     if executable.is_file() {
         Ok(executable)
     } else {
@@ -68,12 +68,12 @@ mod tests {
     #[test]
     fn finds_the_server_inside_its_bundled_folder() {
         let resources = std::env::temp_dir().join(format!("vb-resources-{}", std::process::id()));
-        let folder = resources.join("voicebox-server");
+        let folder = resources.join("herga-server");
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("voicebox-server"), "").unwrap();
+        std::fs::write(folder.join("herga-server"), "").unwrap();
         let found = bundled_executable(&resources);
         std::fs::remove_dir_all(&resources).unwrap();
-        assert_eq!(found, Ok(folder.join("voicebox-server")));
+        assert_eq!(found, Ok(folder.join("herga-server")));
     }
 
     #[test]

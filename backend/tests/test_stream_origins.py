@@ -38,6 +38,6 @@ def test_originless_remote_rejected(client):
 
 
 def test_configured_remote_origin(monkeypatch):
-    monkeypatch.setenv("VOICEBOX_CORS_ORIGINS", " https://voicebox.example, ")
-    assert "https://voicebox.example" in allowed_origins()
-    assert is_allowed_websocket_origin(socket("https://voicebox.example", client="192.168.1.2"))
+    monkeypatch.setenv("HERGA_CORS_ORIGINS", " https://herga.example, ")
+    assert "https://herga.example" in allowed_origins()
+    assert is_allowed_websocket_origin(socket("https://herga.example", client="192.168.1.2"))

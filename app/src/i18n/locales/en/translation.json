@@ -54,21 +54,21 @@
     "inputMonitoring": {
       "title": "Allow Input Monitoring",
       "why": "So your shortcut works in any app",
-      "body": "macOS needs this so Voicebox can hear your shortcut while you’re in other apps. Voicebox only watches for the keys you pick.",
-      "path": "System Settings › Privacy & Security › Input Monitoring › Voicebox"
+      "body": "macOS needs this so Herga can hear your shortcut while you’re in other apps. Herga only watches for the keys you pick.",
+      "path": "System Settings › Privacy & Security › Input Monitoring › Herga"
     },
     "accessibility": {
       "title": "Allow Accessibility",
-      "why": "So Voicebox can paste at your cursor",
-      "body": "macOS needs this so Voicebox can paste what you said into the app you’re using. Without it, dictations still land in Captures.",
-      "path": "System Settings › Privacy & Security › Accessibility › Voicebox"
+      "why": "So Herga can paste at your cursor",
+      "body": "macOS needs this so Herga can paste what you said into the app you’re using. Without it, dictations still land in Captures.",
+      "path": "System Settings › Privacy & Security › Accessibility › Herga"
     },
     "permission": {
       "open": "Open System Settings",
       "recheck": "I’ve turned it on",
       "checking": "Checking…",
-      "stillOff": "Still off. macOS sometimes needs Voicebox to restart before it notices.",
-      "focusHint": "Voicebox checks again when you come back to this window."
+      "stillOff": "Still off. macOS sometimes needs Herga to restart before it notices.",
+      "focusHint": "Herga checks again when you come back to this window."
     },
     "shortcut": {
       "title": "Pick your shortcut",
@@ -133,21 +133,21 @@
     "dictionary": {
       "add": "Add to dictionary",
       "title": "Add to dictionary",
-      "description": "Voicebox writes it this way from now on.",
-      "spellingOnly": "Spelled as it is, so Voicebox only learns this spelling. Change “Write” to fix it.",
-      "replaces": "When you say “{{said}}”, Voicebox writes “{{written}}”.",
+      "description": "Herga writes it this way from now on.",
+      "spellingOnly": "Spelled as it is, so Herga only learns this spelling. Change “Write” to fix it.",
+      "replaces": "When you say “{{said}}”, Herga writes “{{written}}”.",
       "submit": "Add",
       "added": "Added “{{written}}” to the dictionary"
     },
     "feedback": {
-      "report": "Teach Voicebox",
-      "description": "Edit this into what you meant: fix wrong words, drop false starts, put things in order, fix grammar. Keep your own words and every idea you said. Voicebox uses it as an example on your next dictations right away, and the personal model trains on it while the app is idle. Everything stays on this device. Deleting a capture removes its corrections from future training.",
-      "original": "What Voicebox wrote ({{target}})",
+      "report": "Teach Herga",
+      "description": "Edit this into what you meant: fix wrong words, drop false starts, put things in order, fix grammar. Keep your own words and every idea you said. Herga uses it as an example on your next dictations right away, and the personal model trains on it while the app is idle. Everything stays on this device. Deleting a capture removes its corrections from future training.",
+      "original": "What Herga wrote ({{target}})",
       "expected": "What you meant",
       "emptyHint": "Leave empty if the correct output should contain no text.",
       "notes": "What went wrong? (optional)",
       "save": "Save",
-      "saved": "Saved. Voicebox will use this on your next dictations.",
+      "saved": "Saved. Herga will use this on your next dictations.",
       "failed": "Could not save correction",
       "about": "About corrections",
       "exportFailed": "Could not export corrections",
@@ -238,7 +238,7 @@
       "copyRaw": "Copy raw transcript"
     },
     "teach": {
-      "editHint": "Click to correct this. Voicebox learns from your fix.",
+      "editHint": "Click to correct this. Herga learns from your fix.",
       "save": "Save correction",
       "learned": "Learned",
       "moreChanges_one": "+{{count}} more change",
@@ -334,13 +334,13 @@
       },
       "inputMonitoring": {
         "label": "Input Monitoring permission",
-        "ready": "macOS allows Voicebox to detect your global shortcut.",
-        "missing": "macOS needs to allow Voicebox to detect the global shortcut.",
+        "ready": "macOS allows Herga to detect your global shortcut.",
+        "missing": "macOS needs to allow Herga to detect the global shortcut.",
         "openSettings": "Open Settings"
       },
       "accessibility": {
         "label": "Accessibility permission",
-        "ready": "Voicebox can paste transcriptions into other apps.",
+        "ready": "Herga can paste transcriptions into other apps.",
         "missing": "Required so transcriptions can paste into the focused app.",
         "openSettings": "Open Settings"
       }
@@ -348,19 +348,19 @@
     "permissions": {
       "accessibility": {
         "title": "Grant Accessibility permission to enable auto-paste",
-        "body": "Voicebox needs <path>System Settings → Privacy & Security → Accessibility</path> to paste transcriptions into other apps. Your dictation still lands in the Captures tab without it.",
+        "body": "Herga needs <path>System Settings → Privacy & Security → Accessibility</path> to paste transcriptions into other apps. Your dictation still lands in the Captures tab without it.",
         "openSettings": "Open Settings",
         "recheck": "I've enabled it",
         "rechecking": "Checking…",
-        "stillMissing": "Still not detected. macOS usually requires quitting and reopening Voicebox after toggling the permission."
+        "stillMissing": "Still not detected. macOS usually requires quitting and reopening Herga after toggling the permission."
       },
       "inputMonitoring": {
         "title": "Grant Input Monitoring to enable the global shortcut",
-        "body": "Voicebox needs <path>System Settings → Privacy & Security → Input Monitoring</path> to detect your dictation chord. The toggle is on, but macOS is blocking key events until you allow it.",
+        "body": "Herga needs <path>System Settings → Privacy & Security → Input Monitoring</path> to detect your dictation chord. The toggle is on, but macOS is blocking key events until you allow it.",
         "openSettings": "Open Settings",
         "recheck": "I've enabled it",
         "rechecking": "Checking…",
-        "stillMissing": "Still not detected. macOS usually requires quitting and reopening Voicebox after toggling the permission."
+        "stillMissing": "Still not detected. macOS usually requires quitting and reopening Herga after toggling the permission."
       }
     },
     "review": {
@@ -376,7 +376,7 @@
       },
       "added": "May have added: {{words}}",
       "missing": "May have left out: {{words}}",
-      "hint": "If it's wrong, type what you meant under Teach so Voicebox learns it."
+      "hint": "If it's wrong, type what you meant under Teach so Herga learns it."
     },
     "source": {
       "dictation": "Dictation",
@@ -413,7 +413,7 @@
       "qwen": "Qwen3 {{model}}",
       "corrections": "Corrections",
       "correctionsCount": "Corrections · {{count}}",
-      "noCorrections": "None yet. Alter the text to teach Voicebox.",
+      "noCorrections": "None yet. Alter the text to teach Herga.",
       "showing": "Showing"
     },
     "command": {
@@ -585,7 +585,7 @@
         "online": "Online"
       },
       "restart": {
-        "title": "Restart Voicebox",
+        "title": "Restart Herga",
         "description": "Restart the app and its local server. Any recording or task in progress will stop.",
         "action": "Restart",
         "busy": "Restarting…",
@@ -593,7 +593,7 @@
       },
       "launchAtLogin": {
         "title": "Launch at login",
-        "description": "Start Voicebox in the background when you log in, so dictation is ready.",
+        "description": "Start Herga in the background when you log in, so dictation is ready.",
         "unavailable": "Only the installed app in Applications can launch at login.",
         "requiresApproval": "Turned off in System Settings › Login Items.",
         "openLoginItems": "Open Login Items",
@@ -613,7 +613,7 @@
         },
         "inputDevice": {
           "title": "Microphone",
-          "description": "Choose which microphone Voicebox records dictation from.",
+          "description": "Choose which microphone Herga records dictation from.",
           "default": "System Default Microphone",
           "fallbackLabel": "Microphone {{index}}"
         },
@@ -653,7 +653,7 @@
         },
         "autoPaste": {
           "title": "Paste at cursor",
-          "description": "Types the refined text into the focused field. Needs Accessibility. Voicebox saves and restores whatever was on your clipboard."
+          "description": "Types the refined text into the focused field. Needs Accessibility. Herga saves and restores whatever was on your clipboard."
         }
       },
       "transcription": {
@@ -717,11 +717,11 @@
         },
         "punctuationStyle": {
           "title": "Punctuation style",
-          "description": "Casual joins related thoughts with commas and keeps run-on sentences the way you said them. Standard punctuates like written prose. Match my writing follows the habits Voicebox learned from you in Writing style.",
+          "description": "Casual joins related thoughts with commas and keeps run-on sentences the way you said them. Standard punctuates like written prose. Match my writing follows the habits Herga learned from you in Writing style.",
           "casual": "Casual · commas, as spoken",
           "standard": "Standard · written prose",
           "learned": "Match my writing · learned from you",
-          "learnedLocked": "Match my writing · teach Voicebox first"
+          "learnedLocked": "Match my writing · teach Herga first"
         },
         "selfCorrection": {
           "title": "Remove self-corrections",
@@ -739,10 +739,10 @@
       },
       "storage": {
         "title": "Storage",
-        "description": "Captures are saved as paired audio and transcript files in your Voicebox data directory.",
+        "description": "Captures are saved as paired audio and transcript files in your Herga data directory.",
         "retention": {
           "title": "Keep history",
-          "description": "Older captures are deleted with their audio. Corrections, what Voicebox learned and your stats are kept.",
+          "description": "Older captures are deleted with their audio. Corrections, what Herga learned and your stats are kept.",
           "forever": "Keep forever",
           "d365": "1 year",
           "d90": "90 days",
@@ -750,22 +750,22 @@
           "d7": "7 days",
           "confirm": {
             "title": "Keep {{window}} of history?",
-            "description_one": "{{count}} capture older than {{window}} will be deleted with its audio. Its corrections, what Voicebox learned from it and your stats are kept.",
-            "description_other": "{{count}} captures older than {{window}} will be deleted with their audio. Their corrections, what Voicebox learned from them and your stats are kept.",
-            "unknown": "Captures older than {{window}} will be deleted with their audio. Their corrections, what Voicebox learned from them and your stats are kept.",
+            "description_one": "{{count}} capture older than {{window}} will be deleted with its audio. Its corrections, what Herga learned from it and your stats are kept.",
+            "description_other": "{{count}} captures older than {{window}} will be deleted with their audio. Their corrections, what Herga learned from them and your stats are kept.",
+            "unknown": "Captures older than {{window}} will be deleted with their audio. Their corrections, what Herga learned from them and your stats are kept.",
             "delete_one": "Delete {{count}} capture",
             "delete_other": "Delete {{count}} captures",
             "deleteUnknown": "Delete older captures"
           },
           "ask": {
             "title": "Delete old captures?",
-            "description_one": "Voicebox now keeps {{window}} of history. {{count}} capture is older than that and would be deleted with its audio. Your corrections, the names it learned and your stats are kept.",
-            "description_other": "Voicebox now keeps {{window}} of history. {{count}} captures are older than that and would be deleted with their audio. Your corrections, the names they taught and your stats are kept.",
+            "description_one": "Herga now keeps {{window}} of history. {{count}} capture is older than that and would be deleted with its audio. Your corrections, the names it learned and your stats are kept.",
+            "description_other": "Herga now keeps {{window}} of history. {{count}} captures are older than that and would be deleted with their audio. Your corrections, the names they taught and your stats are kept.",
             "choose": "Keep history for",
             "counting": "Counting…",
             "later": "Not now",
             "forever": "Keep forever",
-            "description_zero": "Voicebox now keeps {{window}} of history. No captures are older than that yet. Your corrections, the names they taught and your stats are always kept.",
+            "description_zero": "Herga now keeps {{window}} of history. No captures are older than that yet. Your corrections, the names they taught and your stats are always kept.",
             "keep_zero": "Keep {{window}}",
             "keep_one": "Keep {{window}}, delete {{count}}",
             "keep_other": "Keep {{window}}, delete {{count}}"
@@ -951,11 +951,11 @@
   "writingStyle": {
     "settings": {
       "title": "Writing style",
-      "description": "Teach Voicebox how you write so dictation comes out ready to send, in your own words. Everything stays on this device.",
+      "description": "Teach Herga how you write so dictation comes out ready to send, in your own words. Everything stays on this device.",
       "calibrate": {
-        "title": "Teach Voicebox how you write in {{style}}",
-        "description": "Reply to a few messages the way you normally would, by voice or by typing. Voicebox learns from how you actually write.",
-        "descriptionApps": "Reply to a few messages like the ones you write in {{apps}}, by voice or by typing. Voicebox learns from how you actually write.",
+        "title": "Teach Herga how you write in {{style}}",
+        "description": "Reply to a few messages the way you normally would, by voice or by typing. Herga learns from how you actually write.",
+        "descriptionApps": "Reply to a few messages like the ones you write in {{apps}}, by voice or by typing. Herga learns from how you actually write.",
         "lastRun_one": "Last run {{date}} · {{count}} run so far",
         "lastRun_other": "Last run {{date}} · {{count}} runs so far",
         "habitsLabel": "Learned in {{style}}",
@@ -977,7 +977,7 @@
       },
       "recent": {
         "title": "Recent corrections in {{style}}",
-        "empty": "No corrections yet. Use Teach Voicebox on a capture to fix what it got wrong.",
+        "empty": "No corrections yet. Use Teach Herga on a capture to fix what it got wrong.",
         "today": "today",
         "yesterday": "yesterday",
         "remove": "Remove correction"
@@ -986,10 +986,10 @@
         "title": "Your examples",
         "description_one": "{{count}} example of what you said and what you meant. Cleanup shows the most recent ones on every dictation.",
         "description_other": "{{count}} examples of what you said and what you meant. Cleanup shows the most recent ones on every dictation.",
-        "empty": "No examples yet. Use Teach Voicebox on a capture, or teach this style above.",
+        "empty": "No examples yet. Use Teach Herga on a capture, or teach this style above.",
         "view": "View",
         "dialogTitle": "Your examples",
-        "dialogDescription": "Cleanup shows the model your most recent examples. Older ones are summarized into rules. Removing an example stops Voicebox from using it.",
+        "dialogDescription": "Cleanup shows the model your most recent examples. Older ones are summarized into rules. Removing an example stops Herga from using it.",
         "said": "You said",
         "meant": "You meant",
         "fromCorrection": "From a correction",
@@ -1001,7 +1001,7 @@
         "title": "Rules from older examples",
         "description_one": "{{count}} rule summarized from examples too old to show the model, so they keep counting.",
         "description_other": "{{count}} rules summarized from examples too old to show the model, so they keep counting.",
-        "empty": "None yet. Once enough of your examples are older than the most recent ones, Voicebox summarizes them into rules while it's idle.",
+        "empty": "None yet. Once enough of your examples are older than the most recent ones, Herga summarizes them into rules while it's idle.",
         "view": "View",
         "dialogTitle": "Rules from older examples",
         "dialogDescription": "Cleanup follows these on every dictation. A new version is only kept when replaying your examples with it does no worse than the current rules.",
@@ -1010,7 +1010,7 @@
       }
     },
     "summary": {
-      "title": "Here's what Voicebox learned",
+      "title": "Here's what Herga learned",
       "habitsTitle": "Punctuation habits",
       "noHabits": "No punctuation habits beyond Standard yet.",
       "before": "One of your dictations, cleaned up before",
@@ -1021,7 +1021,7 @@
     },
     "prompt": {
       "title": "Make dictation write like you",
-      "description": "Reply to a few messages the way you'd really send them, so Voicebox learns how you write. About 3 minutes.",
+      "description": "Reply to a few messages the way you'd really send them, so Herga learns how you write. About 3 minutes.",
       "start": "Start",
       "dismiss": "Not now"
     },
@@ -1069,8 +1069,8 @@
       "createFailed": "Could not add the style",
       "assignFailed": "Could not change the app's style",
       "memory": "Each style keeps its own model cache of about {{mb}} MB, which keeps switching apps fast. More styles use more memory.",
-      "limit_one": "Voicebox keeps at most {{count}} style, one model cache each.",
-      "limit_other": "Voicebox keeps at most {{count}} styles, one model cache each.",
+      "limit_one": "Herga keeps at most {{count}} style, one model cache each.",
+      "limit_other": "Herga keeps at most {{count}} styles, one model cache each.",
       "moveDialog": {
         "title": "Move {{app}} to {{to}}",
         "description_one": "{{app}} has {{count}} correction teaching {{from}}. Bring it to {{to}}, or leave it with {{from}}? Either way, new corrections in {{app}} teach {{to}}.",
@@ -1095,7 +1095,7 @@
         "saveFailed": "Could not save the style",
         "deleteFailed": "Could not delete the style",
         "description": "How you write here",
-        "descriptionHelp": "In your own words: who you write to, how formal it is, and what's fine to skip. Voicebox follows it when it cleans up dictation in this style.",
+        "descriptionHelp": "In your own words: who you write to, how formal it is, and what's fine to skip. Herga follows it when it cleans up dictation in this style.",
         "descriptionPlaceholder": "Mostly coworkers, so it's informal. Abbreviations like lmk are fine, run-on sentences are fine, no greetings or sign-offs…",
         "descriptionSay": "Say it",
         "descriptionStop": "Stop"
@@ -1120,8 +1120,8 @@
       "drop_final_period": "No final period"
     },
     "teach": {
-      "title": "Teach Voicebox how you write",
-      "description": "Reply to messages the way you normally would. Voicebox learns from what you send.",
+      "title": "Teach Herga how you write",
+      "description": "Reply to messages the way you normally would. Herga learns from what you send.",
       "starting": "Setting up your conversations…",
       "failed": "Something went wrong while teaching",
       "anyOrder": "{{style}} · any order",
@@ -1200,12 +1200,12 @@
       "tricks": {
         "change_of_mind": {
           "text": "change your mind partway through, the way you would out loud.",
-          "example": "For example, start with one answer, say “no wait”, then give the real one. Voicebox should write only the real one.",
-          "exampleWith": "For example, say {{example}}. Voicebox should write only what you settled on."
+          "example": "For example, start with one answer, say “no wait”, then give the real one. Herga should write only the real one.",
+          "exampleWith": "For example, say {{example}}. Herga should write only what you settled on."
         },
         "long": {
           "text": "take your time and explain, the way you'd talk it through.",
-          "example": "It's fine to ramble; Voicebox learns how to put it in order.",
+          "example": "It's fine to ramble; Herga learns how to put it in order.",
           "exampleWith": "It's fine to ramble, like {{example}}."
         }
       },
@@ -1228,8 +1228,8 @@
       "summary": {
         "saved_one": "{{count}} reply saved · {{dictated}} dictated",
         "saved_other": "{{count}} replies saved · {{dictated}} dictated",
-        "examples": "Your dictated replies are saved as examples, and Voicebox uses them on your next dictations.",
-        "typedOnly": "You typed every reply, so Voicebox kept them but has no dictation to learn cleanup from. Dictate a few next time.",
+        "examples": "Your dictated replies are saved as examples, and Herga uses them on your next dictations.",
+        "typedOnly": "You typed every reply, so Herga kept them but has no dictation to learn cleanup from. Dictate a few next time.",
         "keepTeaching": "Keep teaching"
       }
     }
@@ -1291,9 +1291,9 @@
     }
   },
   "appLocation": {
-    "title": "Move Voicebox to Applications",
-    "description": "Voicebox is running from {{path}}. macOS only keeps microphone, Accessibility and Input Monitoring permissions working for an app in your Applications folder, so dictation may not work from here.",
-    "replaces": "The Voicebox already in Applications will be moved to the Trash.",
+    "title": "Move Herga to Applications",
+    "description": "Herga is running from {{path}}. macOS only keeps microphone, Accessibility and Input Monitoring permissions working for an app in your Applications folder, so dictation may not work from here.",
+    "replaces": "The Herga already in Applications will be moved to the Trash.",
     "move": "Move and relaunch",
     "moving": "Moving…",
     "later": "Not now",

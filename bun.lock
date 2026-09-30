@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "voicebox",
+      "name": "herga",
       "dependencies": {
         "loaders.css": "^0.1.2",
       },
@@ -16,7 +16,7 @@
       },
     },
     "app": {
-      "name": "@voicebox/app",
+      "name": "@herga/app",
       "version": "0.5.0",
       "dependencies": {
         "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -58,7 +58,7 @@
       },
     },
     "tauri": {
-      "name": "@voicebox/tauri",
+      "name": "@herga/tauri",
       "version": "0.5.0",
       "dependencies": {
         "@tauri-apps/api": "^2.0.0",
@@ -423,9 +423,9 @@
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@4.7.0", "", { "dependencies": { "@babel/core": "^7.28.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-beta.27", "@types/babel__core": "^7.20.5", "react-refresh": "^0.17.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" } }, "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA=="],
 
-    "@voicebox/app": ["@voicebox/app@workspace:app"],
+    "@herga/app": ["@herga/app@workspace:app"],
 
-    "@voicebox/tauri": ["@voicebox/tauri@workspace:tauri"],
+    "@herga/tauri": ["@herga/tauri@workspace:tauri"],
 
     "aria-hidden": ["aria-hidden@1.2.6", "", { "dependencies": { "tslib": "^2.0.0" } }, "sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA=="],
 

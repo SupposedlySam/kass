@@ -28,7 +28,7 @@ const MULTILINE: &str = "Thanks for the notes.\nI will send the revised draft to
 /// Open a blank plain-text document in TextEdit (no Automation permission
 /// needed) and return TextEdit's pid.
 fn textedit_pid() -> i32 {
-    let doc = std::env::temp_dir().join("voicebox-insert-bench.txt");
+    let doc = std::env::temp_dir().join("herga-insert-bench.txt");
     std::fs::write(&doc, "").expect("bench document");
     Command::new("open")
         .args(["-a", "TextEdit"])
