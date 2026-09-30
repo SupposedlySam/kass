@@ -8,6 +8,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { useToast } from '@/components/ui/use-toast';
 import { PERSONAL_EXAMPLES_KEY } from '@/components/WritingStyle/PersonalExamples';
 import { apiClient } from '@/lib/api/client';
+import { useBetaFeature } from '@/lib/betaFeatures';
 import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
 import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
@@ -34,6 +35,7 @@ export function useTeachCorrection(
   const [draft, setDraft] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [learned, setLearned] = useState<CaptureFeedbackResponse | null>(null);
+  const withdraws = useBetaFeature('voice_edits');
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['capture-feedback', capture.id] });
@@ -59,11 +61,15 @@ export function useTeachCorrection(
       }),
   });
 
-  // A refined correction becomes one of the writing-style examples; undo
-  // takes it back out. The saved report itself stays in the history.
+  // Undo withdraws the report, and with it everything it taught: the
+  // writing-style example, habits, names and learned rules. Outside the
+  // voice_edits beta, it only takes a refined correction back out of the
+  // writing-style examples; the report stays in the history.
   const undo = useMutation({
     mutationFn: (report: CaptureFeedbackResponse) =>
-      apiClient.removePersonalExample(`correction:${report.id}`),
+      withdraws
+        ? apiClient.withdrawCaptureReport(capture.id, report.id)
+        : apiClient.removePersonalExample(`correction:${report.id}`),
     onSuccess: () => {
       setLearned(null);
       invalidate();
@@ -91,7 +97,7 @@ export function useTeachCorrection(
     learned,
     saving: save.isPending,
     undoing: undo.isPending,
-    canUndo: target === 'refined',
+    canUndo: withdraws || target === 'refined',
     /** Starts editing from the current text, so the user fixes it in place. */
     begin: () => setDraft((d) => d ?? original),
     setDraft,

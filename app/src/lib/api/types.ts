@@ -564,16 +564,21 @@ export interface ActiveTasksResponse {
   downloads: ActiveDownloadTask[];
 }
 
+/** How a report was made; a redictation teaches correction learning only. */
+export type CaptureFeedbackSource = 'manual' | 'voice_fix' | 'redictation';
+
 export interface CaptureFeedbackCreate {
   target: 'raw' | 'refined';
   expected_text: string;
   notes: string;
   snapshot: CaptureResponse;
+  source?: CaptureFeedbackSource;
 }
 
 export interface CaptureFeedbackResponse extends CaptureFeedbackCreate {
   id: string;
   capture_id: string;
+  source: CaptureFeedbackSource;
   created_at: string;
 }
 
@@ -610,10 +615,10 @@ export interface CorrectionLearningStatus {
   outcome: 'waiting' | 'updated' | 'no_change' | 'rolled_back';
   can_rollback: boolean;
   metrics: {
-    training_examples: number;
-    heldout_examples: number;
+    examples: number;
     candidates: number;
     accepted: number;
+    withdrawn: number;
     median_rule_ms: number;
     latency_passed: boolean;
   } | null;

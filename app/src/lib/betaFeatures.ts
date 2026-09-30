@@ -11,7 +11,11 @@ import { create } from 'zustand';
  *
  * The server keeps its own list in backend/beta.py.
  */
-export const BETA_FEATURES = [] as const;
+export const BETA_FEATURES = [
+  // Fixing Herga's own text by voice, and the correction reports those fixes
+  // file; Undo withdraws a report and everything it taught.
+  'voice_edits',
+] as const;
 
 export type BetaFeature = (typeof BETA_FEATURES)[number];
 
