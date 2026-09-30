@@ -19,11 +19,16 @@ this can't resolve (the word isn't there, two are equally close, Whisper
 heard both words the same) is declined with a message, and nothing changes.
 """
 
+import logging
 import re
 from dataclasses import dataclass
 
+from . import dictionary
+
 # How letters sound, as the dictionary hears near misses ("Kris", "Chris").
 from .dictionary import _sound
+
+logger = logging.getLogger(__name__)
 
 # The app's own command words, prompted to Whisper whenever voice edits are
 # on: "Herga" is rarely heard right without it ("Herger", "Urga").
@@ -473,16 +478,85 @@ def plan(said: str, take: str | None) -> Planned | Declined | None:
 def learn_from(planned: Planned, target_capture_id: str | None, bundle_id: str | None) -> None:
     """What a successful edit teaches, run after the take, off the event loop.
 
-    The edit says the take that wrote ``planned.replaced`` got it wrong.
+    The edit says the take that wrote ``planned.replaced`` got it wrong: that
+    capture gets a correction report, and a word spelled for it goes in the
+    Dictionary.
     """
-    # TODO(voice-edits): file an automatic correction report on
-    # `target_capture_id`, the capture that wrote the text, from
-    # planned.before → planned.after (correction-report work, in progress
-    # elsewhere: report source field, withdraw API, learning gate).
-    if planned.spelled:
-        # TODO(voice-edits): add the spelled word to the Dictionary as a
-        # spelling-only entry, once it lands, with `add_spelled_word(letters=
-        # planned.spelled, bundle_id=bundle_id, heard=planned.replaced)` from
-        # services/dictionary.py (letters: the joined capitals, "MEGHAN";
-        # heard: the word fixed, "Megan").
-        pass
+    from ..database import session as database_session
+
+    if database_session.SessionLocal is None:
+        return
+    with database_session.SessionLocal() as db:
+        if planned.spelled:
+            try:
+                dictionary.add_spelled_word(planned.spelled, bundle_id, planned.replaced, db)
+            except Exception:
+                logger.exception("Couldn't add the spelled word to the Dictionary")
+        if target_capture_id:
+            try:
+                report_fix(planned, target_capture_id, db)
+            except Exception:
+                logger.exception("Couldn't file the voice fix as a correction")
+
+
+def corrected(output: str, before: str, after: str) -> str | None:
+    """``output`` with the change that turned ``before`` into ``after``.
+
+    ``before`` is the take as the field showed it, which may differ from the
+    capture's output at its edges (spacing, a dropped final period), so the
+    change is found by its own words and a little of the text around it, and
+    applied only where that occurs once.
+    """
+    start = 0
+    while start < min(len(before), len(after)) and before[start] == after[start]:
+        start += 1
+    end = 0
+    while end < min(len(before), len(after)) - start and before[len(before) - 1 - end] == after[len(after) - 1 - end]:
+        end += 1
+    # Whole words: widen the change to the words it touches.
+    while start > 0 and before[start - 1].isalnum():
+        start -= 1
+    while end > 0 and before[len(before) - end].isalnum():
+        end -= 1
+    old = before[start : len(before) - end]
+    new = after[start : len(after) - end]
+    left = before[max(0, start - _CONTEXT) : start]
+    right = before[len(before) - end : len(before) - end + _CONTEXT]
+    for context_left, context_right in ((left, right), (left, ""), ("", right), ("", "")):
+        needle = context_left + old + context_right
+        if needle and output.count(needle) == 1:
+            at = output.index(needle) + len(context_left)
+            return output[:at] + new + output[at + len(old) :]
+    return None
+
+
+# Characters of the text around a change used to find it in the capture.
+_CONTEXT = 16
+
+
+def report_fix(planned: Planned, capture_id: str, db) -> None:
+    """File the edit as a correction on the capture that wrote the text."""
+    from ..models import CaptureFeedbackCreate
+    from . import capture_feedback
+    from .captures import get_capture
+
+    capture = get_capture(capture_id, db)
+    if capture is None:
+        return
+    target = "refined" if capture.transcript_refined is not None else "raw"
+    output = capture.transcript_refined if target == "refined" else capture.transcript_raw
+    expected = corrected(output or "", planned.before, planned.after)
+    if expected is None or expected == output:
+        logger.info("Voice fix not found in capture %s; no correction filed", capture_id)
+        return
+    capture_feedback.save_feedback(
+        capture_id,
+        CaptureFeedbackCreate(
+            target=target,
+            expected_text=expected,
+            notes=planned.instruction,
+            snapshot=capture,
+            source="voice_fix",
+        ),
+        db,
+    )

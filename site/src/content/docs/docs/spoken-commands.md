@@ -99,6 +99,6 @@ Hold your dictation keys and start with **"fix that"** or **"edit"** to change y
 - "fix that, delete actually"
 - "fix that, add tomorrow after meeting"
 
-For a name Herga keeps hearing wrong, say it and spell it: "fix that, Meghan, M-E-G-H-A-N". You can also start with "Herga": "Herga, change Tuesday to Thursday".
+For a name Herga keeps hearing wrong, say it and spell it: "fix that, Meghan, M-E-G-H-A-N". Herga also adds the name to your dictionary, marked **spelled aloud**, so it's heard right from then on without changing a real Megan. You can also start with "Herga": "Herga, change Tuesday to Thursday".
 
 Herga fixes only its last dictation, and only while it's still as Herga left it, with the cursor right after it. If you've typed since, or the app doesn't let Herga edit its text (Safari pages, Firefox), you hear the error sound and nothing changes. Each fix shows in Captures with the text before and after. Turn it off with **Voice edits** in **Settings › Dictation**.

@@ -33,9 +33,15 @@ Detection runs on the raw transcript right after `take_spoken_style` (and on the
 
 An edit is saved like a Command Mode capture (`source = "command"`, transform "Voice edit"): the take before as the selection, "“Megan” → “Morgan”" as the instruction, the take after as the result. Command captures are already left out of learning, known names and usage stats. A declined edit is saved without a result.
 
+## What a fix teaches
+
+`voice_edits.learn_from` runs after the final event, off the event loop:
+
+- A correction report (`source = "voice_fix"`, docs/plans/CORRECTION_LEARNING.md) on the capture that wrote the text: its refined output (raw without refinement) with the same change. The field's text can differ from the output at its edges, so `corrected` finds the change by its words and up to 16 characters around them, and files nothing unless that occurs exactly once. Rust doesn't confirm the write landed; a failed apply already plays the error cue.
+- A spelled word goes in the Dictionary as a spelling-only entry (`dictionary.add_spelled_word`, docs/plans/DICTIONARIES.md), so Whisper is prompted with it from the next dictation without it respelling a real "Megan".
+
 ## Left for later
 
-- An automatic correction report on the capture that wrote the text, and adding a spelled word to the Dictionary (`dictionary.add_spelled_word`): hooks in `voice_edits.learn_from`, run after the final event.
 - Safari and other apps that ignore Accessibility writes; Gecko; keys/⌘V deliveries.
 - The batch fallback (stream failed before finish) pastes an edit phrase as text.
 - A sound of its own for `Cue::Edit` (it borrows the style sound, quieter).

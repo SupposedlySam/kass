@@ -365,3 +365,106 @@ def streamed_final(tmp_path, monkeypatch):
         while (event := socket.receive_json())["type"] != "final":
             pass
     return event
+
+
+# -- what a fix teaches --------------------------------------------------------
+
+
+def test_the_fix_is_found_in_the_capture_despite_edge_differences():
+    from backend.services.voice_edits import corrected
+
+    # The field dropped the final period and has a leading space.
+    assert (
+        corrected("Thanks Megan for the notes.", " Thanks Megan for the notes", " Thanks Morgan for the notes")
+        == "Thanks Morgan for the notes."
+    )
+    assert corrected("Hi Megan, and Megan again.", "Hi Megan, and Megan again", "Hi Megan, and Morgan again") == (
+        "Hi Megan, and Morgan again."
+    )
+    # Nothing like it in the capture: no report.
+    assert corrected("Something else entirely.", "Thanks Megan", "Thanks Morgan") is None
+
+
+@pytest.fixture
+def learning_db(tmp_path, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    from backend import config
+    from backend.database import session as database_session
+    from backend.database.models import Capture
+    from backend.services import dictionary
+
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    (tmp_path / beta.CHANNEL_FILE).write_text("beta")
+    engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(database_session, "SessionLocal", sessionmaker(bind=engine))
+    with Session(engine) as db:
+        db.add(
+            Capture(
+                id="take",
+                audio_path="captures/take.wav",
+                source="dictation",
+                transcript_raw="thanks megan for the notes",
+                transcript_refined="Thanks Megan for the notes.",
+                stt_model="turbo",
+                llm_model="0.6B",
+            )
+        )
+        db.commit()
+    dictionary.invalidate()
+    yield engine
+    dictionary.invalidate()
+    engine.dispose()
+
+
+def test_a_fix_files_a_voice_fix_report_on_the_take_it_fixed(learning_db):
+    from backend.database.models import CaptureFeedback
+    from backend.services.voice_edits import learn_from
+
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes",
+            after="Thanks Morgan for the notes",
+            instruction="“Megan” → “Morgan”",
+            replaced="Megan",
+        ),
+        "take",
+        "com.apple.TextEdit",
+    )
+    with Session(learning_db) as db:
+        (report,) = db.query(CaptureFeedback).all()
+        assert (report.capture_id, report.target, report.source) == ("take", "refined", "voice_fix")
+        assert report.expected_text == "Thanks Morgan for the notes."
+
+
+def test_a_spelled_fix_also_adds_the_word_spelling_only(learning_db):
+    from backend.database.models import CaptureFeedback
+    from backend.services import dictionary
+    from backend.services.voice_edits import learn_from
+
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes",
+            after="Thanks Meghan for the notes",
+            instruction="“Megan” → “Meghan”",
+            replaced="Megan",
+            spelled="MEGHAN",
+        ),
+        "take",
+        "com.apple.TextEdit",
+    )
+    with Session(learning_db) as db:
+        assert db.query(CaptureFeedback).one().expected_text == "Thanks Meghan for the notes."
+    found = dictionary.for_app("com.apple.TextEdit")
+    assert found.terms == ("Meghan",)
+    assert found.apply("Megan met Meghan") == "Megan met Meghan"
+
+
+def test_without_the_take_nothing_is_reported(learning_db):
+    from backend.database.models import CaptureFeedback
+    from backend.services.voice_edits import learn_from
+
+    learn_from(Planned(before="a", after="b", instruction="", replaced="a"), None, None)
+    with Session(learning_db) as db:
+        assert db.query(CaptureFeedback).count() == 0
