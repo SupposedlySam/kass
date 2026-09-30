@@ -200,14 +200,17 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
     );
   }
 
+  // What follows the greeting waits for its letters to land.
+  const greeting = t('onboarding.name.greeting', { name });
+  const after = { animationDelay: `${200 + greeting.length * 30}ms` };
   return (
     <>
-      <Headline size="xl" drop>
-        {t('onboarding.name.greeting', { name })}
+      <Headline size="xl" letters>
+        {greeting}
       </Headline>
       {phase === 'confirm' ? <Confetti at={{ x: 0.25, y: 0.28 }} delay={0.35} /> : null}
       {phase === 'confirm' ? (
-        <>
+        <div className="poster-rise-late flex flex-col gap-4" style={after}>
           <span className="text-[17px]">{t('onboarding.name.spelledRight')}</span>
           <Actions>
             <PosterButton onClick={() => save(name, false)} autoFocus>
@@ -217,7 +220,7 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
               {t('onboarding.name.fix')}
             </PosterButton>
           </Actions>
-        </>
+        </div>
       ) : (
         <>
           <span className="poster-pop inline-flex origin-left items-center gap-2 self-start rounded-full border-[1.5px] border-[#34C759] bg-[#34C759]/20 px-3.5 py-2 text-[13px]">
@@ -495,7 +498,7 @@ export function DoneStep({
   ].filter((row) => row.keys.length > 0);
   return (
     <>
-      <Headline size="xl" drop>
+      <Headline size="xl" letters>
         {t('onboarding.done.title')}
       </Headline>
       <Confetti burst="celebrate" delay={0.25} />

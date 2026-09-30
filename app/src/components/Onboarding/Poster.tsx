@@ -2,7 +2,7 @@ import { Check, Mic } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils/cn';
 import { displayLabelForKey, modifierSideHint } from '@/lib/utils/keyCodes';
-import { DropLetters } from './PosterMotion';
+import { RiseLetters } from './PosterMotion';
 
 /**
  * Building blocks for the Poster onboarding: every step fills the window
@@ -12,15 +12,15 @@ import { DropLetters } from './PosterMotion';
 
 export const DISPLAY_FONT = 'font-[ui-rounded,"SF_Pro_Rounded",system-ui,sans-serif]';
 
-/** A step's headline. `drop` has a string's letters fall into place. */
+/** A step's headline. `letters` has a string's letters rise into place. */
 export function Headline({
   children,
   size = 'lg',
-  drop = false,
+  letters = false,
 }: {
   children: ReactNode;
   size?: 'md' | 'lg' | 'xl';
-  drop?: boolean;
+  letters?: boolean;
 }) {
   return (
     <h1
@@ -32,11 +32,7 @@ export function Headline({
         size === 'xl' && 'text-[84px] leading-none tracking-[-0.04em]',
       )}
     >
-      {drop && typeof children === 'string' ? (
-        <DropLetters text={children} delay={0.15} />
-      ) : (
-        children
-      )}
+      {letters && typeof children === 'string' ? <RiseLetters text={children} /> : children}
     </h1>
   );
 }

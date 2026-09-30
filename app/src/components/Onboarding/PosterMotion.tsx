@@ -3,7 +3,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 
 /**
  * The bigger moments of the Poster onboarding: the color wipe between steps,
- * letters that drop into place, and confetti. The small ones are CSS in
+ * letters that rise into place, and confetti. The small ones are CSS in
  * poster.css.
  */
 
@@ -14,6 +14,13 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 export function ColorWipe({ color, origin }: { color: string; origin: { x: number; y: number } }) {
   const reduce = useReducedMotion();
   const [under, setUnder] = useState(color);
+  const [over, setOver] = useState(color);
+  // A step changed before its wipe finished: the next one spreads over that
+  // step's color, never back over an older one.
+  if (color !== over) {
+    setUnder(over);
+    setOver(color);
+  }
   const at = `${origin.x}px ${origin.y}px`;
   return (
     <div className="pointer-events-none absolute inset-0" style={{ background: under }} aria-hidden>
@@ -32,8 +39,8 @@ export function ColorWipe({ color, origin }: { color: string; origin: { x: numbe
   );
 }
 
-/** Text whose letters drop in one after another, landing with a bounce. */
-export function DropLetters({ text, delay = 0 }: { text: string; delay?: number }) {
+/** Text whose letters rise into place one after another, like it's being said. */
+export function RiseLetters({ text, delay = 0 }: { text: string; delay?: number }) {
   const reduce = useReducedMotion();
   if (reduce) return <>{text}</>;
   let index = 0;
@@ -52,13 +59,13 @@ export function DropLetters({ text, delay = 0 }: { text: string; delay?: number 
                 <motion.span
                   key={i}
                   className="inline-block"
-                  initial={{ y: -60, opacity: 0, rotate: i % 2 ? 12 : -12 }}
-                  animate={{ y: 0, opacity: 1, rotate: 0 }}
+                  initial={{ y: '0.35em', opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
                   transition={{
-                    delay: delay + i * 0.035,
+                    delay: delay + i * 0.03,
                     type: 'spring',
-                    stiffness: 520,
-                    damping: 17,
+                    stiffness: 380,
+                    damping: 24,
                   }}
                 >
                   {letter}

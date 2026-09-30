@@ -35,6 +35,39 @@ import {
 import { DoneStep, LockedStep, MessyStep, NameStep, RewriteStep } from './steps/SpokenSteps';
 import { useOnboardingDownloads } from './useOnboardingDownloads';
 
+/** How long a screen's pieces take to rise in (poster.css). */
+const ENTRANCE_MS = 1100;
+
+/**
+ * One screen of a step. Its pieces rise in only when it opens: anything that
+ * appears later, like a result or the next question, brings its own motion
+ * instead of replaying the entrance.
+ */
+function Screen({
+  direction,
+  children,
+}: {
+  direction: 'forward' | 'back';
+  children: React.ReactNode;
+}) {
+  const [entering, setEntering] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setEntering(false), ENTRANCE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <main
+      data-direction={direction}
+      className={cn(
+        entering && 'poster-enter',
+        'relative flex min-h-0 flex-1 select-text flex-col justify-start gap-4 px-16 pt-10 pb-14',
+      )}
+    >
+      {children}
+    </main>
+  );
+}
+
 /**
  * First-run onboarding, in its own window (docs/plans/ONBOARDING.md). Each
  * step fills the window with its own color; the line along the top is the
@@ -203,13 +236,10 @@ export function OnboardingWindow() {
           )
         ) : null}
       </div>
-      <main
-        key={step}
-        data-direction={direction}
-        className="poster-enter relative flex min-h-0 flex-1 select-text flex-col justify-start gap-4 px-16 pt-10 pb-14"
-      >
+      {/* A step unlocking when the models land is a new screen too. */}
+      <Screen key={`${step}:${locked}`} direction={direction}>
         {body}
-      </main>
+      </Screen>
       {step !== 'welcome' && step !== 'done' ? (
         <button
           type="button"
