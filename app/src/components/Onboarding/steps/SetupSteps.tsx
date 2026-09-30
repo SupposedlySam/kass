@@ -16,18 +16,23 @@ import {
   ProgressBar,
   SuccessCard,
 } from '../Poster';
+import { Confetti } from '../PosterMotion';
 import type { ModelProgress, OnboardingDownloads } from '../useOnboardingDownloads';
 
 export function WelcomeStep({ onNext }: { onNext: () => void }) {
   const { t } = useTranslation();
-  const struck = 'opacity-45 line-through decoration-4';
+  // The filler is struck out after the line lands, the way Herga cleans it.
   return (
     <>
       <Headline size="md">{t('onboarding.welcome.title')}</Headline>
       <p className={`${DISPLAY_FONT} m-0 text-[50px] font-bold leading-[1.08] tracking-[-0.03em]`}>
-        <span className={struck}>{t('onboarding.welcome.fillerA')}</span>{' '}
+        <span className="poster-strike" style={{ animationDelay: '900ms' }}>
+          {t('onboarding.welcome.fillerA')}
+        </span>{' '}
         {t('onboarding.welcome.keptA')}{' '}
-        <span className={struck}>{t('onboarding.welcome.fillerB')}</span>{' '}
+        <span className="poster-strike" style={{ animationDelay: '1250ms' }}>
+          {t('onboarding.welcome.fillerB')}
+        </span>{' '}
         {t('onboarding.welcome.keptB')}
       </p>
       <Lead>{t('onboarding.welcome.body')}</Lead>
@@ -218,9 +223,10 @@ export function InputMonitoringStep({
             </Actions>
           ) : pressedOnce ? (
             <>
-              <p className={`${DISPLAY_FONT} m-0 text-[26px] font-bold text-[#7BE39A]`}>
+              <p className={`${DISPLAY_FONT} poster-pop m-0 text-[26px] font-bold text-[#7BE39A]`}>
                 {t('onboarding.inputMonitoring.itWorks')}
               </p>
+              <Confetti at={{ x: 0.2, y: 0.62 }} />
               <Actions>
                 <PosterButton onClick={onNext} autoFocus>
                   {t('onboarding.next')}
@@ -426,7 +432,10 @@ export function KeysStep({
       <div className="flex items-center gap-7">
         <Keycaps keys={pushKeys} down={down} size="xl" />
         <div className="flex flex-col gap-1.5">
-          <span className={`${DISPLAY_FONT} text-[26px] font-bold`}>
+          <span
+            key={down ? 'down' : pressedOnce ? 'nice' : 'try'}
+            className={`${DISPLAY_FONT} poster-pop origin-left text-[26px] font-bold`}
+          >
             {down
               ? t('onboarding.keys.listening')
               : pressedOnce
@@ -471,6 +480,7 @@ export function KeysStep({
           )}
         </div>
       ) : null}
+      {pressedOnce ? <Confetti at={{ x: 0.2, y: 0.4 }} /> : null}
       <Actions>
         {pressedOnce ? (
           <PosterButton onClick={onNext} autoFocus>

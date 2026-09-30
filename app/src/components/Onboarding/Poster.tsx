@@ -2,6 +2,7 @@ import { Check, Mic } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils/cn';
 import { displayLabelForKey, modifierSideHint } from '@/lib/utils/keyCodes';
+import { DropLetters } from './PosterMotion';
 
 /**
  * Building blocks for the Poster onboarding: every step fills the window
@@ -11,12 +12,15 @@ import { displayLabelForKey, modifierSideHint } from '@/lib/utils/keyCodes';
 
 export const DISPLAY_FONT = 'font-[ui-rounded,"SF_Pro_Rounded",system-ui,sans-serif]';
 
+/** A step's headline. `drop` has a string's letters fall into place. */
 export function Headline({
   children,
   size = 'lg',
+  drop = false,
 }: {
   children: ReactNode;
   size?: 'md' | 'lg' | 'xl';
+  drop?: boolean;
 }) {
   return (
     <h1
@@ -28,7 +32,11 @@ export function Headline({
         size === 'xl' && 'text-[84px] leading-none tracking-[-0.04em]',
       )}
     >
-      {children}
+      {drop && typeof children === 'string' ? (
+        <DropLetters text={children} delay={0.15} />
+      ) : (
+        children
+      )}
     </h1>
   );
 }
@@ -62,7 +70,8 @@ export function PosterButton({
       // biome-ignore lint/a11y/noAutofocus: each step has one obvious next action
       autoFocus={autoFocus}
       className={cn(
-        'inline-flex h-[46px] items-center gap-2 whitespace-nowrap rounded-full px-[22px] text-[15px] font-semibold transition-opacity',
+        'inline-flex h-[46px] items-center gap-2 whitespace-nowrap rounded-full px-[22px] text-[15px] font-semibold transition-[opacity,transform] duration-150',
+        'enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 enabled:active:scale-[0.96]',
         'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--poster-fg)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--poster-bg)]',
         'disabled:cursor-not-allowed disabled:opacity-45',
         kind === 'primary' && 'bg-[var(--poster-fg)] text-[var(--poster-bg)]',
@@ -102,9 +111,9 @@ export function Actions({ children }: { children: ReactNode }) {
 /** A green card that says a step worked. */
 export function SuccessCard({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="flex max-w-[600px] items-center gap-3 rounded-2xl border-[1.5px] border-[#34C759] bg-[#34C759]/15 px-4 py-3.5">
-      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#34C759]">
-        <Check className="h-[18px] w-[18px] text-white" strokeWidth={3} aria-hidden />
+    <div className="poster-pop flex max-w-[600px] items-center gap-3 rounded-2xl border-[1.5px] border-[#34C759] bg-[#34C759]/15 px-4 py-3.5">
+      <span className="poster-pop flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#34C759] [animation-delay:120ms]">
+        <Check className="poster-check h-[18px] w-[18px] text-white" strokeWidth={3} aria-hidden />
       </span>
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold">{title}</span>
@@ -178,6 +187,13 @@ export function Keycaps({
               transform: `translateY(${down ? (size === 'xl' ? 8 : 2) : 0}px)`,
             }}
           >
+            {down ? (
+              <span
+                className="poster-ripple pointer-events-none absolute -inset-[3px] rounded-[inherit] border-2"
+                style={{ borderColor: tone === 'success' ? '#34C759' : 'var(--poster-fg)' }}
+                aria-hidden
+              />
+            ) : null}
             {displayLabelForKey(key)}
             {side ? (
               <span className="absolute -top-2 -right-2 rounded bg-[#1D1B19] px-1 py-px font-mono text-[9px] leading-none text-white">
@@ -231,14 +247,18 @@ export function SpeakRow({
 function ListeningBars({ visible }: { visible: boolean }) {
   return (
     <span
-      className={cn('inline-flex h-7 items-center gap-[3px]', !visible && 'invisible')}
+      className={cn('poster-bars inline-flex h-7 items-center gap-[3px]', !visible && 'invisible')}
       aria-hidden
     >
       {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
         <span
           key={i}
-          className="w-1 animate-pulse rounded-sm bg-[var(--poster-fg)]"
-          style={{ height: `${8 + ((i * 7) % 18)}px`, animationDelay: `${i * 90}ms` }}
+          className="w-1 rounded-sm bg-[var(--poster-fg)]"
+          style={{
+            height: `${10 + ((i * 7) % 18)}px`,
+            animationDelay: `${i * 110}ms`,
+            animationDuration: `${620 + ((i * 130) % 400)}ms`,
+          }}
         />
       ))}
     </span>

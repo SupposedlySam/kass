@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowLeft } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
 import { useChordSync } from '@/lib/hooks/useChordSync';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { useInAppDictationInsert } from '@/lib/hooks/useInAppDictationInsert';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
+import { cn } from '@/lib/utils/cn';
 import { defaultChordKeys } from '@/lib/utils/keyCodes';
 import {
   clearProgress,
@@ -17,9 +18,12 @@ import {
   previousStep,
   type SavedProgress,
   STEP_COLORS,
+  STEPS,
   type Step,
   saveProgress,
 } from './onboardingFlow';
+import { ColorWipe } from './PosterMotion';
+import './poster.css';
 import {
   AccessibilityStep,
   DownloadStep,
@@ -46,7 +50,24 @@ export function OnboardingWindow() {
     setProgress(next);
     saveProgress(next);
   }, []);
-  const go = useCallback((step: Step) => setAndSave({ ...progress, step }), [progress, setAndSave]);
+  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
+  const go = useCallback(
+    (step: Step) => {
+      setDirection(STEPS.indexOf(step) < STEPS.indexOf(progress.step) ? 'back' : 'forward');
+      setAndSave({ ...progress, step });
+    },
+    [progress, setAndSave],
+  );
+
+  // The next step's color spreads from wherever the user last clicked.
+  const clickedAt = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  useEffect(() => {
+    const remember = (e: PointerEvent) => {
+      clickedAt.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('pointerdown', remember);
+    return () => window.removeEventListener('pointerdown', remember);
+  }, []);
   const next = () => go(nextStep(progress.step));
 
   const downloads = useOnboardingDownloads(readiness, progress.downloadsStarted, () =>
@@ -140,28 +161,32 @@ export function OnboardingWindow() {
   const style = {
     '--poster-bg': STEP_COLORS[step],
     '--poster-fg': fg,
-    background: STEP_COLORS[step],
     color: fg,
   } as CSSProperties;
+  const filling = progress.downloadsStarted && !downloads.ready && !downloads.failed;
 
   return (
     <div
-      className="relative flex h-screen w-screen select-none flex-col overflow-hidden transition-colors duration-300"
+      className="relative flex h-screen w-screen select-none flex-col overflow-hidden transition-colors duration-500"
       style={style}
     >
+      <ColorWipe color={STEP_COLORS[step]} origin={clickedAt.current} />
       <div
         className="absolute inset-x-0 top-0 z-10 h-[5px] bg-[color-mix(in_srgb,var(--poster-fg)_22%,transparent)]"
         aria-hidden
       >
         <div
-          className="h-[5px] transition-[width] duration-300"
+          className={cn('h-[5px] transition-[width] duration-300', filling && 'poster-shimmer')}
           style={{
             width: `${progress.downloadsStarted ? downloads.overall : 0}%`,
             background: downloads.failed ? '#FF9A85' : fg,
           }}
         />
       </div>
-      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center justify-end px-4">
+      <div
+        data-tauri-drag-region
+        className="relative flex h-9 shrink-0 items-center justify-end px-4"
+      >
         {corner ? (
           downloads.failed && step !== 'download' ? (
             <button
@@ -180,7 +205,8 @@ export function OnboardingWindow() {
       </div>
       <main
         key={step}
-        className="flex min-h-0 flex-1 select-text flex-col justify-start gap-4 px-16 pt-10 pb-14"
+        data-direction={direction}
+        className="poster-enter relative flex min-h-0 flex-1 select-text flex-col justify-start gap-4 px-16 pt-10 pb-14"
       >
         {body}
       </main>

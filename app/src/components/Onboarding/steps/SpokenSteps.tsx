@@ -1,5 +1,5 @@
 import { Check, Lock } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse, CaptureSettings } from '@/lib/api/types';
@@ -18,6 +18,7 @@ import {
   SpeakRow,
   StatusLine,
 } from '../Poster';
+import { Confetti } from '../PosterMotion';
 import type { OnboardingDownloads } from '../useOnboardingDownloads';
 
 /** The text a dictation capture delivered. */
@@ -201,7 +202,10 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
 
   return (
     <>
-      <Headline size="xl">{t('onboarding.name.greeting', { name })}</Headline>
+      <Headline size="xl" drop>
+        {t('onboarding.name.greeting', { name })}
+      </Headline>
+      {phase === 'confirm' ? <Confetti at={{ x: 0.25, y: 0.28 }} delay={0.35} /> : null}
       {phase === 'confirm' ? (
         <>
           <span className="text-[17px]">{t('onboarding.name.spelledRight')}</span>
@@ -216,7 +220,7 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
         </>
       ) : (
         <>
-          <span className="inline-flex items-center gap-2 self-start rounded-full border-[1.5px] border-[#34C759] bg-[#34C759]/20 px-3.5 py-2 text-[13px]">
+          <span className="poster-pop inline-flex origin-left items-center gap-2 self-start rounded-full border-[1.5px] border-[#34C759] bg-[#34C759]/20 px-3.5 py-2 text-[13px]">
             <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
             {fixed ? t('onboarding.name.savedFixed', { name }) : t('onboarding.name.saved')}
           </span>
@@ -232,6 +236,8 @@ export function NameStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () 
 }
 
 const SCRIPT_KEYS = ['lunch', 'work', 'friend'] as const;
+const STRIKE_START = 450;
+const STRIKE_EACH = 320;
 
 /** Read a scripted line with filler and a change of mind; see what was kept. */
 export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: () => void }) {
@@ -249,6 +255,15 @@ export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
   useEffect(() => {
     field.current?.focus();
   }, []);
+
+  // Each dropped piece is struck in turn, then the clean line lands.
+  let strikes = 0;
+  const parts = result
+    ? heardParts(result.heard, result.sent).map((part) => ({
+        ...part,
+        strike: part.dropped ? strikes++ : null,
+      }))
+    : [];
 
   return (
     <>
@@ -275,21 +290,32 @@ export function MessyStep({ pushKeys, onNext }: { pushKeys: string[]; onNext: ()
       </div>
       <div className="flex h-[132px] flex-col gap-3 overflow-hidden">
         {result ? (
-          <>
-            <p className="m-0 line-clamp-2 max-w-[700px] text-[17px] leading-snug">
-              {heardParts(result.heard, result.sent).map((part, i) => (
+          <div key={`${result.heard}\n${result.sent}`} className="contents">
+            <p className="poster-rise-late m-0 line-clamp-2 max-w-[700px] text-[17px] leading-snug">
+              {parts.map((part, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: parts are rebuilt together and never reorder
-                <span key={i} className={part.dropped ? 'line-through opacity-50' : 'opacity-85'}>
-                  {part.text}{' '}
-                </span>
+                <Fragment key={i}>
+                  {i ? ' ' : null}
+                  <span
+                    className={part.dropped ? 'poster-strike' : 'opacity-85'}
+                    style={
+                      part.strike === null
+                        ? undefined
+                        : { animationDelay: `${STRIKE_START + part.strike * STRIKE_EACH}ms` }
+                    }
+                  >
+                    {part.text}
+                  </span>
+                </Fragment>
               ))}
             </p>
             <p
-              className={`${DISPLAY_FONT} m-0 line-clamp-2 max-w-[720px] text-[32px] font-bold leading-tight tracking-[-0.02em]`}
+              className={`${DISPLAY_FONT} poster-rise-late m-0 line-clamp-2 max-w-[720px] text-[32px] font-bold leading-tight tracking-[-0.02em]`}
+              style={{ animationDelay: `${STRIKE_START + strikes * STRIKE_EACH + 150}ms` }}
             >
               {result.sent}
             </p>
-          </>
+          </div>
         ) : (
           <p className={`${DISPLAY_FONT} m-0 max-w-[700px] text-[26px] font-medium leading-tight`}>
             {t(`onboarding.messy.scripts.${script}.line`)}
@@ -342,6 +368,8 @@ export function RewriteStep({
   const [text, setText] = useState(original);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on each rewrite, to sweep a light across the new text.
+  const [rewrites, setRewrites] = useState(0);
   const field = useRef<HTMLTextAreaElement>(null);
   const { held } = useHeldChord(false);
   const commandKeys = settings?.chord_command_keys ?? [];
@@ -366,7 +394,9 @@ export function RewriteStep({
       .runCommand(selection, t(`onboarding.rewrite.instructions.${key}`))
       .then((capture) => {
         const rewritten = (capture.transcript_refined ?? '').trim();
-        if (rewritten) setText(text.replace(selection, rewritten));
+        if (!rewritten) return;
+        setText(text.replace(selection, rewritten));
+        setRewrites((n) => n + 1);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(null));
@@ -381,14 +411,23 @@ export function RewriteStep({
       <label htmlFor="onboarding-rewrite" className="sr-only">
         {t('onboarding.rewrite.fieldLabel')}
       </label>
-      <textarea
-        id="onboarding-rewrite"
-        ref={field}
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        className="max-w-[700px] resize-none rounded-2xl bg-white px-4 py-3.5 text-[15px] leading-relaxed text-[#1D1B19] selection:bg-[#C9D3FF] focus:outline-none"
-      />
+      <div className="relative max-w-[700px]">
+        <textarea
+          id="onboarding-rewrite"
+          ref={field}
+          rows={4}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="block w-full resize-none rounded-2xl bg-white px-4 py-3.5 text-[15px] leading-relaxed text-[#1D1B19] selection:bg-[#C9D3FF] focus:outline-none"
+        />
+        {rewrites ? (
+          <span
+            key={rewrites}
+            className="poster-sweep pointer-events-none absolute inset-0 rounded-2xl"
+            aria-hidden
+          />
+        ) : null}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {commandKeys.length > 0 ? (
           <>
@@ -456,7 +495,10 @@ export function DoneStep({
   ].filter((row) => row.keys.length > 0);
   return (
     <>
-      <Headline size="xl">{t('onboarding.done.title')}</Headline>
+      <Headline size="xl" drop>
+        {t('onboarding.done.title')}
+      </Headline>
+      <Confetti burst="celebrate" delay={0.25} />
       <Lead>{t('onboarding.done.body')}</Lead>
       <div className="flex max-w-[560px] flex-col">
         {rows.map((row) => (
