@@ -284,6 +284,7 @@ class CaptureSettingsResponse(BaseModel):
     history_retention_days: HistoryRetentionDays = 30
     # Set by saving history_retention_days; the sweep deletes nothing until then.
     history_retention_confirmed: bool = False
+    onboarding_completed: bool = False
 
     class Config:
         from_attributes = True
@@ -314,6 +315,7 @@ class CaptureSettingsUpdate(BaseModel):
     chord_command_keys: Optional[List[str]] = Field(default=None, max_length=6)
     command_transforms: Optional[List[Transform]] = None
     history_retention_days: Optional[HistoryRetentionDays] = None
+    onboarding_completed: Optional[bool] = None
 
 
 class CommandRunRequest(BaseModel):

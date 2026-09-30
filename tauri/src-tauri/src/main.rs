@@ -35,6 +35,9 @@ use tokio::sync::mpsc;
 
 pub const DICTATE_WINDOW_LABEL: &str = "dictate";
 const MAIN_WINDOW_LABEL: &str = "main";
+pub const ONBOARDING_WINDOW_LABEL: &str = "onboarding";
+const ONBOARDING_WINDOW_WIDTH: f64 = 880.0;
+const ONBOARDING_WINDOW_HEIGHT: f64 = 600.0;
 const DICTATE_WINDOW_WIDTH: f64 = 420.0;
 const DICTATE_WINDOW_HEIGHT: f64 = 64.0;
 const DICTATE_BOTTOM_PADDING: f64 = 24.0;
@@ -77,6 +80,85 @@ fn build_dictate_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewW
     apply_fullscreen_overlay_behavior(&window);
 
     Ok(window)
+}
+
+/// Show the first-run onboarding window (docs/plans/ONBOARDING.md), building
+/// it the first time, and hide the main window behind it.
+#[cfg(desktop)]
+#[command]
+fn open_onboarding(app: tauri::AppHandle) -> Result<(), String> {
+    let window = match app.get_webview_window(ONBOARDING_WINDOW_LABEL) {
+        Some(window) => window,
+        None => build_onboarding_window(&app).map_err(|e| e.to_string())?,
+    };
+    let _ = window.show();
+    let _ = window.set_focus();
+    if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = main.hide();
+    }
+    Ok(())
+}
+
+#[cfg(desktop)]
+fn build_onboarding_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let builder = WebviewWindowBuilder::new(
+        app,
+        ONBOARDING_WINDOW_LABEL,
+        WebviewUrl::App("?view=onboarding".into()),
+    )
+    .title("Herga")
+    .inner_size(ONBOARDING_WINDOW_WIDTH, ONBOARDING_WINDOW_HEIGHT)
+    .resizable(false)
+    .center();
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+    builder.build()
+}
+
+/// Close the onboarding window and bring the main window back, telling it
+/// with `onboarding:finished { show }` (a route to open, or null).
+#[cfg(desktop)]
+#[command]
+fn finish_onboarding(app: tauri::AppHandle, show: Option<String>) {
+    if let Some(window) = app.get_webview_window(ONBOARDING_WINDOW_LABEL) {
+        // Not `close()`: that would come back through CloseRequested.
+        let _ = window.destroy();
+    }
+    release_onboarding(&app);
+    show_main_after_onboarding(&app, show);
+}
+
+/// Give back what the onboarding window held: the microphone test and
+/// practice mode. Its React cleanup may never run, so this runs whenever the
+/// window goes away. The dictation gate is left to the main window, which
+/// sets it again after `onboarding:finished`.
+#[cfg(desktop)]
+fn release_onboarding(app: &tauri::AppHandle) {
+    dictation::mic::stop_preview(&app.state::<dictation::DictationState>());
+    if let Some(mode) = app.try_state::<hotkey_monitor::ChordMode>() {
+        mode.end_practice();
+    }
+}
+
+/// Show and focus the main window and send it `onboarding:finished`.
+#[cfg(desktop)]
+fn show_main_after_onboarding(app: &tauri::AppHandle, show: Option<String>) {
+    if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+    let payload = serde_json::json!({ "show": show });
+    if let Err(e) = app.emit_to(MAIN_WINDOW_LABEL, "onboarding:finished", payload) {
+        eprintln!("Failed to emit onboarding:finished: {e}");
+    }
+}
+
+/// Whether the onboarding window exists.
+#[command]
+fn onboarding_window_open(app: tauri::AppHandle) -> bool {
+    app.get_webview_window(ONBOARDING_WINDOW_LABEL).is_some()
 }
 
 /// Center the pill above the usable screen edge of the display the user is
@@ -394,6 +476,19 @@ async fn start_server(
                     let pid_str = parts[1];
                     if command.contains("herga") {
                         if let Ok(pid) = pid_str.parse::<u32>() {
+                            let running = server_version::running(SERVER_PORT);
+                            if !server_version::is_current(running.as_deref(), &app_version) {
+                                println!(
+                                    "Found herga-server {} on port {} (PID: {}), but this is {}; replacing it",
+                                    running.as_deref().unwrap_or("of unknown version"),
+                                    SERVER_PORT,
+                                    pid,
+                                    app_version
+                                );
+                                server_process::stop(pid)?;
+                                wait_for_server_exit().await?;
+                                break;
+                            }
                             println!(
                                 "Found existing herga-server on port {} (PID: {}), reusing it",
                                 SERVER_PORT, pid
@@ -407,6 +502,25 @@ async fn start_server(
                         // Python/uvicorn/Docker server. Verify via HTTP health check.
                         println!("Port {} in use by '{}' (PID: {}), checking if it's a Herga server...", SERVER_PORT, command, pid_str);
                         if check_health(SERVER_PORT) {
+                            let running = server_version::running(SERVER_PORT);
+                            // A release build replaces an old server, such as
+                            // one still named voicebox-server. A dev build keeps
+                            // the server started by hand, whatever its version.
+                            if !cfg!(debug_assertions)
+                                && !server_version::is_current(running.as_deref(), &app_version)
+                            {
+                                if let Ok(pid) = pid_str.parse::<u32>() {
+                                    println!(
+                                        "Server on port {} is {}, but this is {}; replacing it",
+                                        SERVER_PORT,
+                                        running.as_deref().unwrap_or("of unknown version"),
+                                        app_version
+                                    );
+                                    server_process::stop(pid)?;
+                                    wait_for_server_exit().await?;
+                                    break;
+                                }
+                            }
                             println!(
                                 "Health check passed — reusing external server on port {}",
                                 SERVER_PORT
@@ -476,19 +590,6 @@ async fn start_server(
                 eprintln!("DEV MODE: No server found on port {}", SERVER_PORT);
                 eprintln!("");
                 eprintln!("Start the Python server in a separate terminal:");
-                            let running = server_version::running(SERVER_PORT);
-                            if !server_version::is_current(running.as_deref(), &app_version) {
-                                println!(
-                                    "Found herga-server {} on port {} (PID: {}), but this is {}; replacing it",
-                                    running.as_deref().unwrap_or("of unknown version"),
-                                    SERVER_PORT,
-                                    pid,
-                                    app_version
-                                );
-                                server_process::stop(pid)?;
-                                wait_for_server_exit().await?;
-                                break;
-                            }
                 eprintln!("  bun run dev:server");
                 eprintln!("=================================================================");
                 eprintln!("");
@@ -502,25 +603,6 @@ async fn start_server(
 
     // Build common args
     let data_dir_str = data_dir
-                            let running = server_version::running(SERVER_PORT);
-                            // A release build replaces an old server, such as
-                            // one still named voicebox-server. A dev build keeps
-                            // the server started by hand, whatever its version.
-                            if !cfg!(debug_assertions)
-                                && !server_version::is_current(running.as_deref(), &app_version)
-                            {
-                                if let Ok(pid) = pid_str.parse::<u32>() {
-                                    println!(
-                                        "Server on port {} is {}, but this is {}; replacing it",
-                                        SERVER_PORT,
-                                        running.as_deref().unwrap_or("of unknown version"),
-                                        app_version
-                                    );
-                                    server_process::stop(pid)?;
-                                    wait_for_server_exit().await?;
-                                    break;
-                                }
-                            }
         .to_str()
         .ok_or_else(|| "Invalid data dir path".to_string())?
         .to_string();
@@ -1354,6 +1436,7 @@ async fn debug_clipboard_roundtrip(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    identifier_move::move_from_old_identifier(HERGA_BUNDLE_ID);
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -1365,6 +1448,7 @@ pub fn run() {
         })
         .manage(dictation::DictationState::default())
         .manage(deep_link::DeepLinkState::default())
+        .manage(hotkey_monitor::ChordMode::default())
         .setup(|app| {
             // The main window starts hidden (tauri.conf.json) so a login
             // launch stays out of the way until the Dock icon is clicked.
@@ -1437,6 +1521,14 @@ pub fn run() {
             enable_hotkey,
             disable_hotkey,
             update_chord_bindings,
+            hotkey_monitor::set_chord_practice,
+            hotkey_monitor::set_dictation_gate,
+            open_onboarding,
+            finish_onboarding,
+            onboarding_window_open,
+            dictation::mic::microphone_permission,
+            dictation::mic::mic_preview_start,
+            dictation::mic::mic_preview_stop,
             dictation::dictation_configure,
             dictation::dictation_start,
             dictation::dictation_stop,
@@ -1452,6 +1544,22 @@ pub fn run() {
         .on_window_event({
             let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             move |window, event| {
+                if window.label() == ONBOARDING_WINDOW_LABEL {
+                    match event {
+                        // Its close button: the same as finish_onboarding(None).
+                        WindowEvent::CloseRequested { .. } => {
+                            release_onboarding(window.app_handle());
+                            show_main_after_onboarding(window.app_handle(), None);
+                        }
+                        WindowEvent::Destroyed => release_onboarding(window.app_handle()),
+                        _ => {}
+                    }
+                    return;
+                }
+                // Only the main window may stop the server on close.
+                if window.label() != MAIN_WINDOW_LABEL {
+                    return;
+                }
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     // If we're already in the close flow, let it proceed
                     if closing.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1472,7 +1580,6 @@ pub fn run() {
                     }
 
                     // Set up listener for frontend response
-    identifier_move::move_from_old_identifier(HERGA_BUNDLE_ID);
                     let window_for_close = window.clone();
                     let closing_for_timeout = closing.clone();
                     let (tx, mut rx) = mpsc::unbounded_channel::<()>();
@@ -1510,7 +1617,11 @@ pub fn run() {
                     has_visible_windows: false,
                     ..
                 } => {
-                    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    // Onboarding stands in for the main window while it's open.
+                    let window = app
+                        .get_webview_window(ONBOARDING_WINDOW_LABEL)
+                        .or_else(|| app.get_webview_window(MAIN_WINDOW_LABEL));
+                    if let Some(window) = window {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }

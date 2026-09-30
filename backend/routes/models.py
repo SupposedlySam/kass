@@ -92,6 +92,22 @@ async def get_models_cache_dir():
     return {"path": str(Path(hf_constants.HF_HUB_CACHE))}
 
 
+@router.get("/models/disk-space")
+async def get_models_disk_space():
+    """Free space, in MB, on the volume the model cache downloads to."""
+    from huggingface_hub import constants as hf_constants
+
+    return {"free_mb": free_mb_at(Path(hf_constants.HF_HUB_CACHE))}
+
+
+def free_mb_at(path: Path) -> int:
+    """Free MB on ``path``'s volume, measured at its nearest existing parent."""
+    existing = path
+    while not existing.exists() and existing.parent != existing:
+        existing = existing.parent
+    return shutil.disk_usage(existing).free // (1024 * 1024)
+
+
 @router.post("/models/migrate")
 async def migrate_models(request: models.ModelMigrateRequest):
     """Move all downloaded models to a new directory with byte-level progress via SSE."""

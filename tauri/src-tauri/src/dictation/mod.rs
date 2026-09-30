@@ -22,6 +22,7 @@ pub mod command;
 pub mod delivery;
 pub mod http;
 pub mod live;
+pub mod mic;
 pub mod paste_command;
 pub mod protocol;
 pub mod stream;
@@ -56,6 +57,8 @@ const LEARNING_PAUSE_INTERVAL: Duration = Duration::from_secs(30);
 const MAIN_WINDOW_LABEL: &str = "main";
 /// How long the main window has to report an in-app insertion.
 const IN_APP_INSERT_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long a Herga window has to report its selection for a command take.
+const IN_APP_SELECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Where and how to capture. Pushed by the dictate webview, which owns the
 /// server URL and capture settings.
@@ -106,6 +109,8 @@ pub struct DictationState {
     active: Mutex<Takes<ActiveTake>>,
     next_take: AtomicU64,
     http: OnceLock<reqwest::Client>,
+    /// The onboarding window's microphone test ([`mic`]).
+    preview: Mutex<Option<std_mpsc::Sender<()>>>,
 }
 
 impl DictationState {
@@ -156,6 +161,8 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
     if active.is_recording() {
         return None;
     }
+    // The take needs the microphone the test was showing.
+    mic::stop_preview(&state);
     let config = state.config.lock().map(|c| c.clone()).unwrap_or_default();
     // Live text writes a dictation as it is cleaned up; a command's result
     // replaces the selection once, when it is complete.
@@ -345,10 +352,32 @@ fn target_app(focus: &Mutex<Option<FocusSnapshot>>) -> Option<TargetApp> {
     })
 }
 
-/// Type `text` into the field focused in Voicebox's own window, for a
-/// shortcut take whose target is Voicebox (a correction, for example).
+/// The Herga window a take aimed at Herga goes to: the focused one of
+/// the main and onboarding windows, else the main window.
+fn herga_window_label(app: &AppHandle) -> String {
+    let windows: Vec<(String, bool)> = app
+        .webview_windows()
+        .into_iter()
+        .map(|(label, window)| (label, window.is_focused().unwrap_or(false)))
+        .collect();
+    pick_herga_window(&windows).to_string()
+}
+
+fn pick_herga_window(windows: &[(String, bool)]) -> &str {
+    windows
+        .iter()
+        .find(|(label, focused)| {
+            *focused && (label == MAIN_WINDOW_LABEL || label == crate::ONBOARDING_WINDOW_LABEL)
+        })
+        .map(|(label, _)| label.as_str())
+        .unwrap_or(MAIN_WINDOW_LABEL)
+}
+
+/// Type `text` into the field focused in Herga's own window, for a
+/// shortcut take whose target is Herga (a correction, for example).
 /// Synthetic ⌘V and Accessibility insertion are aimed at other apps; the
-/// main window inserts through the DOM instead, so React sees the edit.
+/// focused Herga window inserts through the DOM instead, so React sees
+/// the edit.
 async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bool, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
     let tx = Mutex::new(Some(tx));
@@ -365,7 +394,8 @@ async fn insert_in_app(app: &AppHandle, take_id: u64, text: String) -> Result<bo
         }
     });
     let payload = serde_json::json!({ "take": take_id, "text": text });
-    let result = match app.emit_to(MAIN_WINDOW_LABEL, "dictation:insert", payload) {
+    let window = herga_window_label(app);
+    let result = match app.emit_to(window.as_str(), "dictation:insert", payload) {
         Ok(()) => Ok(tokio::time::timeout(IN_APP_INSERT_TIMEOUT, rx)
             .await
             .ok()
@@ -411,7 +441,7 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
         return;
     };
     if take.mode == TakeMode::Command {
-        read_selection(take, focus.clone());
+        read_selection(app, take, focus.clone());
     } else if let Some(focus) = focus.as_ref() {
         let (pid, bundle_id) = (focus.pid, focus.bundle_id.clone());
         let in_herga = bundle_id.as_deref() == Some(crate::HERGA_BUNDLE_ID);
@@ -438,11 +468,16 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
 
 /// Read a command take's selection on a blocking thread, while the user
 /// speaks, and hand it to the stream (or decline the take).
-fn read_selection(take: &ActiveTake, focus: Option<FocusSnapshot>) {
+fn read_selection(app: &AppHandle, take: &ActiveTake, focus: Option<FocusSnapshot>) {
     let audio = take.audio.clone();
     let slot = take.selection.clone();
+    let app = app.clone();
+    let take_id = take.id;
     tauri::async_runtime::spawn_blocking(move || {
         let found = match focus {
+            Some(focus) if focus.bundle_id.as_deref() == Some(crate::HERGA_BUNDLE_ID) => {
+                selection_in_app(&app, take_id)
+            }
             // The pill never takes focus, so the target is still in front.
             Some(focus) => command::read_selection(&focus, true),
             None => Err(delivery::NO_FOCUS_MESSAGE),
@@ -458,6 +493,47 @@ fn read_selection(take: &ActiveTake, focus: Option<FocusSnapshot>) {
         };
         let _ = audio.send(message);
     });
+}
+
+/// Ask the focused Herga window for its selection, for a command take
+/// aimed at Herga (onboarding's rewrite step, for example). Blocking.
+fn selection_in_app(app: &AppHandle, take_id: u64) -> Result<String, &'static str> {
+    let (tx, rx) = std_mpsc::channel::<String>();
+    let tx = Mutex::new(tx);
+    let listener = app.listen("dictation:selection", move |event| {
+        let Ok(reply) = serde_json::from_str::<Value>(event.payload()) else {
+            return;
+        };
+        if reply.get("take").and_then(Value::as_u64) != Some(take_id) {
+            return;
+        }
+        let text = reply
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if let Ok(tx) = tx.lock() {
+            let _ = tx.send(text.to_string());
+        }
+    });
+    let window = herga_window_label(app);
+    let payload = serde_json::json!({ "take": take_id });
+    let reply = match app.emit_to(window.as_str(), "dictation:selection-request", payload) {
+        Ok(()) => rx.recv_timeout(IN_APP_SELECTION_TIMEOUT).ok(),
+        Err(e) => {
+            eprintln!("[command] could not reach the Herga window: {e}");
+            None
+        }
+    };
+    app.unlisten(listener);
+    command::decide_in_app(reply)
+}
+
+/// Show `message` in the pill without recording: a chord pressed while
+/// dictation is blocked (docs/plans/ONBOARDING.md).
+pub fn show_notice(app: &AppHandle, message: String) {
+    let take_id = app.state::<DictationState>().next_take_id();
+    show_hud(app);
+    send_state(app, take_id, &PillEvent::notice(message));
 }
 
 /// End the recording take. Finalization continues in the background, so a
@@ -946,6 +1022,36 @@ pub async fn list_input_devices() -> Result<Vec<NativeInputDevice>, String> {
     tauri::async_runtime::spawn_blocking(capture::list_input_devices)
         .await
         .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod herga_window_tests {
+    use super::*;
+
+    fn windows(list: &[(&str, bool)]) -> Vec<(String, bool)> {
+        list.iter().map(|(l, f)| (l.to_string(), *f)).collect()
+    }
+
+    #[test]
+    fn text_goes_to_the_focused_onboarding_window() {
+        let list = windows(&[("main", false), ("dictate", false), ("onboarding", true)]);
+        assert_eq!(pick_herga_window(&list), "onboarding");
+    }
+
+    #[test]
+    fn text_goes_to_the_focused_main_window() {
+        let list = windows(&[("main", true), ("onboarding", false)]);
+        assert_eq!(pick_herga_window(&list), "main");
+    }
+
+    #[test]
+    fn the_pill_or_no_focus_falls_back_to_the_main_window() {
+        assert_eq!(
+            pick_herga_window(&windows(&[("dictate", true), ("onboarding", false)])),
+            "main"
+        );
+        assert_eq!(pick_herga_window(&windows(&[])), "main");
+    }
 }
 
 #[cfg(test)]

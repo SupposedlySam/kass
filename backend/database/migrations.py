@@ -251,3 +251,12 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "history_retention_confirmed BOOLEAN NOT NULL DEFAULT 0",
             "history_retention_confirmed",
         )
+    if "onboarding_completed" not in columns:
+        # A settings row from before onboarding existed belongs to an install
+        # that was already set up, so it never sees onboarding.
+        _add_column(
+            engine,
+            "capture_settings",
+            "onboarding_completed BOOLEAN NOT NULL DEFAULT 1",
+            "onboarding_completed",
+        )

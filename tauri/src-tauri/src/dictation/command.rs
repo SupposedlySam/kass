@@ -50,6 +50,15 @@ pub fn decide(
     Ok(text)
 }
 
+/// The selection a Herga window reported, or `None` when it didn't in
+/// time. Blank is no selection.
+pub fn decide_in_app(reply: Option<String>) -> Result<String, &'static str> {
+    match reply {
+        Some(text) if !text.trim().is_empty() => Ok(text),
+        _ => Err(NO_SELECTION_MESSAGE),
+    }
+}
+
 /// Read the selection in the app `focus` names. `in_front` is whether that
 /// app is frontmost, which ⌘C needs; otherwise it is brought forward first.
 /// Blocking.
@@ -192,6 +201,20 @@ mod tests {
             decide(SelectionRead::Unreadable, || Err("no pasteboard".into())),
             Err(NO_SELECTION_MESSAGE)
         );
+    }
+
+    #[test]
+    fn a_herga_window_selection_is_used_as_is() {
+        assert_eq!(
+            decide_in_app(Some(" two words ".into())),
+            Ok(" two words ".into())
+        );
+    }
+
+    #[test]
+    fn no_reply_or_a_blank_one_from_a_herga_window_is_no_selection() {
+        assert_eq!(decide_in_app(None), Err(NO_SELECTION_MESSAGE));
+        assert_eq!(decide_in_app(Some(" \n".into())), Err(NO_SELECTION_MESSAGE));
     }
 
     #[test]

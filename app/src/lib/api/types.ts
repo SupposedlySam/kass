@@ -449,6 +449,8 @@ export interface CaptureSettings {
   history_retention_days: HistoryRetentionDays;
   /** Set by saving `history_retention_days`; nothing is deleted until then. */
   history_retention_confirmed: boolean;
+  /** First-run onboarding was finished or closed (docs/plans/ONBOARDING.md). */
+  onboarding_completed: boolean;
 }
 
 export interface RetentionStatus {

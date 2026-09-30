@@ -11,6 +11,7 @@ import { CapturesTab } from '@/components/CapturesTab/CapturesTab';
 import { CommandPalette } from '@/components/CommandPalette/CommandPalette';
 import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
 import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
+import { SetupEntry } from '@/components/Onboarding/SetupEntry';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
 import { RetentionAskDialog } from '@/components/ServerTab/RetentionAskDialog';
@@ -20,7 +21,6 @@ import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPa
 import { DictionaryPage } from '@/components/Settings/DictionaryPage';
 import { TranscriptionSettingsPage } from '@/components/Settings/TranscriptionSettingsPage';
 import { WritingStylePage } from '@/components/Settings/WritingStylePage';
-import { SetupFlow } from '@/components/Setup/SetupFlow';
 import { useFirstRunRedirect } from '@/components/Setup/useFirstRunRedirect';
 import { Sidebar } from '@/components/Sidebar';
 import { StatusBar } from '@/components/StatusBar';
@@ -195,11 +195,11 @@ const settingsLogsRoute = createRoute({
   component: LogsPage,
 });
 
-// First-run setup: models, permissions, shortcut, try it.
+// First-run setup: the onboarding window on desktop, the setup page on the web.
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/setup',
-  component: SetupFlow,
+  component: SetupEntry,
 });
 
 // Redirect old /server path to /settings

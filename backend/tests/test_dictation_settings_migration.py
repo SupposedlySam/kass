@@ -68,3 +68,32 @@ def test_live_text_is_off_until_turned_on(tmp_path):
     run_migrations(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT live_text FROM capture_settings")).scalar_one() == 0
+
+
+def test_installs_from_before_onboarding_skip_it(tmp_path):
+    from sqlalchemy import create_engine, text
+
+    from backend.database.migrations import run_migrations
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE capture_settings (id INTEGER PRIMARY KEY, stt_model VARCHAR)"))
+        connection.execute(text("INSERT INTO capture_settings (id, stt_model) VALUES (1, 'turbo')"))
+    run_migrations(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT onboarding_completed FROM capture_settings")).scalar_one() == 1
+
+
+def test_new_installs_start_with_onboarding():
+    from backend.models import CaptureSettingsResponse
+
+    assert CaptureSettingsResponse.model_fields['onboarding_completed'].default is False
+    assert CaptureSettingsUpdate(onboarding_completed=True).model_dump(exclude_unset=True) == {
+        'onboarding_completed': True
+    }
+
+
+def test_free_space_is_measured_where_the_cache_will_be(tmp_path):
+    from backend.routes.models import free_mb_at
+
+    assert free_mb_at(tmp_path / 'not' / 'created' / 'yet') > 0

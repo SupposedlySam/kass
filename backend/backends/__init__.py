@@ -164,6 +164,7 @@ def _get_whisper_configs() -> list[ModelConfig]:
             engine="whisper",
             hf_repo_id="openai/whisper-base",
             model_size="base",
+            size_mb=290,
         ),
         ModelConfig(
             model_name="whisper-small",
@@ -171,6 +172,7 @@ def _get_whisper_configs() -> list[ModelConfig]:
             engine="whisper",
             hf_repo_id="openai/whisper-small",
             model_size="small",
+            size_mb=970,
         ),
         ModelConfig(
             model_name="whisper-medium",
@@ -178,6 +180,7 @@ def _get_whisper_configs() -> list[ModelConfig]:
             engine="whisper",
             hf_repo_id="openai/whisper-medium",
             model_size="medium",
+            size_mb=3060,
         ),
         ModelConfig(
             model_name="whisper-large",
@@ -185,6 +188,7 @@ def _get_whisper_configs() -> list[ModelConfig]:
             engine="whisper",
             hf_repo_id="openai/whisper-large-v3",
             model_size="large",
+            size_mb=3090,
         ),
         ModelConfig(
             model_name="whisper-turbo",
@@ -192,6 +196,7 @@ def _get_whisper_configs() -> list[ModelConfig]:
             engine="whisper",
             hf_repo_id="openai/whisper-large-v3-turbo",
             model_size="turbo",
+            size_mb=1620,
         ),
     ]
 

@@ -32,13 +32,13 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use keytap::chord::{Chord, ChordEvent, ChordMatcher};
 use keytap::{EventKind, Key, RecvTimeoutError, Tap};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::dictation;
 use crate::focus_capture;
@@ -59,6 +59,15 @@ pub enum ChordAction {
 }
 
 impl ChordAction {
+    /// The name the webview's `chord:down` / `chord:up` events use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::PushToTalk => "push_to_talk",
+            Self::ToggleToTalk => "toggle_to_talk",
+            Self::Command => "command",
+        }
+    }
+
     /// What a take started by this chord is for.
     pub fn take_mode(self) -> dictation::TakeMode {
         match self {
@@ -84,6 +93,74 @@ pub enum Effect {
 /// `HashSet<Key>` shape so callers don't need to know about keytap's
 /// `Chord` type.
 pub type Bindings = HashMap<ChordAction, HashSet<Key>>;
+
+// ========================================================================
+// Practice mode + dictation gate
+// ========================================================================
+
+/// What a chord press may do, set by the onboarding window
+/// (docs/plans/ONBOARDING.md). Practice mode: chords only send their
+/// `chord:down` / `chord:up` events. Gate: a chord that would start a take
+/// shows this message in the pill instead.
+#[derive(Default)]
+pub struct ChordMode {
+    practice: AtomicBool,
+    gate: Mutex<Option<String>>,
+}
+
+impl ChordMode {
+    /// Turn practice mode off, for when onboarding closes.
+    pub fn end_practice(&self) {
+        self.practice.store(false, Ordering::Relaxed);
+    }
+
+    fn on_start(&self) -> OnStart {
+        let gate = self.gate.lock().ok().and_then(|g| g.clone());
+        on_start(self.practice.load(Ordering::Relaxed), gate)
+    }
+}
+
+/// What a chord's start does.
+#[derive(Debug, PartialEq, Eq)]
+enum OnStart {
+    /// Start a take.
+    Record,
+    /// Practice mode: nothing records and the pill stays hidden.
+    Practice,
+    /// Nothing records; the pill shows this notice.
+    Blocked(String),
+}
+
+fn on_start(practice: bool, gate: Option<String>) -> OnStart {
+    if practice {
+        return OnStart::Practice;
+    }
+    match gate {
+        Some(message) => OnStart::Blocked(message),
+        None => OnStart::Record,
+    }
+}
+
+/// Practice mode on or off: while on, chords only send `chord:down` /
+/// `chord:up` events and nothing records.
+#[tauri::command]
+pub fn set_chord_practice(mode: tauri::State<'_, ChordMode>, enabled: bool) {
+    mode.practice.store(enabled, Ordering::Relaxed);
+}
+
+/// Block takes with a message for the pill (the models are still
+/// downloading, for example), or unblock them with `None`.
+#[tauri::command]
+pub fn set_dictation_gate(mode: tauri::State<'_, ChordMode>, blocked: Option<String>) {
+    if let Ok(mut gate) = mode.gate.lock() {
+        *gate = blocked;
+    }
+}
+
+/// Tell every window a chord went down or up, for the onboarding keycaps.
+fn emit_chord(app: &AppHandle, event: &str, action: ChordAction) {
+    let _ = app.emit(event, serde_json::json!({ "action": action.name() }));
+}
 
 // ========================================================================
 // Monitor
@@ -344,6 +421,7 @@ fn process_event(
                     id: start_id,
                     time: start_time,
                 }) if start_time == end_time => {
+                    emit_chord(app, "chord:up", end_id);
                     apply_effect(Effect::RestartRecording(start_id), start_time);
                 }
                 Ok(other) => {
@@ -369,38 +447,81 @@ fn process_event(
 fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
     match effect {
         Effect::StartRecording(action) => {
-            // Open the microphone before anything else: every word from
-            // key-down must be captured. `time` is the key event's own
-            // timestamp, so the logged latency includes our dispatch.
-            let take = dictation::start(
-                app,
-                time,
-                dictation::TakeOrigin::Shortcut,
-                action.take_mode(),
-            );
-
-            // Snapshot focus BEFORE we touch the window — any AppKit
-            // reshuffle triggered by set_position / show could in principle
-            // steal key focus and poison the reading. In practice those
-            // calls leave keyWindow alone, but capturing first is free.
-            let focus = focus_capture::capture_focus().ok();
-            if let Some(take) = take {
-                dictation::set_focus(app, take, focus);
+            match app.state::<ChordMode>().on_start() {
+                OnStart::Record => start_take(app, action, time),
+                OnStart::Practice => {}
+                OnStart::Blocked(message) => dictation::show_notice(app, message),
             }
-
-            dictation::show_hud(app);
+            emit_chord(app, "chord:down", action);
         }
-        Effect::StopRecording(_) => dictation::stop_shortcut_take(app),
-        Effect::RestartRecording(_) => {
+        Effect::StopRecording(action) => {
+            // Stops nothing when the chord's start didn't record.
+            dictation::stop_shortcut_take(app);
+            emit_chord(app, "chord:up", action);
+        }
+        Effect::RestartRecording(action) => {
             // PTT upgraded to hands-free mid-hold: keep the same take
             // recording (it was never interrupted) until the toggle ends it.
+            emit_chord(app, "chord:down", action);
         }
     }
+}
+
+fn start_take(app: &AppHandle, action: ChordAction, time: Instant) {
+    // Open the microphone before anything else: every word from
+    // key-down must be captured. `time` is the key event's own
+    // timestamp, so the logged latency includes our dispatch.
+    let take = dictation::start(
+        app,
+        time,
+        dictation::TakeOrigin::Shortcut,
+        action.take_mode(),
+    );
+
+    // Snapshot focus BEFORE we touch the window — any AppKit
+    // reshuffle triggered by set_position / show could in principle
+    // steal key focus and poison the reading. In practice those
+    // calls leave keyWindow alone, but capturing first is free.
+    let focus = focus_capture::capture_focus().ok();
+    if let Some(take) = take {
+        dictation::set_focus(app, take, focus);
+    }
+
+    dictation::show_hud(app);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chord_records_when_nothing_holds_it_back() {
+        assert_eq!(on_start(false, None), OnStart::Record);
+    }
+
+    #[test]
+    fn practice_mode_records_nothing_and_shows_nothing() {
+        assert_eq!(on_start(true, None), OnStart::Practice);
+        assert_eq!(
+            on_start(true, Some("Still downloading".into())),
+            OnStart::Practice
+        );
+    }
+
+    #[test]
+    fn a_gate_shows_its_message_instead_of_recording() {
+        assert_eq!(
+            on_start(false, Some("Still downloading".into())),
+            OnStart::Blocked("Still downloading".into())
+        );
+    }
+
+    #[test]
+    fn chord_actions_have_the_webview_names() {
+        assert_eq!(ChordAction::PushToTalk.name(), "push_to_talk");
+        assert_eq!(ChordAction::ToggleToTalk.name(), "toggle_to_talk");
+        assert_eq!(ChordAction::Command.name(), "command");
+    }
 
     #[test]
     fn only_escape_going_down_cancels() {

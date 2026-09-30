@@ -117,7 +117,7 @@
       "settingsTranscription": "Settings: Transcription",
       "settingsWritingStyle": "Settings: Writing style",
       "settingsLogs": "Settings: Logs",
-      "setup": "Open setup",
+      "setup": "Open onboarding",
       "calibrate": "Run style calibration…",
       "themeLight": "Switch to light theme",
       "themeDark": "Switch to dark theme",
@@ -579,8 +579,6 @@
     },
     "general": {
       "sectionApp": "App",
-      "server": {
-        "title": "Local server",
       "version": {
         "title": "Version",
         "current": "Herga {{version}}",
@@ -589,6 +587,8 @@
       },
         "description": "Runs Whisper and Qwen3 on this Mac. Nothing leaves your machine."
       },
+      "server": {
+        "title": "Local server",
       "connection": {
         "connecting": "Connecting",
         "offline": "Offline",
@@ -1265,8 +1265,8 @@
     "add": {
       "say": "When I say",
       "write": "Write",
-      "sayPlaceholder": "voice box",
-      "writePlaceholder": "VoiceBox",
+      "sayPlaceholder": "her ga",
+      "writePlaceholder": "Herga",
       "action": "Add",
       "hint": "Leave “When I say” empty to only teach the spelling.",
       "limit": "The dictionary is full at {{count}} words. Delete some to add more."
@@ -1307,6 +1307,170 @@
     "move": "Move and relaunch",
     "moving": "Moving…",
     "later": "Not now",
-    "manual": "Drag Voicebox into your Applications folder in Finder, then open it from there."
+    "manual": "Drag Herga into your Applications folder in Finder, then open it from there."
+  },
+  "dictation": {
+    "stillDownloading": "Still downloading the models"
+  },
+  "onboarding": {
+    "back": "Back",
+    "next": "Next",
+    "skip": "Skip",
+    "skipForNow": "Skip for now",
+    "tryItNow": "Try it now",
+    "openSettings": "Open System Settings",
+    "hold": "Hold",
+    "dictate": "Dictate",
+    "stop": "Stop",
+    "orHold": "or hold",
+    "working": "Working…",
+    "corner": {
+      "speech": "Speech {{percent}}%",
+      "cleanup": "Cleanup {{percent}}%",
+      "ready": "Models ready",
+      "stopped": "Download stopped · see why"
+    },
+    "welcome": {
+      "title": "Talk. It writes.",
+      "fillerA": "um so",
+      "keptA": "Can we meet",
+      "fillerB": "thursday no actually",
+      "keptB": "Friday?",
+      "body": "You say the first thing. Herga sends the second. Everything stays on this Mac.",
+      "start": "Get started"
+    },
+    "download": {
+      "title": "First, the models.",
+      "body": "Two downloads. They keep going while you do the next steps, even if Herga has to restart.",
+      "speech": "Speech to text",
+      "speechRole": "turns your voice into words",
+      "cleanup": "Cleanup",
+      "cleanupRole": "removes “um”, fixes punctuation",
+      "ready": "ready",
+      "stopped": "stopped",
+      "next": "next",
+      "waiting": "waiting",
+      "start": "Download both",
+      "continue": "Continue while it downloads",
+      "diskTitle": "Not enough space for the models.",
+      "diskBody": "Free up about {{size}}, then check again.",
+      "checkAgain": "Check again"
+    },
+    "failed": {
+      "title": "The download stopped.",
+      "body": "{{model}} stopped at {{percent}}%. Herga tried again a few times. Try once more, or use a smaller speech model that downloads faster. You can switch back later in Models.",
+      "details": "Show error details",
+      "retry": "Try again now",
+      "smaller": "Use a smaller model"
+    },
+    "inputMonitoring": {
+      "title": "Let your keys work in any app.",
+      "body": "macOS calls this Input Monitoring. Herga only listens for the keys you use to dictate.",
+      "quitTitle": "macOS will ask you to quit Herga.",
+      "quitBody": "That’s expected. When it reopens, you’ll be right back here. Your downloads pick up where they left off.",
+      "onTitle": "Input Monitoring is on.",
+      "onDetail": "Herga came back right where you left off, and the downloads kept going.",
+      "holdHint": "right side · hold the real keys",
+      "itWorks": "It works. Herga heard your keys."
+    },
+    "accessibility": {
+      "title": "Let your words land at your cursor.",
+      "body": "macOS calls this Accessibility. It lets Herga type into the app you’re using. No restart needed.",
+      "onTitle": "Accessibility is on.",
+      "onDetail": "Text will show up wherever you’re typing."
+    },
+    "microphone": {
+      "title": "Say hello.",
+      "askBody": "First, let Herga use your microphone. Then talk and watch the bars move.",
+      "body": "Talk and watch the bars. If they stay flat, pick a different microphone.",
+      "allow": "Allow microphone",
+      "pick": "Microphone",
+      "systemDefault": "System default",
+      "soundsGood": "Sounds good",
+      "deniedBody": "Herga can’t use the microphone. Turn it on in System Settings, then check again.",
+      "path": "System Settings › Privacy & Security › Microphone › Herga",
+      "checkAgain": "Check again"
+    },
+    "keys": {
+      "title": "Hold these to talk.",
+      "tryIt": "Try it now.",
+      "listening": "Listening…",
+      "nice": "Nice. That’s it.",
+      "hint": "Hold them in any app, talk, and let go. Add Space to talk hands-free. You can change your keys in Settings.",
+      "needsInputMonitoring": "Input Monitoring is off, so Herga can’t see your keys yet. Go back a few steps to turn it on.",
+      "loginTitle": "Open Herga when you log in",
+      "loginDetail": "So it’s ready whenever you are.",
+      "loginEnable": "Enable",
+      "loginApprove": "Approve in System Settings",
+      "loginEnabled": "Enabled",
+      "loginEnabledLabel": "Enabled. Click to turn off."
+    },
+    "locked": {
+      "title": "Almost ready.",
+      "body": "{{model}} is still downloading. This step opens by itself as soon as it finishes.",
+      "failedBody": "The download stopped. Herga keeps trying, or you can fix it now.",
+      "cantHear": "Herga can’t hear you until this finishes.",
+      "seeWhy": "See what happened"
+    },
+    "name": {
+      "title": "What should we call you?",
+      "body": "Hold your keys and say your name.",
+      "editBody": "Type it the way you want it written. Herga will write it this way every time you say it.",
+      "hi": "Hi,",
+      "greeting": "Hi, {{name}}.",
+      "placeholder": "Your name",
+      "fieldLabel": "Your name",
+      "spelledRight": "Is that spelled right?",
+      "yes": "Yes, that’s me",
+      "fix": "Fix the spelling",
+      "saveSpelling": "Save spelling",
+      "sayAgain": "Say it again instead",
+      "saved": "Saved to your dictionary, so it’s always spelled this way.",
+      "savedFixed": "Saved to your dictionary. When you say it, Herga writes “{{name}}”."
+    },
+    "messy": {
+      "title": "Say it the way you talk.",
+      "body": "Read one of these out loud, “um” and all.",
+      "fieldLabel": "Where your words land",
+      "fieldPlaceholder": "Your words land here",
+      "scripts": {
+        "lunch": {
+          "title": "Lunch plans",
+          "line": "“Um, can we move lunch to noon? No, actually, one. At the usual place.”"
+        },
+        "work": {
+          "title": "A work update",
+          "line": "“So the report is, uh, done on Tuesday. No wait, Wednesday. I’ll send it then.”"
+        },
+        "friend": {
+          "title": "Text a friend",
+          "line": "“Heading out now, be there in ten. No, fifteen minutes.”"
+        }
+      }
+    },
+    "rewrite": {
+      "title": "Fix text you already wrote.",
+      "body": "This is selected. Hold your command keys and say what to do with it, or pick one below.",
+      "bodyNoKeys": "This is selected. Pick what to do with it.",
+      "fieldLabel": "Text to rewrite",
+      "andSay": "and say",
+      "undo": "Undo",
+      "paragraph": "Hi team, I wanted to give a quick update on where things stand with the onboarding work. We have picked a direction for the flow and the next step is to design the screens, which should happen this week if nothing else comes up.",
+      "instructions": {
+        "shorter": "make this shorter",
+        "friendlier": "make it friendlier",
+        "bullets": "turn it into bullets"
+      }
+    },
+    "done": {
+      "title": "Go talk.",
+      "body": "We’ll show you the rest when it’s useful.",
+      "push": "Hold, talk, let go. Works in any app.",
+      "toggle": "Hands-free. Tap to start, tap to stop.",
+      "command": "Rewrite the text you’ve selected.",
+      "change": "Change any of these in Settings.",
+      "start": "Start using Herga",
+      "showMe": "Show me now"
+    }
   }
 }

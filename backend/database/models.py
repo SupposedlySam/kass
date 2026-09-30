@@ -67,6 +67,8 @@ class CaptureSettings(Base):
     # Nothing is deleted until the user has chosen a window, or there was
     # nothing old to delete when first asked.
     history_retention_confirmed = Column(Boolean, nullable=False, default=False)
+    # First-run onboarding (docs/plans/ONBOARDING.md) was finished or closed.
+    onboarding_completed = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

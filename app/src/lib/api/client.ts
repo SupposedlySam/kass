@@ -486,6 +486,19 @@ class ApiClient {
     });
   }
 
+  /** Free MB on the volume models download to. */
+  async getModelsDiskSpace(): Promise<{ free_mb: number }> {
+    return this.request<{ free_mb: number }>('/models/disk-space');
+  }
+
+  /** Rewrite `selection` by a spoken or typed instruction (Command Mode without a recording). */
+  async runCommand(selection: string, instruction: string): Promise<CaptureResponse> {
+    return this.request<CaptureResponse>('/commands/run', {
+      method: 'POST',
+      body: JSON.stringify({ selection, instruction }),
+    });
+  }
+
   async cancelDownload(modelName: string): Promise<{ message: string }> {
     return this.request<{ message: string }>('/models/download/cancel', {
       method: 'POST',

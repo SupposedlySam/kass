@@ -2,6 +2,8 @@ import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import hergaLogo from '@/assets/herga-logo.png';
 import { DictateWindow } from '@/components/DictateWindow/DictateWindow';
+import { OnboardingWindow } from '@/components/Onboarding/OnboardingWindow';
+import { useOnboardingLauncher } from '@/components/Onboarding/useOnboardingLauncher';
 import ShinyText from '@/components/ShinyText';
 import { TitleBarDragRegion } from '@/components/TitleBarDragRegion';
 import { useThemeSync } from '@/hooks/useThemeSync';
@@ -18,9 +20,10 @@ import { router } from '@/router';
 import { useLogStore } from '@/stores/logStore';
 import { useServerStore } from '@/stores/serverStore';
 
-function isDictateView(): boolean {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('view') === 'dictate';
+/** Which window this webview is: `?view=dictate` and `?view=onboarding` are their own. */
+function currentView(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('view');
 }
 
 /**
@@ -68,8 +71,13 @@ function App() {
   // server bootstrap (the main window owns that lifecycle) and render only
   // the floating recording surface. Split into a sibling component so the
   // main app's hooks are not called on the dictate path.
-  if (isDictateView()) {
+  const view = currentView();
+  if (view === 'dictate') {
     return <DictateWindow />;
+  }
+  // Onboarding runs in its own window once the main window has the server up.
+  if (view === 'onboarding') {
+    return <OnboardingWindow />;
   }
   return <MainApp />;
 }
@@ -81,10 +89,12 @@ function MainApp() {
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const serverStartingRef = useRef(false);
 
+  // First run opens the onboarding window, which owns the chord until it's done.
+  const onboardingOwnsChord = useOnboardingLauncher(serverReady);
   // Replay the saved chord into the Rust hotkey listener every time
   // capture_settings resolves or the user edits the chord.
-  useChordSync();
-  // Dictation into Voicebox's own fields arrives here instead of as a paste.
+  useChordSync({ paused: onboardingOwnsChord });
+  // Dictation into Herga's own fields arrives here instead of as a paste.
   useInAppDictationInsert();
   // Rust plays the dictation chimes; it needs their saved settings.
   useSoundCueSync();

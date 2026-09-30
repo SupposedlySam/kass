@@ -3,7 +3,7 @@
   "identifier": "default",
   "description": "Default permissions for herga",
   "platforms": ["macOS"],
-  "windows": ["main", "dictate"],
+  "windows": ["main", "dictate", "onboarding"],
   "remote": {
     "urls": ["http://localhost:*"]
   },
