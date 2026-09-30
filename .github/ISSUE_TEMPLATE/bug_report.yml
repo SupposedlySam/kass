@@ -1,0 +1,56 @@
+name: Report a problem
+description: Something doesn't work, crashes, or dictation came out wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. [Troubleshooting](https://herga.mrgnhnt.com/docs/troubleshooting/) covers the most common problems.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: If the text came out wrong, include what you said and what Herga wrote. You can copy both from the Captures tab.
+      placeholder: |
+        I said: "…"
+        Herga wrote: "…"
+        I expected: "…"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it happen?
+      description: The app you were typing in, and the steps that lead to the problem.
+  - type: input
+    id: version
+    attributes:
+      label: Herga version
+      description: Shown in Settings › General › Version.
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 26.1, MacBook Air M3
+    validations:
+      required: true
+  - type: dropdown
+    id: models
+    attributes:
+      label: Models, if it's about transcription or cleanup
+      multiple: true
+      options:
+        - Whisper Turbo
+        - Whisper Base / Small / Medium / Large
+        - Qwen3 0.6B
+        - Qwen3 1.7B
+        - Qwen3 4B
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything relevant from Settings › Logs. Check it doesn't contain text you'd rather keep private.
+      render: text

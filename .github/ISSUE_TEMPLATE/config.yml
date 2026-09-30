@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Herga docs
+    url: https://herga.mrgnhnt.com/docs/
+    about: Setup, hotkeys, spoken commands and troubleshooting.
