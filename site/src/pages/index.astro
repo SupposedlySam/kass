@@ -1,0 +1,1081 @@
+---
+import '../styles/site.css';
+import DictationDemo from '../components/DictationDemo.astro';
+import StarButton from '../components/StarButton.astro';
+import { DOWNLOAD, ISSUES, NEW_ISSUE, REPO } from '../site';
+
+const title = 'Herga — Private dictation for your Mac';
+const description =
+  'Hold a key, speak, and let go. Herga turns what you said into clean, ready-to-send text in any app. Everything runs on your Mac.';
+
+const examples = [
+  {
+    label: 'Changes of mind',
+    said: 'send it Tuesday, no actually Wednesday',
+    got: 'Send it Wednesday.',
+  },
+  {
+    label: 'Lists',
+    said: 'make a list of flights, hotel and the rental car',
+    got: '- Flights\n- Hotel\n- The rental car',
+  },
+  {
+    label: 'Spelling',
+    said: 'my username is m, r, g, n, capital H',
+    got: 'My username is mrgnH',
+  },
+  {
+    label: 'Symbols',
+    said: 'wrap it in open bracket x close bracket',
+    got: 'Wrap it in [x]',
+  },
+  {
+    label: 'Line breaks',
+    said: 'thanks for the help new paragraph Morgan',
+    got: 'Thanks for the help.\n\nMorgan',
+  },
+  {
+    label: 'Your clipboard',
+    said: 'here is the link paste from clipboard',
+    got: 'Here is the link: https://…',
+  },
+];
+
+const features = [
+  {
+    title: 'A style for every app',
+    body: 'Slack can be casual while Mail stays polished. Each app gets a writing style, and each style learns on its own. Say “use formal mode” to switch mid-thought.',
+    tag: 'Writing styles',
+    href: '/docs/writing-styles/',
+  },
+  {
+    title: 'Your words, spelled right',
+    body: 'Add names, product terms and jargon to your dictionary, along with how you say them. Select a word in any past capture to add it.',
+    tag: 'Dictionary',
+    href: '/docs/dictionary/',
+  },
+  {
+    title: 'Rewrite anything you select',
+    body: 'Highlight text in any app, hold the command chord, and say what to do: “make this friendlier”, “translate to Spanish”, “Polish”.',
+    tag: 'Command Mode',
+    href: '/docs/command-mode/',
+  },
+  {
+    title: 'It learns from your fixes',
+    body: 'When a result isn’t what you meant, fix it. Herga learns from the fix right away, and later folds your fixes into rules, keeping them only if they hold up against your past corrections.',
+    tag: 'Correction learning',
+    href: '/docs/captures/',
+  },
+  {
+    title: 'Every take, kept for you',
+    body: 'Captures holds the audio next to the raw and cleaned text. Replay it, re-transcribe with another model, or fix it in place.',
+    tag: 'Captures',
+    href: '/docs/captures/',
+  },
+  {
+    title: 'See how much you’ve said',
+    body: 'Insights tracks words dictated, your speaking pace, time saved and the apps you talk to most. The numbers stay on your Mac.',
+    tag: 'Insights',
+    href: '/docs/captures/',
+  },
+];
+
+const faqs = [
+  {
+    q: 'Does anything I say leave my Mac?',
+    a: 'No. Recording, transcription, cleanup and learning all run locally. Your audio and text never leave your Mac. Herga only goes online to download its speech and language models from Hugging Face, and to check GitHub for new versions.',
+  },
+  {
+    q: 'How is this different from macOS dictation?',
+    a: 'Built-in dictation types what it hears. Herga cleans it up the way you’d have typed it: filler words and false starts go, spoken corrections are applied, and punctuation follows your habits. It also learns your vocabulary and the fixes you make.',
+  },
+  {
+    q: 'Will it rewrite what I meant?',
+    a: 'No. Cleanup keeps your words and your meaning. It never summarizes and never adds anything you didn’t say. If you want a real rewrite, that’s what Command Mode is for.',
+  },
+  {
+    q: 'Which Macs does it run on?',
+    a: 'Macs with Apple Silicon (M1 or later). Whisper and the cleanup model run on Apple’s MLX framework on the GPU, which is what keeps it fast without the cloud.',
+  },
+  {
+    q: 'Does it work in every app?',
+    a: 'It works in any app with a text field: chat, email, docs, browsers, editors and terminals. Herga writes into the field you were in when you started. When it has to paste, it puts your clipboard back afterward.',
+  },
+  {
+    q: 'What languages does it understand?',
+    a: 'English, Spanish, French, German, Japanese, Chinese and Hindi, or let it detect the language for you.',
+  },
+  {
+    q: 'What does it cost?',
+    a: 'Nothing. Herga is free and open source under the MIT license. There’s no account and no subscription.',
+  },
+];
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content="https://herga.mrgnhnt.com/icon.png" />
+		<meta name="theme-color" content="#0d0d0c" />
+	</head>
+	<body>
+		<header class="nav">
+			<div class="wrap nav-inner">
+				<a class="brand" href="/">
+					<img src="/icon.png" alt="" width="30" height="30" />
+					<span>Herga</span>
+				</a>
+				<nav class="links">
+					<a href="#how">How it works</a>
+					<a href="#features">Features</a>
+					<a href="#privacy">Privacy</a>
+					<a href="/docs/">Docs</a>
+					<a href="/changelog/">Changelog</a>
+				</nav>
+				<div class="nav-star"><StarButton size="sm" /></div>
+				<a class="btn btn-gold nav-cta" href={DOWNLOAD}>Download</a>
+			</div>
+		</header>
+
+		<main>
+			<section class="hero">
+				<div class="glow" aria-hidden="true"></div>
+				<div class="wrap hero-grid">
+					<div class="hero-copy">
+						<p class="eyebrow">Dictation for Apple Silicon Macs</p>
+						<h1>Say it messy.<br /><span class="gold">Send it clean.</span></h1>
+						<p class="lede">
+							Hold a key and talk the way you think. When you let go, Herga drops the ums, applies your
+							“no, actually”s and puts clean, ready-to-send text into whatever app you’re in. None of it leaves
+							your Mac.
+						</p>
+						<div class="ctas">
+							<a class="btn btn-gold" href={DOWNLOAD}>
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+									><path
+										d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.27-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.41-3.64zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.66 1.37-.58.67-1.09 1.76-.96 2.8 1.02.08 2.05-.52 2.68-1.28z"
+									></path></svg
+								>
+								Download for Mac
+							</a>
+							<a class="btn btn-ghost" href="/docs/">Read the docs</a>
+						</div>
+						<p class="fineprint">Free and open source · Apple Silicon · No account</p>
+					</div>
+					<DictationDemo />
+				</div>
+			</section>
+
+			<section id="how" class="how">
+				<div class="wrap">
+					<p class="eyebrow">How it works</p>
+					<h2>Hold. Speak. Let go.</h2>
+					<ol class="steps">
+						<li>
+							<span class="num">1</span>
+							<div class="step-keys"><span class="key">right ⌘</span> <span class="key">right ⌥</span></div>
+							<h3>Hold the chord</h3>
+							<p>From any app, anywhere. A small pill shows you’re being heard. Tap <kbd>Space</kbd> to keep going hands-free.</p>
+						</li>
+						<li>
+							<span class="num">2</span>
+							<div class="wave" aria-hidden="true">
+								{Array.from({ length: 24 }, (_, i) => <i style={`--i:${i}`}></i>)}
+							</div>
+							<h3>Talk like you think</h3>
+							<p>Ramble, restart, change your mind. Herga transcribes while you’re still speaking, so there’s little to wait for.</p>
+						</li>
+						<li>
+							<span class="num">3</span>
+							<div class="landed"><span class="gold">✓</span> Pasted into Slack</div>
+							<h3>Let go, it’s there</h3>
+							<p>Clean text lands in the field you started in, even if you’ve clicked somewhere else since.</p>
+						</li>
+					</ol>
+				</div>
+			</section>
+
+			<section class="examples">
+				<div class="wrap">
+					<p class="eyebrow">What you say → what you get</p>
+					<h2>It knows what you meant.</h2>
+					<p class="lede section-lede">
+						Speech is faster than typing, but it comes out full of detours. Herga cleans them up without
+						summarizing or putting words in your mouth.
+					</p>
+					<div class="ex-grid">
+						{
+							examples.map((ex) => (
+								<figure class="ex">
+									<figcaption>{ex.label}</figcaption>
+									<p class="ex-said">“{ex.said}”</p>
+									<p class="ex-got">{ex.got}</p>
+								</figure>
+							))
+						}
+					</div>
+				</div>
+			</section>
+
+			<section id="privacy" class="privacy">
+				<div class="wrap privacy-grid">
+					<div>
+						<p class="eyebrow">Private by design</p>
+						<h2>Your voice never leaves the room.</h2>
+						<p class="lede">
+							There is no Herga server to send your audio to. Speech recognition, cleanup and everything learned
+							from your corrections run on your Mac’s own chip and stay in a folder you can open.
+						</p>
+						<ul class="checks">
+							<li>No account, sign-in or subscription</li>
+							<li>Works offline once your models are downloaded</li>
+							<li>No analytics, telemetry or crash reporting</li>
+							<li>Recordings and history stay on disk, and you choose how long to keep them</li>
+							<li>Open source, so you can check every line</li>
+						</ul>
+					</div>
+					<div class="mac" aria-label="Diagram: every step of dictation happens inside your Mac" role="img">
+						<div class="mac-label">Your Mac</div>
+						<div class="flow">
+							<div class="node"><b>Microphone</b><span>captured natively in Rust</span></div>
+							<div class="arrow"></div>
+							<div class="node"><b>Whisper</b><span>speech to text on MLX</span></div>
+							<div class="arrow"></div>
+							<div class="node"><b>Qwen3</b><span>cleans it in your style</span></div>
+							<div class="arrow"></div>
+							<div class="node node-gold"><b>Your app</b><span>text lands where you were typing</span></div>
+						</div>
+						<div class="cloud"><span>☁︎</span> Internet: only for model downloads and update checks</div>
+					</div>
+				</div>
+			</section>
+
+			<section id="features" class="features">
+				<div class="wrap">
+					<p class="eyebrow">Features</p>
+					<h2>Gets better the more you use it.</h2>
+					<div class="feat-grid">
+						{
+							features.map((f) => (
+								<a class="feat" href={f.href}>
+									<span class="tag">{f.tag}</span>
+									<h3>{f.title}</h3>
+									<p>{f.body}</p>
+									<span class="more">Learn more →</span>
+								</a>
+							))
+						}
+					</div>
+				</div>
+			</section>
+
+			<section class="native">
+				<div class="wrap native-grid">
+					<div class="stat">
+						<b>Native</b>
+						<span>Built with Tauri and Rust, not Electron. The hotkey, microphone and paste run in native code.</span>
+					</div>
+					<div class="stat">
+						<b>Streaming</b>
+						<span>Recognition and cleanup start while you speak, a sentence at a time.</span>
+					</div>
+					<div class="stat">
+						<b>On-device</b>
+						<span>Whisper and Qwen3 run on the Apple Silicon GPU through MLX.</span>
+					</div>
+				</div>
+			</section>
+
+			<section class="open">
+				<div class="wrap open-inner">
+					<div>
+						<p class="eyebrow">Open source</p>
+						<h2>Built in the open.</h2>
+						<p class="lede">
+							Herga is free, MIT licensed and developed on GitHub. Star the repository to follow along, and
+							tell us when something doesn’t work the way you expect. Every report makes dictation better.
+						</p>
+					</div>
+					<div class="open-cards">
+						<a class="open-card" href={REPO}>
+							<span class="open-icon">★</span>
+							<b>Star on GitHub</b>
+							<span>Follow releases and help other people find Herga.</span>
+						</a>
+						<a class="open-card" href={NEW_ISSUE}>
+							<span class="open-icon">!</span>
+							<b>Report an issue</b>
+							<span>Something broke, or text came out wrong? Tell us what you said and what you got.</span>
+						</a>
+						<a class="open-card" href={ISSUES}>
+							<span class="open-icon">→</span>
+							<b>Browse issues</b>
+							<span>See what’s known, what’s being worked on, and add your vote.</span>
+						</a>
+					</div>
+				</div>
+			</section>
+
+			<section class="faq">
+				<div class="wrap faq-grid">
+					<div>
+						<p class="eyebrow">Questions</p>
+						<h2>Good to know.</h2>
+						<p class="faq-more">More in the <a href="/docs/">docs</a>.</p>
+					</div>
+					<div class="faq-list">
+						{
+							faqs.map((f) => (
+								<details>
+									<summary>{f.q}</summary>
+									<p>{f.a}</p>
+								</details>
+							))
+						}
+					</div>
+				</div>
+			</section>
+
+			<section class="final">
+				<div class="wrap final-inner">
+					<img src="/icon.png" alt="" width="96" height="96" />
+					<h2>Stop typing everything.</h2>
+					<p class="lede">Free for Apple Silicon Macs. About 2 GB of models, downloaded once.</p>
+					<div class="ctas">
+						<a class="btn btn-gold" href={DOWNLOAD}>Download for Mac</a>
+						<StarButton label="Star on GitHub" />
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer class="foot">
+			<div class="wrap foot-inner">
+				<div class="brand">
+					<img src="/icon.png" alt="" width="24" height="24" />
+					<span>Herga</span>
+				</div>
+				<nav>
+					<a href="/docs/">Docs</a>
+					<a href="/docs/privacy/">Privacy</a>
+					<a href="/changelog/">Changelog</a>
+					<a href={REPO}>GitHub</a>
+					<a href={NEW_ISSUE}>Report an issue</a>
+				</nav>
+				<p>From <em>jerga</em>, Spanish for slang. MIT licensed. Based on <a href="https://github.com/jamiepine/voicebox">Voicebox</a> by Jamie Pine.</p>
+			</div>
+		</footer>
+	</body>
+</html>
+
+<style>
+	.nav {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		backdrop-filter: blur(14px);
+		background: rgba(13, 13, 12, 0.72);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+	}
+
+	.nav-inner {
+		display: flex;
+		align-items: center;
+		gap: 28px;
+		height: 68px;
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-family: var(--font-display);
+		font-weight: 700;
+		font-size: 1.15rem;
+		text-decoration: none;
+		letter-spacing: -0.02em;
+	}
+
+	.brand img {
+		border-radius: 8px;
+	}
+
+	.links {
+		display: flex;
+		gap: 26px;
+		margin-left: auto;
+		font-size: 0.93rem;
+	}
+
+	.links a {
+		color: var(--ink-soft);
+		text-decoration: none;
+	}
+
+	.links a:hover {
+		color: var(--ink);
+	}
+
+	.nav-star {
+		display: flex;
+	}
+
+	.nav-cta {
+		padding: 9px 18px;
+		font-size: 0.9rem;
+	}
+
+	@media (max-width: 820px) {
+		.links {
+			display: none;
+		}
+		.nav-inner {
+			gap: 12px;
+		}
+		.nav-star {
+			margin-left: auto;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.nav-star {
+			display: none;
+		}
+		.nav-cta {
+			margin-left: auto;
+		}
+	}
+
+	/* Hero */
+	.hero {
+		position: relative;
+		padding: 110px 0 120px;
+		overflow: hidden;
+	}
+
+	.glow {
+		position: absolute;
+		inset: -30% -10% auto auto;
+		width: 900px;
+		height: 900px;
+		background: radial-gradient(closest-side, rgba(233, 180, 76, 0.16), transparent 70%);
+		pointer-events: none;
+	}
+
+	.hero-grid {
+		position: relative;
+		display: grid;
+		grid-template-columns: 1.25fr 1fr;
+		gap: 56px;
+		align-items: center;
+	}
+
+	.hero h1 {
+		font-size: clamp(3rem, 6.4vw, 5.2rem);
+		margin-bottom: 26px;
+	}
+
+	.ctas {
+		display: flex;
+		gap: 12px;
+		margin-top: 34px;
+		flex-wrap: wrap;
+	}
+
+	.fineprint {
+		margin-top: 18px;
+		font-size: 0.85rem;
+		color: var(--ink-faint);
+	}
+
+	@media (max-width: 960px) {
+		.hero {
+			padding: 64px 0 80px;
+		}
+		.hero-grid {
+			grid-template-columns: 1fr;
+			gap: 56px;
+		}
+	}
+
+	/* How */
+	.how {
+		border-top: 1px solid var(--line);
+	}
+
+	.steps {
+		list-style: none;
+		padding: 0;
+		margin: 56px 0 0;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 20px;
+	}
+
+	.steps li {
+		position: relative;
+		padding: 30px 28px;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--bg-raised);
+	}
+
+	.steps h3 {
+		margin: 26px 0 10px;
+	}
+
+	.steps p {
+		color: var(--ink-soft);
+		font-size: 0.97rem;
+	}
+
+	.num {
+		position: absolute;
+		top: 24px;
+		right: 26px;
+		font-family: var(--font-mono);
+		color: var(--ink-faint);
+		font-size: 0.85rem;
+	}
+
+	.step-keys,
+	.wave,
+	.landed {
+		height: 44px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.wave {
+		gap: 4px;
+	}
+
+	.wave i {
+		width: 4px;
+		border-radius: 2px;
+		background: var(--gold);
+		height: 8px;
+		animation: wave 1.4s ease-in-out infinite;
+		animation-delay: calc(var(--i) * -0.09s);
+	}
+
+	@keyframes wave {
+		0%,
+		100% {
+			height: 6px;
+			opacity: 0.5;
+		}
+		50% {
+			height: 36px;
+			opacity: 1;
+		}
+	}
+
+	.landed {
+		font-size: 0.9rem;
+		padding: 0 14px;
+		height: 40px;
+		width: fit-content;
+		border-radius: 999px;
+		border: 1px solid var(--line-strong);
+		color: var(--ink-soft);
+	}
+
+	@media (max-width: 860px) {
+		.steps {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Examples */
+	.examples {
+		background: linear-gradient(180deg, var(--bg), #12110f);
+	}
+
+	.section-lede {
+		margin-top: 20px;
+		max-width: 52ch;
+	}
+
+	.ex-grid {
+		margin-top: 56px;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 16px;
+	}
+
+	.ex {
+		margin: 0;
+		padding: 24px;
+		border-radius: var(--radius);
+		border: 1px solid var(--line);
+		background: var(--bg-card);
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.ex figcaption {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--gold);
+	}
+
+	.ex-said {
+		color: var(--ink-faint);
+		font-style: italic;
+		font-size: 0.95rem;
+	}
+
+	.ex-got {
+		white-space: pre-line;
+		font-weight: 500;
+		padding-top: 14px;
+		border-top: 1px dashed var(--line-strong);
+		margin-top: auto;
+	}
+
+	@media (max-width: 900px) {
+		.ex-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	@media (max-width: 580px) {
+		.ex-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Privacy */
+	.privacy-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 72px;
+		align-items: center;
+	}
+
+	.privacy .lede {
+		margin-top: 22px;
+	}
+
+	.checks {
+		list-style: none;
+		padding: 0;
+		margin: 30px 0 0;
+		display: grid;
+		gap: 12px;
+	}
+
+	.checks li {
+		position: relative;
+		padding-left: 30px;
+		color: var(--ink-soft);
+	}
+
+	.checks li::before {
+		content: '✓';
+		position: absolute;
+		left: 0;
+		color: var(--gold);
+		font-weight: 700;
+	}
+
+	.mac {
+		position: relative;
+		border: 1.5px solid var(--gold-deep);
+		border-radius: 26px;
+		padding: 44px 26px 26px;
+		background:
+			radial-gradient(120% 80% at 50% 0%, var(--gold-glow), transparent 60%),
+			var(--bg-raised);
+	}
+
+	.mac-label {
+		position: absolute;
+		top: -12px;
+		left: 24px;
+		padding: 0 10px;
+		background: var(--bg);
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--gold);
+	}
+
+	.flow {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.node {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 16px;
+		padding: 14px 18px;
+		border-radius: 12px;
+		border: 1px solid var(--line-strong);
+		background: var(--bg-card);
+	}
+
+	.node span {
+		font-size: 0.85rem;
+		color: var(--ink-faint);
+		text-align: right;
+	}
+
+	.node-gold {
+		border-color: var(--gold-deep);
+	}
+
+	.arrow {
+		width: 2px;
+		height: 22px;
+		margin: 0 auto;
+		background: linear-gradient(var(--gold-deep), var(--gold));
+	}
+
+	.cloud {
+		margin-top: 24px;
+		padding-top: 16px;
+		border-top: 1px dashed var(--line-strong);
+		font-size: 0.85rem;
+		color: var(--ink-faint);
+		text-align: center;
+	}
+
+	@media (max-width: 900px) {
+		.privacy-grid {
+			grid-template-columns: 1fr;
+			gap: 48px;
+		}
+	}
+
+	/* Features */
+	.features {
+		border-top: 1px solid var(--line);
+	}
+
+	.feat-grid {
+		margin-top: 56px;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 16px;
+	}
+
+	.feat {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 28px;
+		border-radius: var(--radius);
+		border: 1px solid var(--line);
+		background: var(--bg-raised);
+		text-decoration: none;
+		transition:
+			border-color 0.2s ease,
+			transform 0.2s ease;
+	}
+
+	.feat:hover {
+		border-color: var(--gold-deep);
+		transform: translateY(-2px);
+	}
+
+	.feat p {
+		color: var(--ink-soft);
+		font-size: 0.96rem;
+	}
+
+	.tag {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--gold);
+	}
+
+	.more {
+		margin-top: auto;
+		padding-top: 8px;
+		font-size: 0.88rem;
+		color: var(--ink-faint);
+	}
+
+	.feat:hover .more {
+		color: var(--gold);
+	}
+
+	@media (max-width: 900px) {
+		.feat-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	@media (max-width: 580px) {
+		.feat-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Native */
+	.native {
+		padding: 0 0 120px;
+	}
+
+	.native-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		border-top: 1px solid var(--line);
+		border-bottom: 1px solid var(--line);
+	}
+
+	.stat {
+		padding: 40px 28px;
+		display: grid;
+		gap: 10px;
+	}
+
+	.stat + .stat {
+		border-left: 1px solid var(--line);
+	}
+
+	.stat b {
+		font-family: var(--font-display);
+		font-size: 2rem;
+		letter-spacing: -0.03em;
+		color: var(--gold);
+	}
+
+	.stat span {
+		color: var(--ink-soft);
+		font-size: 0.95rem;
+	}
+
+	@media (max-width: 760px) {
+		.native {
+			padding-bottom: 80px;
+		}
+		.native-grid {
+			grid-template-columns: 1fr;
+		}
+		.stat + .stat {
+			border-left: 0;
+			border-top: 1px solid var(--line);
+		}
+	}
+
+	/* Open source */
+	.open {
+		border-top: 1px solid var(--line);
+	}
+
+	.open-inner {
+		display: grid;
+		grid-template-columns: 1fr 1.2fr;
+		gap: 64px;
+		align-items: center;
+	}
+
+	.open .lede {
+		margin-top: 22px;
+	}
+
+	.open-cards {
+		display: grid;
+		gap: 12px;
+	}
+
+	.open-card {
+		display: grid;
+		grid-template-columns: 40px 1fr;
+		column-gap: 16px;
+		row-gap: 4px;
+		padding: 20px 22px;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--bg-raised);
+		text-decoration: none;
+		transition:
+			border-color 0.2s ease,
+			transform 0.2s ease;
+	}
+
+	.open-card:hover {
+		border-color: var(--gold-deep);
+		transform: translateY(-2px);
+	}
+
+	.open-icon {
+		grid-row: span 2;
+		width: 40px;
+		height: 40px;
+		display: grid;
+		place-items: center;
+		border-radius: 12px;
+		background: var(--gold-glow);
+		color: var(--gold);
+		font-weight: 700;
+	}
+
+	.open-card span:last-child {
+		color: var(--ink-soft);
+		font-size: 0.93rem;
+	}
+
+	@media (max-width: 860px) {
+		.open-inner {
+			grid-template-columns: 1fr;
+			gap: 36px;
+		}
+	}
+
+	/* FAQ */
+	.faq {
+		padding-top: 0;
+	}
+
+	.faq-grid {
+		display: grid;
+		grid-template-columns: 1fr 1.6fr;
+		gap: 64px;
+	}
+
+	.faq-more {
+		margin-top: 20px;
+		color: var(--ink-soft);
+	}
+
+	.faq-more a {
+		color: var(--gold);
+	}
+
+	details {
+		border-bottom: 1px solid var(--line);
+		padding: 22px 0;
+	}
+
+	details:first-child {
+		border-top: 1px solid var(--line);
+	}
+
+	summary {
+		cursor: pointer;
+		list-style: none;
+		font-weight: 600;
+		font-size: 1.08rem;
+		display: flex;
+		justify-content: space-between;
+		gap: 20px;
+	}
+
+	summary::-webkit-details-marker {
+		display: none;
+	}
+
+	summary::after {
+		content: '+';
+		color: var(--gold);
+		font-size: 1.4rem;
+		line-height: 1;
+		transition: transform 0.2s ease;
+	}
+
+	details[open] summary::after {
+		transform: rotate(45deg);
+	}
+
+	details p {
+		margin-top: 12px;
+		color: var(--ink-soft);
+		max-width: 62ch;
+	}
+
+	@media (max-width: 860px) {
+		.faq-grid {
+			grid-template-columns: 1fr;
+			gap: 36px;
+		}
+	}
+
+	/* Final */
+	.final {
+		background: radial-gradient(60% 70% at 50% 100%, rgba(233, 180, 76, 0.14), transparent 70%);
+		border-top: 1px solid var(--line);
+	}
+
+	.final-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+
+	.final img {
+		border-radius: 22px;
+		margin-bottom: 30px;
+		box-shadow: 0 20px 60px -20px rgba(233, 180, 76, 0.45);
+	}
+
+	.final .lede {
+		margin-top: 18px;
+	}
+
+	.final .ctas {
+		justify-content: center;
+	}
+
+	/* Footer */
+	.foot {
+		border-top: 1px solid var(--line);
+		padding: 36px 0 48px;
+		font-size: 0.88rem;
+		color: var(--ink-faint);
+	}
+
+	.foot-inner {
+		display: flex;
+		align-items: center;
+		gap: 28px;
+		flex-wrap: wrap;
+	}
+
+	.foot nav {
+		display: flex;
+		gap: 20px;
+	}
+
+	.foot a {
+		color: var(--ink-soft);
+		text-decoration: none;
+	}
+
+	.foot a:hover {
+		color: var(--ink);
+	}
+
+	.foot p {
+		margin-left: auto;
+	}
+
+	@media (max-width: 700px) {
+		.foot p {
+			margin-left: 0;
+			width: 100%;
+		}
+	}
+</style>

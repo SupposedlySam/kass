@@ -1,0 +1,59 @@
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* Dark: graphite and gold, matching the landing page. */
+:root {
+  --sl-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+
+  --sl-color-accent-low: #3a2a0c;
+  --sl-color-accent: #e9b44c;
+  --sl-color-accent-high: #f6cf7a;
+  --sl-color-white: #f3efe6;
+  --sl-color-gray-1: #e4dfd4;
+  --sl-color-gray-2: #c4beb1;
+  --sl-color-gray-3: #948e81;
+  --sl-color-gray-4: #5e594f;
+  --sl-color-gray-5: #34312b;
+  --sl-color-gray-6: #1b1a17;
+  --sl-color-black: #0d0d0c;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #f7e6c2;
+  --sl-color-accent: #95650f;
+  --sl-color-accent-high: #4f3505;
+  --sl-color-white: #17150f;
+  --sl-color-gray-1: #2a261d;
+  --sl-color-gray-2: #423d31;
+  --sl-color-gray-3: #6d6656;
+  --sl-color-gray-4: #9c9585;
+  --sl-color-gray-5: #d9d3c5;
+  --sl-color-gray-6: #f1ede3;
+  --sl-color-gray-7: #f8f6f0;
+  --sl-color-black: #fdfcf8;
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top {
+  font-family: "Bricolage Grotesque Variable", var(--sl-font);
+  letter-spacing: -0.02em;
+}
+
+.site-title img {
+  border-radius: 7px;
+}
+
+.sl-markdown-content kbd {
+  font-family: var(--sl-font-mono);
+  font-size: 0.82em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--sl-color-gray-5);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--sl-color-gray-6);
+  white-space: nowrap;
+}
