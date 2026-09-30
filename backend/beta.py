@@ -14,7 +14,7 @@ app/src/lib/betaFeatures.ts.
 
 from . import config
 
-BETA_FEATURES: frozenset[str] = frozenset()
+BETA_FEATURES: frozenset[str] = frozenset({"voice_edits"})
 
 CHANNEL_FILE = "update-channel"
 

@@ -10,7 +10,7 @@ Notable changes to Herga for users. Each release gets a section here, newest fir
 
 ### Improved
 
-- **Dictionary names can leave similar names alone.** A `Meghan` entry used to also turn `Megan` and `Meagan` into `Meghan`. Turn off **Also fix words that sound like it** on an entry to fix only its exact spelling.
+- **Dictionary names can leave similar names alone (beta).** With **Beta updates** on, you can stop a name from respelling similar ones. A `Meghan` entry used to also turn `Megan` and `Meagan` into `Meghan`. Turn off **Also fix words that sound like it** on an entry to fix only its exact spelling.
 
 ### Fixed
 

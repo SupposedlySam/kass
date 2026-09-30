@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
 
+from .. import beta
+
 logger = logging.getLogger(__name__)
 
 SCOPES = ("app", "style", "global")
@@ -318,7 +320,9 @@ def resolve(entries: Iterable[Entry], bundle_id: str | None, style_id: str | Non
     return resolved
 
 
-def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
+def build(resolved: list[tuple[Entry, bool]], exact_spelling: bool = True) -> Dictionary:
+    """The dictionary for ``resolved``. Without ``exact_spelling`` (the
+    ``voice_edits`` beta), every term is matched by sound, as before."""
     active = [entry for entry, overridden in resolved if not overridden]
     if not active:
         return EMPTY
@@ -337,7 +341,7 @@ def build(resolved: list[tuple[Entry, bool]]) -> Dictionary:
             continue
         spellings[_normal(written)] = written
         # The most specific entry that writes it decides.
-        if not entry.match_sound:
+        if exact_spelling and not entry.match_sound:
             exact.add(_normal(written))
         terms.append(written)
     names = frozenset(word for term in terms for word in _WORD.findall(term) if word[:1].isupper())
@@ -383,7 +387,7 @@ def prompt(terms: Iterable[str]) -> str:
 
 _lock = threading.Lock()
 _entries: tuple[Entry, ...] | None = None
-_by_app: dict[tuple[str, str], Dictionary] = {}
+_by_app: dict[tuple[str, str, bool], Dictionary] = {}
 
 
 def _entry(row) -> Entry:
@@ -436,12 +440,13 @@ def for_app(bundle_id: str | None, style_id: str | None = None) -> Dictionary:
     from .styles import snapshot as styles_snapshot
 
     style_id = style_id or styles_snapshot().for_app(bundle_id).id
-    cache_key = (bundle_id or "", style_id)
+    exact_spelling = beta.enabled("voice_edits")
+    cache_key = (bundle_id or "", style_id, exact_spelling)
     with _lock:
         cached = _by_app.get(cache_key)
     if cached is not None:
         return cached
-    built = build(resolve(entries(), bundle_id, style_id))
+    built = build(resolve(entries(), bundle_id, style_id), exact_spelling)
     with _lock:
         _by_app[cache_key] = built
     return built

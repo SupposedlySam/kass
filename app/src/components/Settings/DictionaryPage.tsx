@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Toggle } from '@/components/ui/toggle';
 import type { DictionaryEntry, DictionaryEntryUpdate } from '@/lib/api/types';
+import { useBetaFeature } from '@/lib/betaFeatures';
 import {
   useAddDictionaryEntry,
   useDeleteDictionaryEntry,
@@ -350,7 +351,7 @@ function WrittenText({
     Partial<Pick<DictionaryEntry, 'match_sound' | 'source'>>;
 }) {
   const { t } = useTranslation();
-  const note = entryNote(entry);
+  const note = useBetaFeature('voice_edits') ? entryNote(entry) : null;
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span
@@ -469,6 +470,7 @@ function EditEntryRow({
   const [places, setPlaces] = useState(initialPlaces);
   const initialMatchSound = entry.match_sound !== false;
   const [matchSound, setMatchSound] = useState(initialMatchSound);
+  const exactSpelling = useBetaFeature('voice_edits');
   const canSave = !!written.trim() && places.length > 0 && !update.isPending;
 
   const save = () => {
@@ -535,22 +537,24 @@ function EditEntryRow({
             {t(`${P}.list.save`)}
           </Button>
         </div>
-        <div className="mt-2 flex items-center gap-2" title={t(`${P}.list.matchSoundHint`)}>
-          <Toggle
-            id={`dictionary-match-sound-${entry.id}`}
-            checked={matchSound}
-            onCheckedChange={(checked) => {
-              if (update.error) update.reset();
-              setMatchSound(checked);
-            }}
-          />
-          <label
-            htmlFor={`dictionary-match-sound-${entry.id}`}
-            className="cursor-pointer text-xs text-muted-foreground"
-          >
-            {t(`${P}.list.matchSound`)}
-          </label>
-        </div>
+        {exactSpelling && (
+          <div className="mt-2 flex items-center gap-2" title={t(`${P}.list.matchSoundHint`)}>
+            <Toggle
+              id={`dictionary-match-sound-${entry.id}`}
+              checked={matchSound}
+              onCheckedChange={(checked) => {
+                if (update.error) update.reset();
+                setMatchSound(checked);
+              }}
+            />
+            <label
+              htmlFor={`dictionary-match-sound-${entry.id}`}
+              className="cursor-pointer text-xs text-muted-foreground"
+            >
+              {t(`${P}.list.matchSound`)}
+            </label>
+          </div>
+        )}
         {update.error && <p className="mt-1.5 text-xs text-destructive">{update.error.message}</p>}
       </div>
     </li>
