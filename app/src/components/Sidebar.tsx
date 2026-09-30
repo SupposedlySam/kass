@@ -5,6 +5,7 @@ import {
   Captions,
   ChartColumn,
   CircleAlert,
+  Loader2,
   type LucideIcon,
   SlidersHorizontal,
   TriangleAlert,
@@ -14,7 +15,6 @@ import hergaLogo from '@/assets/herga-logo.png';
 import { type ModelAlerts, useModelAlerts } from '@/lib/hooks/useModelAlerts';
 import { useUpdateCheck } from '@/lib/hooks/useUpdateCheck';
 import { cn } from '@/lib/utils/cn';
-import { version } from '../../package.json';
 
 const tabs: Array<{ id: string; path: string; icon: LucideIcon; labelKey: string }> = [
   { id: 'captures', path: '/captures', icon: Captions, labelKey: 'nav.captures' },
@@ -61,28 +61,48 @@ export function Sidebar() {
       })}
 
       {update.status.state === 'ready' ? (
-        <UpdateButton version={update.status.version} onRestart={update.restart} />
+        <UpdateButton
+          current={update.version}
+          latest={update.status.version}
+          restarting={update.restarting}
+          onRestart={update.restart}
+        />
       ) : (
-        <span className="mt-auto font-mono text-[10px] text-muted-foreground/60">v{version}</span>
+        <span className="mt-auto font-mono text-[10px] text-muted-foreground/60">
+          v{update.version}
+        </span>
       )}
     </nav>
   );
 }
 
 /** Takes the place of the version once a newer release has downloaded; restarts into it. */
-function UpdateButton({ version: latest, onRestart }: { version: string; onRestart: () => void }) {
+function UpdateButton({
+  current,
+  latest,
+  restarting,
+  onRestart,
+}: {
+  current: string;
+  latest: string;
+  restarting: boolean;
+  onRestart: () => void;
+}) {
   const { t } = useTranslation();
-  const tip = t('nav.update.tip', { latest, current: version });
+  const tip = restarting ? t('nav.update.restarting') : t('nav.update.tip', { latest, current });
+  const Icon = restarting ? Loader2 : ArrowUpCircle;
   return (
     <button
       type="button"
       title={tip}
       aria-label={tip}
+      aria-busy={restarting}
+      disabled={restarting}
       onClick={onRestart}
       className="mt-auto flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] text-accent hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
-      <ArrowUpCircle className="h-[18px] w-[18px]" strokeWidth={1.7} />
-      {t('nav.update.label')}
+      <Icon className={cn('h-[18px] w-[18px]', restarting && 'animate-spin')} strokeWidth={1.7} />
+      {restarting ? t('nav.update.restartingLabel') : t('nav.update.label')}
       <span className="font-mono text-[9px] opacity-80">v{latest}</span>
     </button>
   );

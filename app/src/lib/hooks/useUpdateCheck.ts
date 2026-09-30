@@ -1,7 +1,9 @@
+import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useState } from 'react';
 import { usePlatform } from '@/platform/PlatformContext';
+import { version as builtVersion } from '../../../package.json';
 
 /**
  * Herga downloads a newer release in the background (tauri
@@ -12,10 +14,22 @@ export type UpdateStatus =
   | { state: 'downloading'; version: string }
   | { state: 'ready'; version: string };
 
-/** Where the background update is, and a restart into it once it's ready. */
-export function useUpdateCheck(): { status: UpdateStatus; restart: () => Promise<void> } {
+/**
+ * The running version, where the background update is, and a restart into
+ * it once it's ready. `restarting` is set from the click until Herga quits
+ * (stopping the server takes a moment).
+ */
+export function useUpdateCheck(): {
+  version: string;
+  status: UpdateStatus;
+  restarting: boolean;
+  restart: () => void;
+} {
   const platform = usePlatform();
   const [status, setStatus] = useState<UpdateStatus>({ state: 'current' });
+  // The app's own version, which an update changes; the frontend's is a fallback.
+  const [version, setVersion] = useState(builtVersion);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     if (!platform.metadata.isTauri) return;
@@ -27,6 +41,11 @@ export function useUpdateCheck(): { status: UpdateStatus; restart: () => Promise
         else release = unlisten;
       })
       .catch((err) => console.warn('[update] listen failed:', err));
+    getVersion()
+      .then((current) => {
+        if (!disposed) setVersion(current);
+      })
+      .catch(() => {});
     invoke<UpdateStatus>('update_status')
       .then((current) => {
         if (!disposed) setStatus(current);
@@ -38,6 +57,12 @@ export function useUpdateCheck(): { status: UpdateStatus; restart: () => Promise
     };
   }, [platform.metadata.isTauri]);
 
-  const restart = useCallback(() => invoke<void>('restart_to_update'), []);
-  return { status, restart };
+  const restart = useCallback(() => {
+    setRestarting(true);
+    invoke<void>('restart_to_update').catch((err) => {
+      console.warn('[update] restart failed:', err);
+      setRestarting(false);
+    });
+  }, []);
+  return { version, status, restarting, restart };
 }

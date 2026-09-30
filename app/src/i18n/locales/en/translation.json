@@ -17,6 +17,8 @@
     "settings": "Settings",
     "update": {
       "label": "Restart",
+      "restartingLabel": "Restarting",
+      "restarting": "Restarting into the new version…",
       "tip": "Herga {{latest}} is downloaded (you have {{current}}). Click to restart into it; it also installs the next time you quit."
     },
     "alerts": {
@@ -586,7 +588,8 @@
         "current": "Herga {{version}}",
         "downloading": "Herga {{current}}. Downloading {{latest}}…",
         "ready": "Herga {{current}}. {{latest}} is downloaded and installs when Herga restarts.",
-        "restart": "Restart to update"
+        "restart": "Restart to update",
+        "restarting": "Restarting…"
       },
       "server": {
         "title": "Local server",
