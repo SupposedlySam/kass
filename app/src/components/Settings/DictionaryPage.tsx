@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Toggle } from '@/components/ui/toggle';
 import type { DictionaryEntry, DictionaryEntryUpdate } from '@/lib/api/types';
+import { useBetaFeature } from '@/lib/betaFeatures';
 import {
   useAddDictionaryEntry,
   useDeleteDictionaryEntry,
@@ -30,6 +32,7 @@ import {
   EVERYWHERE_KEY,
   entriesIn,
   entryAge,
+  entryNote,
   entryPlaceKeys,
   type InheritedGroup,
   inheritedForApp,
@@ -341,10 +344,29 @@ function SaidText({ spoken }: { spoken: string | null }) {
   return <span className="truncate text-sm">{spoken}</span>;
 }
 
-function WrittenText({ written }: { written: string }) {
+function WrittenText({
+  entry,
+}: {
+  entry: Pick<DictionaryEntry, 'written'> &
+    Partial<Pick<DictionaryEntry, 'match_sound' | 'source'>>;
+}) {
+  const { t } = useTranslation();
+  const note = useBetaFeature('voice_edits') ? entryNote(entry) : null;
   return (
-    <span className={cn('truncate text-sm', looksLikeCode(written) && 'font-mono text-[13px]')}>
-      {written}
+    <span className="flex min-w-0 items-baseline gap-2">
+      <span
+        className={cn('truncate text-sm', looksLikeCode(entry.written) && 'font-mono text-[13px]')}
+      >
+        {entry.written}
+      </span>
+      {note && (
+        <span
+          className="shrink-0 whitespace-nowrap text-xs italic text-muted-foreground"
+          title={t(`${P}.list.note.${note}Hint`)}
+        >
+          {t(`${P}.list.note.${note}`)}
+        </span>
+      )}
     </span>
   );
 }
@@ -384,7 +406,7 @@ function EntryRow({
       <div className={cn(ROW_GRID, 'px-3 py-2')}>
         <SaidText spoken={entry.spoken} />
         <Arrow />
-        <WrittenText written={entry.written} />
+        <WrittenText entry={entry} />
         <AgeText createdAt={entry.created_at} />
         <div className="flex">
           <Button
@@ -446,6 +468,9 @@ function EditEntryRow({
   const [spoken, setSpoken] = useState(entry.spoken ?? '');
   const initialPlaces = entryPlaceKeys(entry);
   const [places, setPlaces] = useState(initialPlaces);
+  const initialMatchSound = entry.match_sound !== false;
+  const [matchSound, setMatchSound] = useState(initialMatchSound);
+  const exactSpelling = useBetaFeature('voice_edits');
   const canSave = !!written.trim() && places.length > 0 && !update.isPending;
 
   const save = () => {
@@ -456,6 +481,7 @@ function EditEntryRow({
     if (nextWritten !== entry.written) patch.written = nextWritten;
     if (nextSpoken !== entry.spoken) patch.spoken = nextSpoken;
     if (!samePlaces(places, initialPlaces)) patch.places = placesFromKeys(places, options);
+    if (matchSound !== initialMatchSound) patch.match_sound = matchSound;
     if (!Object.keys(patch).length) return onDone();
     update.mutate({ id: entry.id, patch }, { onSuccess: onDone });
   };
@@ -511,6 +537,24 @@ function EditEntryRow({
             {t(`${P}.list.save`)}
           </Button>
         </div>
+        {exactSpelling && (
+          <div className="mt-2 flex items-center gap-2" title={t(`${P}.list.matchSoundHint`)}>
+            <Toggle
+              id={`dictionary-match-sound-${entry.id}`}
+              checked={matchSound}
+              onCheckedChange={(checked) => {
+                if (update.error) update.reset();
+                setMatchSound(checked);
+              }}
+            />
+            <label
+              htmlFor={`dictionary-match-sound-${entry.id}`}
+              className="cursor-pointer text-xs text-muted-foreground"
+            >
+              {t(`${P}.list.matchSound`)}
+            </label>
+          </div>
+        )}
         {update.error && <p className="mt-1.5 text-xs text-destructive">{update.error.message}</p>}
       </div>
     </li>
@@ -604,7 +648,7 @@ function InheritedGroupRow({ group, source }: { group: InheritedGroup; source: s
             <li key={entry.id} className={cn(ROW_GRID, 'px-3 py-1.5 pl-8')}>
               <SaidText spoken={entry.spoken} />
               <Arrow />
-              <WrittenText written={entry.written} />
+              <WrittenText entry={entry} />
             </li>
           ))}
         </ul>

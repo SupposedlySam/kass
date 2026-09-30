@@ -236,4 +236,9 @@ class DictionaryEntry(Base):
     # Rows added together as one entry that applies in several places share
     # this; null means the row is an entry of its own (its id).
     group_id = Column(String, nullable=True, index=True)
+    # Off: the word is only prompted and recased where spelled exactly, never
+    # swapped in for words that sound like it ("Meghan" leaves "Megan" alone).
+    match_sound = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Who added it: null for the user, "spoken_fix" for a word spelled aloud to fix it.
+    source = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

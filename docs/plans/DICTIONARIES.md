@@ -15,6 +15,10 @@ An entry is one row: what to **write**, and optionally what is **said**.
 
 Capitals are fixed only for terms that aren't common words, using `phrase_seams._common_word`. That way the term `Mark` never capitalizes the verb "mark", and `mrgnhnt96` always gets fixed. This is one general rule, with no per-term exceptions.
 
+**Sound matching** is a property of each entry (`match_sound`, on by default). Off, the word is still prompted to Whisper, recased where it is spelled exactly (any case, same letters) and counted as a known name, but never swapped in for a word that only sounds like it: a `Meghan` term with it off leaves `Megan`, `Meagan` and `Meghann` alone. The word also stays protected from other terms' sound matching, as every term is. Where two active entries write the same word, the most specific decides.
+
+**Spoken fixes.** When the user fixes a word by spelling it aloud ("fix that, Meghan, M-E-G-H-A-N"), Voice Edits calls `dictionary.add_spelled_word(letters, bundle_id, heard)`, which adds it with no confirmation: everywhere (a name is the same in every app), `match_sound` off, `source = "spoken_fix"`. `spelled_word` writes letters in one case as a name ("MEGHAN" → "Meghan"), keeps the heard word's own capitals when it is the same letters ("NASA", "iPhone"), and keeps mixed case or digits as spelled. Nothing is added when the app's dictionary already writes the word, and an existing entry is never changed; a word said the same way that writes something else stays too. Editing a spoken-fix entry makes it the user's (`source` cleared).
+
 ## Scopes
 
 An entry applies in one or more places, each a scope:
@@ -27,7 +31,7 @@ Everywhere excludes the others: choosing it clears the rest. A dictation merges 
 
 ## Storage
 
-The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `group_id`, `created_at`. There is one row per place; the rows of an entry that applies in several places share `group_id` (null: the row is its own entry, as rows from before groups are). `migrations.py` adds `group_id` to an existing table. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`), so a place never holds the same word said twice; the API names the place in its 409. Matching, prompting and dictation read rows and never see groups.
+The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `group_id`, `match_sound` (default true), `source` (null for the user, `spoken_fix`), `created_at`. There is one row per place; the rows of an entry that applies in several places share `group_id` (null: the row is its own entry, as rows from before groups are). `migrations.py` adds `group_id`, `match_sound` and `source` to an existing table. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`), so a place never holds the same word said twice; the API names the place in its 409. Matching, prompting and dictation read rows and never see groups.
 
 `services/dictionary.py` keeps an in-memory snapshot, like `styles.snapshot()`. Writes rebuild it. `for_app(bundle_id)` returns a resolved `Dictionary`: prompt terms in priority order, compiled replacements, and the recase set. That result is cached per (bundle id, style) until the next write. Dictation itself never reads from disk or the database.
 
@@ -55,8 +59,8 @@ Every path that runs Whisper passes it: phrase recognition (`capture_stream.reco
 ## API
 
 - `GET /dictionary`: every entry, newest first, each with its `places` (`{scope, scope_id, app_name}`).
-- `POST /dictionary`: `{written, spoken?, places}`.
-- `PATCH /dictionary/{id}`: `{written?, spoken?, places?}`; changing `places` adds and removes rows, keeping the entry's date. `DELETE /dictionary/{id}` removes it everywhere.
+- `POST /dictionary`: `{written, spoken?, places, match_sound?}`. Entries come back with `match_sound` and `source` (`user` / `spoken_fix`).
+- `PATCH /dictionary/{id}`: `{written?, spoken?, places?, match_sound?}`; changing `places` adds and removes rows, keeping the entry's date. `DELETE /dictionary/{id}` removes it everywhere.
 - `GET /dictionary/resolved?bundle_id=`: the rows one app uses, most specific first, each with its entry's id, and which terms fit the Whisper prompt.
 
 ## UI
@@ -66,7 +70,8 @@ Settings gets a **Dictionary** page, next to Writing style (the canvas "Dictiona
 - A scope list on the left: Everywhere, then writing styles, then apps, each with how many entries apply there.
 - The selected scope on the right. At the top, an add form reads "When I say" → "Write", then Add; an empty "When I say" only teaches the spelling. New entries go in the selected scope.
 - Its entries, newest first: said → written, a date, edit and delete. A spelling-only entry shows "spelling only" where the said words go.
-- Editing opens a strip under the row with an "Applies in" dropdown: a checkbox list of Everywhere, the styles and the apps. Checking Everywhere clears the rest.
+- Editing opens a strip under the row with an "Applies in" dropdown: a checkbox list of Everywhere, the styles and the apps. Checking Everywhere clears the rest. Below it, a switch: "Also fix words that sound like it" (`match_sound`).
+- Beside the written word, a row notes "spelled aloud" for a spoken-fix entry, or "exact spelling" for one with sound matching off.
 - For an app or style, "Also applies in <scope>" rows show what it inherits from its style and from everywhere: the first word or two and a count, opening to the list. There's also a note when some terms don't fit in the Whisper prompt.
 
 This covers only the Settings page. The capture pill doesn't change. An "Add to dictionary" action from a correction in the Captures tab is a possible follow-up, not part of this work.

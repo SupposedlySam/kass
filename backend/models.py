@@ -696,6 +696,10 @@ class DictionaryEntryModel(BaseModel):
     spoken: str | None = None
     places: list[DictionaryPlace]
     created_at: datetime | None = None
+    # Off: only fixed where spelled exactly, never swapped in for a word that sounds like it.
+    match_sound: bool = True
+    # "spoken_fix": added by itself when the user spelled the word aloud to fix it.
+    source: Literal["user", "spoken_fix"] = "user"
 
 
 class DictionaryResponse(BaseModel):
@@ -706,12 +710,14 @@ class DictionaryEntryCreate(BaseModel):
     written: str = Field(max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] = Field(min_length=1, max_length=100)
+    match_sound: bool = True
 
 
 class DictionaryEntryUpdate(BaseModel):
     written: str | None = Field(default=None, max_length=1000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] | None = Field(default=None, min_length=1, max_length=100)
+    match_sound: bool | None = None
 
 
 class ResolvedDictionaryEntry(BaseModel):
@@ -724,6 +730,7 @@ class ResolvedDictionaryEntry(BaseModel):
     written: str
     spoken: str | None = None
     created_at: datetime | None = None
+    match_sound: bool = True
     # A more specific place has an entry for the same word said.
     overridden: bool = False
 

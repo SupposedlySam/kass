@@ -152,6 +152,16 @@ export function newEntry(
   };
 }
 
+/** What a row notes beside its word: added by a spoken fix, or fixed only where spelled exactly. */
+export type EntryNote = 'spokenFix' | 'exact' | null;
+
+export function entryNote(
+  entry: Partial<Pick<DictionaryEntry, 'match_sound' | 'source'>>,
+): EntryNote {
+  if (entry.source === 'spoken_fix') return 'spokenFix';
+  return entry.match_sound === false ? 'exact' : null;
+}
+
 /** The place bodies for chosen scope keys, naming apps from the scope list. */
 export function placesFromKeys(keys: string[], options: ScopeOptions): DictionaryPlaceInput[] {
   const names = new Map(options.apps.map((o) => [o.key, o.name]));

@@ -1350,7 +1350,15 @@
       "everywhereClears": "Checking Everywhere clears the rest.",
       "justNow": "just now",
       "minutesAgo": "{{count}}m ago",
-      "hoursAgo": "{{count}}h ago"
+      "hoursAgo": "{{count}}h ago",
+      "matchSound": "Also fix words that sound like it",
+      "matchSoundHint": "Off: only this exact spelling is fixed, so a similar name (Megan for Meghan) is left alone.",
+      "note": {
+        "spokenFix": "spelled aloud",
+        "spokenFixHint": "Added when you spelled it aloud to fix it. Only this exact spelling is fixed; words that sound like it are left alone.",
+        "exact": "exact spelling",
+        "exactHint": "Only this exact spelling is fixed; words that sound like it are left alone."
+      }
     },
     "inherited": {
       "title": "Also applies in {{scope}}",
