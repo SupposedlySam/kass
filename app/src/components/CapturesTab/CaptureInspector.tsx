@@ -30,7 +30,8 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 
 /**
  * This capture's corrections, newest first. The one the card is showing is
- * tagged, with Undo when it can be taken back.
+ * tagged, with Undo when it can be taken back; in the voice_edits beta every
+ * other one, a voice edit's too, has Remove.
  */
 function Corrections({
   reports,
@@ -64,6 +65,7 @@ function Corrections({
         <ul className="m-0 flex list-none flex-col p-0">
           {items.map((report) => {
             const showing = teach.learned?.id === report.id;
+            const removable = showing ? teach.canUndo : teach.canRemove;
             return (
               <li
                 key={report.id}
@@ -79,21 +81,27 @@ function Corrections({
                     </span>
                   )}
                   <span className="flex-1" />
-                  {showing && teach.canUndo && (
+                  {removable && (
                     <Button
                       variant="link"
                       size="sm"
                       className="h-5 px-1 text-xs text-muted-foreground"
                       disabled={teach.undoing}
-                      onClick={teach.undo}
+                      aria-busy={teach.removingId === report.id}
+                      onClick={showing ? teach.undo : () => teach.remove(report)}
                     >
-                      {t('captures.teach.undo')}
+                      {t(showing ? 'captures.teach.undo' : 'captures.teach.remove')}
                     </Button>
                   )}
                 </div>
                 <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-normal">
                   {report.expected_text || '∅'}
                 </p>
+                {report.source === 'voice_fix' && (
+                  <p className="m-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {t('captures.inspector.byVoiceEdit')}
+                  </p>
+                )}
                 {report.notes && (
                   <p className="m-0 whitespace-pre-wrap break-words text-xs leading-normal text-muted-foreground">
                     {report.notes}

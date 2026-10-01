@@ -252,6 +252,7 @@
       "examplesLearned_one": "{{count}} example learned",
       "examplesLearned_other": "{{count}} examples learned",
       "undo": "Undo",
+      "remove": "Remove",
       "undoFailed": "Could not undo the correction",
       "alter": "Alter",
       "correctedByYou": "Corrected by you"
@@ -422,7 +423,8 @@
       "corrections": "Corrections",
       "correctionsCount": "Corrections · {{count}}",
       "noCorrections": "None yet. Alter the text to teach Kass.",
-      "showing": "Showing"
+      "showing": "Showing",
+      "byVoiceEdit": "From a voice edit"
     },
     "command": {
       "result": "Rewrite",

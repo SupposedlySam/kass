@@ -22,7 +22,8 @@ const MAX_HUNKS_SHOWN = 3;
 
 /**
  * State for teaching one transcript of a capture: the draft of what the user
- * meant, the optional note, saving it as a correction, and undoing it.
+ * meant, the optional note, saving it as a correction, and undoing it or
+ * removing any of the capture's corrections.
  */
 export function useTeachCorrection(
   capture: CaptureResponse,
@@ -64,14 +65,15 @@ export function useTeachCorrection(
   // Undo withdraws the report, and with it everything it taught: the
   // writing-style example, habits, names and learned rules. Outside the
   // voice_edits beta, it only takes a refined correction back out of the
-  // writing-style examples; the report stays in the history.
+  // writing-style examples; the report stays in the history. Any report of
+  // the capture can be withdrawn this way, a voice edit's included.
   const undo = useMutation({
     mutationFn: (report: CaptureFeedbackResponse) =>
       withdraws
         ? apiClient.withdrawCaptureReport(capture.id, report.id)
         : apiClient.removePersonalExample(`correction:${report.id}`),
-    onSuccess: () => {
-      setLearned(null);
+    onSuccess: (_, report) => {
+      setLearned((current) => (current?.id === report.id ? null : current));
       invalidate();
     },
     onError: (error: Error) =>
@@ -97,7 +99,11 @@ export function useTeachCorrection(
     learned,
     saving: save.isPending,
     undoing: undo.isPending,
+    /** The report being undone or removed, while it is. */
+    removingId: undo.isPending ? (undo.variables?.id ?? null) : null,
     canUndo: withdraws || target === 'refined',
+    /** Whether any report, not only the one just saved, can be withdrawn. */
+    canRemove: withdraws,
     /** Starts editing from the current text, so the user fixes it in place. */
     begin: () => setDraft((d) => d ?? original),
     setDraft,
@@ -120,6 +126,8 @@ export function useTeachCorrection(
       submit(text);
     },
     undo: () => learned && undo.mutate(learned),
+    /** Withdraws one of the capture's reports and everything it taught. */
+    remove: (report: CaptureFeedbackResponse) => undo.mutate(report),
   };
 }
 
