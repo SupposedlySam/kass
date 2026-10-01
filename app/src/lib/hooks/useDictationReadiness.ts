@@ -73,12 +73,12 @@ export function useDictationReadiness(): DictationReadiness {
     // gated to the same condition.
     refetchInterval: (query) => {
       const d = query.state.data;
-      const allGreen = d && d.stt.ready && (!autoRefine || d.llm.ready);
+      const allGreen = d?.stt.ready && (!autoRefine || d.llm.ready);
       return allGreen ? false : READINESS_POLL_INTERVAL_MS;
     },
     refetchOnWindowFocus: (query) => {
       const d = query.state.data;
-      return !(d && d.stt.ready && (!autoRefine || d.llm.ready));
+      return !(d?.stt.ready && (!autoRefine || d.llm.ready));
     },
   });
 

@@ -177,6 +177,7 @@ section {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* biome-ignore-start lint/complexity/noImportantStyles: reduced motion has to win over every animation and transition on the page. */
   *,
   *::before,
   *::after {
@@ -184,6 +185,7 @@ section {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* biome-ignore-end lint/complexity/noImportantStyles: reduced motion */
   html {
     scroll-behavior: auto;
   }

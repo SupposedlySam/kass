@@ -34,6 +34,7 @@ export function useChordSync({ paused = false }: { paused?: boolean } = {}) {
   const modelsReady = !missing.includes('stt') && !missing.includes('llm');
   const gate = modelsReady ? null : t('dictation.stillDownloading');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the chords are compared as joined strings below, so a refetch with equal arrays doesn't re-arm the hotkey.
   useEffect(() => {
     if (!platform.metadata.isTauri || paused) return;
     if (enabled === undefined || !pushKeys || !toggleKeys) return;

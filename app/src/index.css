@@ -171,6 +171,7 @@
 }
 
 /* react-loaders */
+/* biome-ignore-start lint/complexity/noImportantStyles: react-loaders sets these with inline styles, which only !important overrides. */
 .line-scale-pulse-out-rapid > div,
 .line-scale > div {
   background-color: hsl(var(--accent)) !important;
@@ -184,3 +185,4 @@
   animation-play-state: paused !important;
   background-color: hsl(var(--muted-foreground)) !important;
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: react-loaders */
