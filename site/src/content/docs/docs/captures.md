@@ -32,9 +32,9 @@ Every six hours, or when you click **Check now**, a local job turns your correct
 
 You can export all your corrections as JSON.
 
-### Personal speech model
+### Model updates
 
-After enough corrected recordings (12 for training plus a handful set aside for testing), Kass can fine-tune the speech model to your voice while your Mac is idle. The new model is only used if it tests better, and **Undo model update** puts the old one back.
+Once you've made enough corrections (12 to learn from, plus at least 5 recorded ones set aside for testing), Kass uses your Mac's idle time to train its cleanup model on how you fix its results. It can also switch to the Whisper size that transcribes you best; Whisper itself isn't retrained. Each change is tested against your corrected recordings and kept only if it does better, and **Undo model update** puts the previous model back.
 
 ## Insights
 
