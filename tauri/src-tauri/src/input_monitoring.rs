@@ -30,10 +30,13 @@ mod ffi {
     /// events created by other processes."
     pub const REQUEST_TYPE_LISTEN_EVENT: c_uint = 1;
 
-    /// `kIOHIDAccessTypeGranted` from `IOHIDLib.h`. The other values are
-    /// `Denied = 1` and `Unknown = 2`; we only ever care about the granted
-    /// case so they don't get their own constants.
+    /// `kIOHIDAccessTypeGranted` from `IOHIDLib.h`. `Denied = 1` is the
+    /// other value, and needs no constant.
     pub const ACCESS_TYPE_GRANTED: c_uint = 0;
+
+    /// `kIOHIDAccessTypeUnknown`: macOS hasn't asked yet, so Kass isn't in
+    /// the Input Monitoring pane.
+    pub const ACCESS_TYPE_UNKNOWN: c_uint = 2;
 
     #[link(name = "IOKit", kind = "framework")]
     extern "C" {
@@ -56,6 +59,12 @@ mod ffi {
 
 pub fn is_trusted() -> bool {
     unsafe { ffi::IOHIDCheckAccess(ffi::REQUEST_TYPE_LISTEN_EVENT) == ffi::ACCESS_TYPE_GRANTED }
+}
+
+/// Whether Kass is in the Input Monitoring pane, granted or not: false
+/// until macOS has asked.
+pub fn is_listed() -> bool {
+    unsafe { ffi::IOHIDCheckAccess(ffi::REQUEST_TYPE_LISTEN_EVENT) != ffi::ACCESS_TYPE_UNKNOWN }
 }
 
 /// Fire the Input Monitoring prompt if not already granted. Returns the

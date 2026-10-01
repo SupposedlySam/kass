@@ -63,3 +63,28 @@ pub fn request() -> bool {
         trusted
     }
 }
+
+/// Marker in the app config directory: Kass has asked for Accessibility.
+const ASKED_MARKER: &str = "accessibility-asked";
+
+/// Whether Kass has asked for Accessibility before, which lists it in the
+/// Accessibility pane. macOS has no call that says whether it is listed.
+pub fn was_asked(app: &tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    app.path()
+        .app_config_dir()
+        .is_ok_and(|dir| dir.join(ASKED_MARKER).exists())
+}
+
+/// Record that Kass asked, so the next time opens the pane instead.
+pub fn remember_asked(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let Ok(dir) = app.path().app_config_dir() else {
+        return;
+    };
+    if let Err(e) =
+        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(ASKED_MARKER), b""))
+    {
+        eprintln!("[accessibility] could not record asking: {e}");
+    }
+}

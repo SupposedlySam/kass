@@ -1119,11 +1119,17 @@ fn update_chord_bindings(
 /// the user can grant the permission. The URL scheme is stable across
 /// macOS 10.14–15.
 ///
-/// Asks for the permission first: a pane that doesn't list Kass leaves
-/// the user nothing to switch on, and only the request adds the entry.
+/// The first time, only asks: the request is what lists Kass in the pane,
+/// and macOS's prompt has its own button to open it. Opening the pane too
+/// covered the prompt and showed a list without Kass in it.
 #[command]
 fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = accessibility::request();
+    if !accessibility::was_asked(&app) {
+        accessibility::remember_asked(&app);
+        if !accessibility::request() {
+            return Ok(());
+        }
+    }
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
     app.shell()
         .open(url, None)
@@ -1135,11 +1141,14 @@ fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
 /// Used by the Captures settings UI when the toggle is on but the grant
 /// is missing, so the user can flip the system toggle without hunting.
 ///
-/// Asks for the permission first: a pane that doesn't list Kass leaves
-/// the user nothing to switch on, and only the request adds the entry.
+/// When Kass isn't listed yet, only asks: the request is what lists it, and
+/// macOS's prompt has its own button to open the pane.
 #[command]
 fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = input_monitoring::request();
+    if !input_monitoring::is_listed() {
+        let _ = input_monitoring::request();
+        return Ok(());
+    }
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
     app.shell()
         .open(url, None)
