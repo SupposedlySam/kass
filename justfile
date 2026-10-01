@@ -93,9 +93,10 @@ release version:
 # Run all checks (JS + Python lint + format)
 check: check-js check-python
 
-# JS/TS: lint + format + typecheck (Biome)
+# JS/TS: lint + format (Biome), then typecheck app and tauri (tsc)
 check-js:
     bun run check
+    bun run typecheck
 
 # Python: lint + format check (ruff)
 check-python: _ensure-venv

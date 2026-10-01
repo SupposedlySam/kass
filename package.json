@@ -14,7 +14,7 @@
     "build:server": "./scripts/build-server.sh",
     "update:icons": "./scripts/update-icons.sh",
     "lint": "biome lint .",
-    "typecheck": "bunx tsc -p app/tsconfig.json --noEmit",
+    "typecheck": "bunx tsc -p app/tsconfig.json --noEmit && bunx tsc -p tauri/tsconfig.json --noEmit",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome format .",
