@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
+from .laughter import is_laughter, join_laughter
 from .spelling import join_spelling
 from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
@@ -74,10 +75,12 @@ def strip_stt_artifacts(text: str) -> str:
     Loops (see ``collapse_repetitive_artifacts``), and U+FFFD, which Whisper
     emits when it stops partway through a multi-byte character, typically
     at the start of a loop ("box the\ufffd, the,R,A,A,A,..."). Also spelled-out
-    text Whisper splits apart (see ``join_spelling``).
+    text and laughs Whisper splits apart (see ``join_spelling``,
+    ``join_laughter``).
     Applied to every transcript, so saved captures and the examples made from
     them are clean.
     """
+    text = join_laughter(text)
     cleaned = collapse_repetitive_artifacts(text.replace("\ufffd", ""))
     if cleaned != text:
         cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
@@ -122,7 +125,8 @@ def _collapse_character_runs(text: str, min_run: int) -> str:
         r"(.{2," + str(_MAX_REPETITION_UNIT_CHARS) + r"}?)\1{" + str(min_run - 1) + r",}",
         flags=re.DOTALL,
     )
-    result = pattern.sub("", text)
+    # A long laugh ("hahahahahaha") is said, not looped.
+    result = pattern.sub(lambda run: run.group() if is_laughter(run.group(1)) else "", text)
     if result == text:
         return text
     # Stripping a run leaves double whitespace where the loop used to
@@ -569,7 +573,8 @@ async def refine_transcript(
         from .writing_style import apply_learned
 
         text = apply_learned(text, flags.style)
-    return text, resolved_size
+    # The model may write a laugh back the way Whisper heard it.
+    return join_laughter(text), resolved_size
 
 
 async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
@@ -656,7 +661,8 @@ def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, st
 
     # Pre-process before the LLM sees the text — the model shouldn't have
     # to reason about obvious STT garbage (see ``collapse_repetitive_artifacts``).
-    cleaned_input = collapse_repetitive_artifacts(transcript)
+    # A laugh is joined first, so a long one isn't taken for a loop.
+    cleaned_input = collapse_repetitive_artifacts(join_laughter(transcript))
     if flags.self_correction:
         # Repeats, restarts and changed answers are cleaned, not resolved: the
         # model still gets the text, so this never short-circuits refinement.
