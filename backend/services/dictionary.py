@@ -585,6 +585,7 @@ def _row(
     created_at=None,
     match_sound: bool = True,
     source: str | None = None,
+    added_by: str | None = None,
 ):
     from ..database.models import DictionaryEntry
 
@@ -598,6 +599,7 @@ def _row(
         group_id=group_id,
         match_sound=match_sound,
         source=source,
+        added_by=added_by,
         created_at=created_at or datetime.utcnow(),
     )
 
@@ -614,7 +616,15 @@ def list_groups(db) -> list[Group]:
     return groups
 
 
-def add_group(db, written: str, spoken: str | None, places, match_sound: bool = True, source: str = "user") -> Group:
+def add_group(
+    db,
+    written: str,
+    spoken: str | None,
+    places,
+    match_sound: bool = True,
+    source: str = "user",
+    added_by: str | None = None,
+) -> Group:
     import uuid
 
     written, spoken, places = _clean(written, "What to write"), _clean_spoken(spoken), _places(places)
@@ -628,7 +638,17 @@ def add_group(db, written: str, spoken: str | None, places, match_sound: bool = 
     group_id, now = str(uuid.uuid4()), datetime.utcnow()
     for place in places:
         db.add(
-            _row(group_id, place, written, spoken, key, now, bool(match_sound), None if source == "user" else source)
+            _row(
+                group_id,
+                place,
+                written,
+                spoken,
+                key,
+                now,
+                bool(match_sound),
+                None if source == "user" else source,
+                added_by,
+            )
         )
     db.commit()
     invalidate()
@@ -656,7 +676,7 @@ def update_group(db, group_id: str, patch: dict) -> Group | None:
             db.delete(row)
             continue
         row.written, row.spoken, row.key, row.group_id = written, spoken, key, group_id
-        row.match_sound, row.source = match_sound, None
+        row.match_sound, row.source, row.added_by = match_sound, None, None
         row.app_name = place.app_name or row.app_name
     for place in wanted.values():
         db.add(_row(group_id, place, written, spoken, key, current.created_at, match_sound))
@@ -674,6 +694,24 @@ def delete_group(db, group_id: str) -> bool:
     db.commit()
     invalidate()
     return True
+
+
+def delete_added_by(db, capture_id: str) -> None:
+    """Remove the words a voice edit capture spelled into the dictionary,
+    except those the user has edited since (they are theirs then)."""
+    from ..database.models import DictionaryEntry
+
+    rows = (
+        db.query(DictionaryEntry)
+        .filter(DictionaryEntry.added_by == capture_id, DictionaryEntry.source == "spoken_fix")
+        .all()
+    )
+    if not rows:
+        return
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    invalidate()
 
 
 def list_entries(db) -> list[Entry]:
@@ -726,7 +764,13 @@ def spelled_word(letters: str, heard: str | None = None) -> str:
     return word
 
 
-def add_spelled_word(letters: str, bundle_id: str | None = None, heard: str | None = None, db=None) -> Group | None:
+def add_spelled_word(
+    letters: str,
+    bundle_id: str | None = None,
+    heard: str | None = None,
+    db=None,
+    added_by: str | None = None,
+) -> Group | None:
     """Keep a word the user spelled aloud to fix it, with no confirmation.
 
     ``letters`` are the spelled letters as ``join_spelling`` joined them
@@ -736,7 +780,8 @@ def add_spelled_word(letters: str, bundle_id: str | None = None, heard: str | No
     as a known name, but never replaces a word that sounds like it (a real
     "Megan"). ``bundle_id`` is the app it was spelled in: nothing is added
     when that app's dictionary already writes the word, and an entry the
-    user made is never changed. Returns the entry that now has the word, or
+    user made is never changed. ``added_by`` is the voice edit capture that
+    spelled it, so deleting that capture removes the word. Returns the entry that now has the word, or
     None when there's no word, the dictionary is full, or there's no database.
     """
     from ..database import session as database_session
@@ -745,7 +790,7 @@ def add_spelled_word(letters: str, bundle_id: str | None = None, heard: str | No
         if database_session.SessionLocal is None:
             return None
         with database_session.SessionLocal() as own:
-            return add_spelled_word(letters, bundle_id, heard, own)
+            return add_spelled_word(letters, bundle_id, heard, own, added_by)
     from .styles import snapshot as styles_snapshot
 
     try:
@@ -758,7 +803,9 @@ def add_spelled_word(letters: str, bundle_id: str | None = None, heard: str | No
         if not overridden and _normal(entry.written) == wanted:
             return _group(_rows(db, entry.group_id or entry.id))
     try:
-        return add_group(db, written, None, [Place("global")], match_sound=False, source="spoken_fix")
+        return add_group(
+            db, written, None, [Place("global")], match_sound=False, source="spoken_fix", added_by=added_by
+        )
     except DuplicateEntryError:
         # Everywhere already has an entry said this way that writes something
         # else; it's the user's, so it stays.

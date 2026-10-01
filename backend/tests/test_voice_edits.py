@@ -471,3 +471,115 @@ def test_without_the_take_nothing_is_reported(learning_db):
     learn_from(Planned(before="a", after="b", instruction="", replaced="a"), None, None)
     with Session(learning_db) as db:
         assert db.query(CaptureFeedback).count() == 0
+
+
+# -- deleting a voice edit -----------------------------------------------------
+
+
+def _edit_capture(engine, capture_id="edit"):
+    from backend.database.models import Capture
+
+    with Session(engine) as db:
+        db.add(
+            Capture(
+                id=capture_id,
+                audio_path=f"captures/{capture_id}.wav",
+                source="command",
+                transcript_raw="Kass, it's Morgan, not Megan.",
+                command_transform="Voice edit",
+            )
+        )
+        db.commit()
+
+
+def test_deleting_a_voice_edit_withdraws_the_fix_it_filed(learning_db, monkeypatch):
+    from backend.database.models import CaptureFeedback
+    from backend.services import captures
+    from backend.services.voice_edits import learn_from
+
+    relearned = []
+    monkeypatch.setattr(correction_learning, "request_run", lambda retrain=False: relearned.append(retrain))
+    _edit_capture(learning_db)
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes",
+            after="Thanks Morgan for the notes",
+            instruction="“Megan” → “Morgan”",
+            replaced="Megan",
+        ),
+        "take",
+        "com.apple.TextEdit",
+        "edit",
+    )
+    with Session(learning_db) as db:
+        assert db.query(CaptureFeedback).one().filed_by == "edit"
+        relearned.clear()
+        assert captures.delete_capture("edit", db)
+        assert db.query(CaptureFeedback).count() == 0
+        # The take it fixed stays.
+        assert captures.get_capture("take", db) is not None
+    assert relearned == [True]
+
+
+def test_deleting_a_voice_edit_removes_the_word_it_spelled(learning_db):
+    from backend.services import captures, dictionary
+    from backend.services.voice_edits import learn_from
+
+    _edit_capture(learning_db)
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes",
+            after="Thanks Meghan for the notes",
+            instruction="“Megan” → “Meghan”",
+            replaced="Megan",
+            spelled="MEGHAN",
+        ),
+        "take",
+        "com.apple.TextEdit",
+        "edit",
+    )
+    assert dictionary.for_app("com.apple.TextEdit").terms == ("Meghan",)
+    with Session(learning_db) as db:
+        captures.delete_capture("edit", db)
+    assert dictionary.for_app("com.apple.TextEdit").terms == ()
+
+
+def test_a_spelled_word_the_user_edited_outlives_the_voice_edit(learning_db):
+    from backend.services import captures, dictionary
+    from backend.services.voice_edits import learn_from
+
+    _edit_capture(learning_db)
+    learn_from(
+        Planned(before="Hi Megan", after="Hi Meghan", instruction="", replaced="Megan", spelled="MEGHAN"),
+        None,
+        "com.apple.TextEdit",
+        "edit",
+    )
+    with Session(learning_db) as db:
+        (group,) = dictionary.list_groups(db)
+        dictionary.update_group(db, group.id, {"match_sound": True})
+        captures.delete_capture("edit", db)
+    assert dictionary.for_app("com.apple.TextEdit").terms == ("Meghan",)
+
+
+def test_deleting_another_capture_leaves_a_voice_edit_s_fix(learning_db):
+    from backend.database.models import CaptureFeedback
+    from backend.services import captures
+    from backend.services.voice_edits import learn_from
+
+    _edit_capture(learning_db)
+    _edit_capture(learning_db, "other")
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes",
+            after="Thanks Morgan for the notes",
+            instruction="",
+            replaced="Megan",
+        ),
+        "take",
+        None,
+        "edit",
+    )
+    with Session(learning_db) as db:
+        captures.delete_capture("other", db)
+        assert db.query(CaptureFeedback).count() == 1

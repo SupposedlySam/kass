@@ -285,6 +285,7 @@
     "deleteDialog": {
       "title": "Delete capture",
       "description": "This will permanently delete the capture, its audio, and its transcript. This cannot be undone.",
+      "voiceEditDescription": "This will permanently delete the voice edit and its audio, and take back what it taught Kass: the correction it saved on the take it fixed, and any word it spelled into the Dictionary. The text it changed stays as it is.",
       "deleting": "Deleting…"
     },
     "toast": {

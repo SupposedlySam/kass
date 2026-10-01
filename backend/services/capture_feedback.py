@@ -28,7 +28,9 @@ def to_response(row: CaptureFeedback) -> CaptureFeedbackResponse:
     )
 
 
-def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session):
+def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session, filed_by: str | None = None):
+    """Keep a correction and what it teaches. ``filed_by`` is the voice edit
+    capture that filed it, which takes it back when deleted."""
     if request.source != "manual" and not beta.enabled("voice_edits"):
         raise ValueError("Voice fixes are a beta feature.")
     capture = get_capture(capture_id, db)
@@ -53,6 +55,7 @@ def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session):
         notes=request.notes.strip(),
         snapshot=capture.model_dump_json(),
         source=request.source,
+        filed_by=filed_by,
     )
     db.add(row)
     db.commit()
@@ -79,6 +82,26 @@ def withdraw_feedback(capture_id: str, report_id: str, db: Session) -> bool:
     db.commit()
     _reports_changed(target, source, db, withdrawn=True)
     return True
+
+
+def forget_capture(capture_id: str, db: Session) -> None:
+    """Before a capture the user deletes goes: withdraw its own reports and
+    the ones it filed as a voice edit, with everything they taught, and the
+    words it spelled into the dictionary. Commits."""
+    from . import dictionary
+
+    rows = (
+        db.query(CaptureFeedback)
+        .filter((CaptureFeedback.capture_id == capture_id) | (CaptureFeedback.filed_by == capture_id))
+        .all()
+    )
+    changed = {(row.target, row.source) for row in rows}
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    for target, source in changed:
+        _reports_changed(target, source, db, withdrawn=True)
+    dictionary.delete_added_by(db, capture_id)
 
 
 def _reports_changed(target: str, source: str, db: Session, withdrawn: bool = False) -> None:

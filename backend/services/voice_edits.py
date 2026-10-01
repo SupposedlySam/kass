@@ -476,12 +476,15 @@ def plan(said: str, take: str | None) -> Planned | Declined | None:
     return Planned(take, after, described, replaced, spelled)
 
 
-def learn_from(planned: Planned, target_capture_id: str | None, bundle_id: str | None) -> None:
+def learn_from(
+    planned: Planned, target_capture_id: str | None, bundle_id: str | None, edit_capture_id: str | None = None
+) -> None:
     """What a successful edit teaches, run after the take, off the event loop.
 
     The edit says the take that wrote ``planned.replaced`` got it wrong: that
     capture gets a correction report, and a word spelled for it goes in the
-    Dictionary.
+    Dictionary. Both are tied to ``edit_capture_id``, the edit's own
+    capture, so deleting it takes them back.
     """
     from ..database import session as database_session
 
@@ -490,12 +493,12 @@ def learn_from(planned: Planned, target_capture_id: str | None, bundle_id: str |
     with database_session.SessionLocal() as db:
         if planned.spelled:
             try:
-                dictionary.add_spelled_word(planned.spelled, bundle_id, planned.replaced, db)
+                dictionary.add_spelled_word(planned.spelled, bundle_id, planned.replaced, db, edit_capture_id)
             except Exception:
                 logger.exception("Couldn't add the spelled word to the Dictionary")
         if target_capture_id:
             try:
-                report_fix(planned, target_capture_id, db)
+                report_fix(planned, target_capture_id, db, edit_capture_id)
             except Exception:
                 logger.exception("Couldn't file the voice fix as a correction")
 
@@ -535,7 +538,7 @@ def corrected(output: str, before: str, after: str) -> str | None:
 _CONTEXT = 16
 
 
-def report_fix(planned: Planned, capture_id: str, db) -> None:
+def report_fix(planned: Planned, capture_id: str, db, filed_by: str | None = None) -> None:
     """File the edit as a correction on the capture that wrote the text."""
     from ..models import CaptureFeedbackCreate
     from . import capture_feedback
@@ -560,4 +563,5 @@ def report_fix(planned: Planned, capture_id: str, db) -> None:
             source="voice_fix",
         ),
         db,
+        filed_by,
     )

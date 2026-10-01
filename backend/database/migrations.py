@@ -98,6 +98,8 @@ def _migrate_capture_feedback(engine, inspector, tables: set[str]) -> None:
             _add_column(engine, "capture_feedback", f"{column} VARCHAR", column)
     if "source" not in columns:
         _add_column(engine, "capture_feedback", "source VARCHAR NOT NULL DEFAULT 'manual'", "source")
+    if "filed_by" not in columns:
+        _add_column(engine, "capture_feedback", "filed_by VARCHAR", "filed_by")
 
 
 def _migrate_writing_styles(engine, inspector, tables: set[str]) -> None:
@@ -119,6 +121,8 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "dictionary_entries", "match_sound BOOLEAN NOT NULL DEFAULT 1", "match_sound")
     if "source" not in columns:
         _add_column(engine, "dictionary_entries", "source VARCHAR", "source")
+    if "added_by" not in columns:
+        _add_column(engine, "dictionary_entries", "added_by VARCHAR", "added_by")
 
 
 # Kass was Herga (com.mrgnhnt.herga), and before that Voicebox, with bundle

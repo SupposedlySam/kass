@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { CaptureResponse } from '@/lib/api/types';
 import { cn } from '@/lib/utils/cn';
 import { useUIStore } from '@/stores/uiStore';
+import { CaptureDeleteButton, isVoiceEdit } from './CaptureDeleteButton';
 import { formatDuration } from './captureFormat';
 import { CopyButton } from './TranscriptCard';
 
@@ -26,7 +27,8 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 /**
  * A Command Mode capture (docs/plans/COMMAND_MODE.md): the rewrite that
  * replaced the selection, what was asked, and the original selection with a
- * copy button, so a bad rewrite can be put back in any app.
+ * copy button, so a bad rewrite can be put back in any app. A voice edit's
+ * card has its own Delete, which also takes back what the edit taught.
  */
 export function CommandDetail({ capture }: { capture: CaptureResponse }) {
   const { t } = useTranslation();
@@ -58,11 +60,17 @@ export function CommandDetail({ capture }: { capture: CaptureResponse }) {
         </section>
 
         <section className="flex flex-col gap-1.5 rounded-xl border border-border px-5 py-4">
-          <Heading className="text-muted-foreground">
-            {capture.command_transform
-              ? `${t('captures.command.transform')} · ${capture.command_transform}`
-              : t('captures.command.instruction')}
-          </Heading>
+          <div className="flex items-center gap-2">
+            <Heading className="text-muted-foreground">
+              {capture.command_transform
+                ? `${t('captures.command.transform')} · ${capture.command_transform}`
+                : t('captures.command.instruction')}
+            </Heading>
+            <span className="flex-1" />
+            {isVoiceEdit(capture) && (
+              <CaptureDeleteButton capture={capture} shortcut={false} className="h-7 w-7" />
+            )}
+          </div>
           <p className="m-0 whitespace-pre-wrap break-words text-sm leading-normal">
             {instruction || '∅'}
           </p>

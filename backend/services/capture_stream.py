@@ -532,7 +532,7 @@ class StreamingCapture:
         """What the edit teaches (a report on the take it fixed, a spelled
         word). Blocking: run after the final event is sent."""
         if isinstance(self.edit, voice_edits.Planned):
-            voice_edits.learn_from(self.edit, self.last_take_capture_id, self.app_bundle_id)
+            voice_edits.learn_from(self.edit, self.last_take_capture_id, self.app_bundle_id, self.id)
 
     @property
     def is_command(self) -> bool:

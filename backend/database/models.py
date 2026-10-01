@@ -173,6 +173,8 @@ class CaptureFeedback(Base):
     # A redictation is weaker evidence: it teaches learning only, never the
     # writing style (examples, habits, names), and a rule needs an explicit report.
     source = Column(String, nullable=False, default="manual", server_default="manual")
+    # The voice edit capture that filed it; deleting that capture withdraws it.
+    filed_by = Column(String, nullable=True)
     # Copied from the capture when history retention deletes it, so the
     # correction keeps teaching the same style (docs/plans/HISTORY_RETENTION.md).
     # Null while the capture exists: read the capture's own columns then.
@@ -245,4 +247,7 @@ class DictionaryEntry(Base):
     match_sound = Column(Boolean, nullable=False, default=True, server_default="1")
     # Who added it: null for the user, "spoken_fix" for a word spelled aloud to fix it.
     source = Column(String, nullable=True)
+    # The voice edit capture that added a spelled word; deleting that capture
+    # removes the entry, unless the user has edited it since.
+    added_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
