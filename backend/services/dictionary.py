@@ -102,7 +102,22 @@ def _bounded(alternatives: Iterable[str]) -> re.Pattern | None:
     ordered = sorted(set(alternatives), key=len, reverse=True)
     if not ordered:
         return None
-    return re.compile(r"(?<![\w'\u2019-])(?:" + "|".join(ordered) + r")(?![\w'\u2019-])", re.IGNORECASE)
+    # Grouped by first letter, so a position is turned down after one letter
+    # instead of after trying every term: a flat list of hundreds of terms
+    # cost milliseconds a take. Terms that start differently never match at
+    # the same place, and each group keeps the longest-first order. Only an
+    # ASCII letter or digit, which re.escape leaves alone and case folds
+    # predictably, starts a group.
+    groups: dict[str, list[str]] = {}
+    rest: list[str] = []
+    for pattern in ordered:
+        first = pattern[0]
+        if first.isascii() and first.isalnum():
+            groups.setdefault(first.lower(), []).append(pattern[1:])
+        else:
+            rest.append(pattern)
+    grouped = [re.escape(first) + "(?:" + "|".join(tails) + ")" for first, tails in groups.items()]
+    return re.compile(r"(?<![\w'\u2019-])(?:" + "|".join([*grouped, *rest]) + r")(?![\w'\u2019-])", re.IGNORECASE)
 
 
 def _normal(text: str) -> str:

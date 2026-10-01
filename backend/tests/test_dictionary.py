@@ -1,5 +1,6 @@
 """Dictionaries: scopes, what a dictation's merged dictionary does, and the API (docs/plans/DICTIONARIES.md)."""
 
+import re
 import statistics
 import time
 from datetime import datetime, timedelta
@@ -215,6 +216,44 @@ def test_span_covers_the_longest_match():
     assert found.span == 4
     # A term may be heard as one word more than it has.
     assert merged(entry("global", "Kubernetes")).span == 2
+
+
+def test_grouping_terms_by_first_letter_matches_what_one_flat_list_does():
+    terms = [
+        "voice box",
+        "voice box app",
+        "Voicebox",
+        "VS Code",
+        "vscode",
+        "kubernetes",
+        "Kass",
+        "k8s",
+        "3D",
+        "3D printer",
+        "iOS",
+        "iPhone",
+        "O'Brien",
+        ".NET",
+        "C#",
+        "\u00c9lodie",
+        "\u0130stanbul",
+        "a",
+    ]
+    patterns = [dictionary._phrase(term) for term in terms]
+    ordered = sorted(set(patterns), key=len, reverse=True)
+    flat = re.compile(r"(?<![\w'\u2019-])(?:" + "|".join(ordered) + r")(?![\w'\u2019-])", re.IGNORECASE)
+    grouped = dictionary._bounded(patterns)
+    texts = [
+        "open the voice box app, then the voice-box and VOICEBOX",
+        "vs   code or VS-Code or vscode; Kubernetes on k8s with KASS",
+        "a 3D printer and 3d and 3Dprinter, ios iphone IOS",
+        "o'brien and O'Brien's .net c# \u00e9lodie \u00c9LODIE \u0130stanbul istanbul",
+        "a a-a aa, voice box apps, kassa",
+    ]
+    for text in texts:
+        assert [(m.span(), m.group()) for m in grouped.finditer(text)] == [
+            (m.span(), m.group()) for m in flat.finditer(text)
+        ], text
 
 
 def test_a_large_dictionary_stays_under_five_milliseconds():
