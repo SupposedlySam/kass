@@ -80,7 +80,13 @@ from .phrase_seams import (
     open_phrase,
     strip_pause_mark,
 )
-from .refinement import RefinementFlags, prepare_refinement, refine_transcript, style_first_word
+from .refinement import (
+    RefinementFlags,
+    keep_said_punctuation,
+    prepare_refinement,
+    refine_transcript,
+    style_first_word,
+)
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
 from .styles import flags_for, snapshot as styles_snapshot, spoken_style
@@ -644,7 +650,10 @@ class StreamingCapture:
         closed = close_phrase(text) if closed else text
         # Phrases were styled one at a time; habits like a dropped final period
         # only apply once the whole dictation is joined.
-        return (learned or self.learned)(closed) if self.flags.punctuation_style == "learned" else closed
+        if self.flags.punctuation_style == "learned":
+            closed = (learned or self.learned)(closed)
+        # Punctuation the speaker said wins over the style and the closing.
+        return keep_said_punctuation(self.raw, closed) if self.flags.smart_cleanup else closed
 
     def join(self, previous, phrase, raw_phrase, learned=None):
         if self.overlap:

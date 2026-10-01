@@ -18,6 +18,7 @@ from .spelling import join_spelling
 from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
+from .spoken_punctuation import apply_spoken_punctuation, keep_spoken_punctuation
 from .voice_commands import commands_alone
 
 # A run that repeats this many times gets collapsed before the LLM sees
@@ -573,6 +574,8 @@ async def refine_transcript(
         from .writing_style import apply_learned
 
         text = apply_learned(text, flags.style)
+    if flags.smart_cleanup:
+        text = keep_said_punctuation(transcript, text)
     # The model may write a laugh back the way Whisper heard it.
     return join_laughter(text), resolved_size
 
@@ -656,6 +659,26 @@ async def prefill_cleanup(flags: RefinementFlags, model_size: str) -> None:
         prompt_cache_key.reset(key)
 
 
+def _said_marks(text: str) -> str:
+    """Case, quotes, brackets and symbols the speaker asked for, written."""
+    return apply_spoken_marks(apply_spoken_case(text))
+
+
+def _learned_punctuation():
+    from .correction_learning import learned_punctuation
+
+    return learned_punctuation()
+
+
+def keep_said_punctuation(said: str, text: str) -> str:
+    """``text`` with every punctuation mark ``said`` asked for back in place.
+
+    A mark the speaker said wins over the cleanup model and the writing style
+    (see ``keep_spoken_punctuation``).
+    """
+    return keep_spoken_punctuation(_said_marks(said), text, _learned_punctuation())
+
+
 def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, str | None]:
     """Shared production/training preprocessing, including deterministic edits."""
 
@@ -681,9 +704,10 @@ def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, st
         # Spoken breaks become real ones before the model sees the text, so
         # the content check compares like with like. Marks go first, so a
         # quoted "new line" stays words. Case asked for ("in all caps") is
-        # written here too, so the model never sees the ask as words.
+        # written here too, so the model never sees the ask as words, and so
+        # is punctuation said as a word ("comma").
         def spoken(text: str) -> str:
-            return apply_line_breaks(apply_spoken_marks(apply_spoken_case(text)))
+            return apply_line_breaks(apply_spoken_punctuation(_said_marks(text), _learned_punctuation()))
 
         cleaned_input = spoken(cleaned_input)
         edited = spoken(edited) if edited is not None else None

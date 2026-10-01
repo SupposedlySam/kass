@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from .. import beta, config
 from ..database import session as database_session
 from ..database.models import CaptureFeedback
+from . import spoken_punctuation
 from .correction_rules import MAX_TEXT, Example, apply_rules, compile_rules, evaluate, loss
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ _lock = threading.RLock()
 _state = None
 _path = None
 _compiled = ()
+# Words the speaker says for punctuation marks, and where a mark word stays a word.
+_punctuation = ({}, frozenset())
 # Reports changed since the last run; a withdrawn one also needs the adapter retrained.
 _pending = False
 _retrain = False
@@ -41,11 +44,17 @@ def _empty():
         "evaluated_report_ids": [],
         "metrics": None,
         "outcome": "waiting",
+        "punctuation": {"aliases": {}, "kept": []},
     }
 
 
+def _punctuation_of(state):
+    learned = state.get("punctuation") or {}
+    return dict(learned.get("aliases", {})), frozenset(learned.get("kept", []))
+
+
 def initialize():
-    global _state, _path, _compiled
+    global _state, _path, _compiled, _punctuation
     with _lock:
         path = config.get_data_dir() / "correction-learning.json"
         if _state is not None and _path == path:
@@ -62,10 +71,11 @@ def initialize():
                 logger.exception("Could not load correction learning; using no learned rules")
         _path, _state = path, state
         _compiled = compile_rules(state["rules"])
+        _punctuation = _punctuation_of(state)
 
 
 def _publish(state):
-    global _state, _compiled
+    global _state, _compiled, _punctuation
     compiled = compile_rules(state["rules"])
     _path.parent.mkdir(parents=True, exist_ok=True)
     temporary = _path.with_suffix(".tmp")
@@ -79,6 +89,7 @@ def _publish(state):
         temporary.unlink(missing_ok=True)
     _state = state
     _compiled = compiled
+    _punctuation = _punctuation_of(state)
 
 
 def request_run(retrain=False):
@@ -103,6 +114,12 @@ def apply_learned_corrections(text, language=None):
     # No disk/DB access, locks, extra prompts, or model calls during dictation.
     # Very long transcripts skip the bounded, latency-tested rule layer.
     return apply_rules(text, _compiled, language) if len(text) <= MAX_TEXT else text
+
+
+def learned_punctuation():
+    """The speaker's own words for marks, and contexts where a mark word is a word."""
+    # Read from memory like the rules: never disk during dictation.
+    return _punctuation
 
 
 def status():
@@ -166,9 +183,16 @@ def run_job():
         lifted = {rule for rule, reports in _state["blocked_by"].items() if not existing & set(reports)}
         if not every_report:
             lifted = set()
-        if fingerprint == _state["fingerprint"] and report_ids == _state["evaluated_report_ids"] and not lifted:
+        punctuation = spoken_punctuation.learn(examples)
+        if (
+            fingerprint == _state["fingerprint"]
+            and report_ids == _state["evaluated_report_ids"]
+            and not lifted
+            and punctuation == _state.get("punctuation")
+        ):
             return status()
         state = json.loads(json.dumps(_state))
+        state["punctuation"] = punctuation
         state["blocked"] = [rule for rule in state["blocked"] if rule not in lifted]
         state["blocked_by"] = {rule: reports for rule, reports in state["blocked_by"].items() if rule not in lifted}
         active = state["rules"]
