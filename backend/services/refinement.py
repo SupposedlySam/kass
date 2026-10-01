@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
 from .spelling import join_spelling
+from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
 from .voice_commands import commands_alone
@@ -673,9 +674,10 @@ def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, st
     if flags.smart_cleanup:
         # Spoken breaks become real ones before the model sees the text, so
         # the content check compares like with like. Marks go first, so a
-        # quoted "new line" stays words.
+        # quoted "new line" stays words. Case asked for ("in all caps") is
+        # written here too, so the model never sees the ask as words.
         def spoken(text: str) -> str:
-            return apply_line_breaks(apply_spoken_marks(text))
+            return apply_line_breaks(apply_spoken_marks(apply_spoken_case(text)))
 
         cleaned_input = spoken(cleaned_input)
         edited = spoken(edited) if edited is not None else None

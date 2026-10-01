@@ -15,11 +15,12 @@ def test_spelled_out_letters_lose_the_dashes_whisper_adds():
 
 
 def test_saying_capital_before_a_letter_leaves_just_the_capital_letter():
-    assert join_spelling("capital C-H-E-N-E-Y") == "CHENEY"
+    assert join_spelling("capital C-H-E-N-E-Y") == "Cheney"
     assert join_spelling("capital c-h-e-n-e-y") == "Cheney"
     assert join_spelling("Plan capital b, then capital C.") == "Plan B, then C."
     assert join_spelling("capital I") == "I"
-    assert join_spelling("capital I-B-M stock") == "IBM stock"
+    assert join_spelling("capital I-B-M stock") == "Ibm stock"
+    assert join_spelling("I-B-M stock") == "IBM stock"
     # "capital" before a word is the word itself.
     assert join_spelling("the capital city of Utah") == "the capital city of Utah"
     assert join_spelling("capital-intensive work") == "capital-intensive work"
@@ -29,7 +30,7 @@ def test_saying_capital_before_a_letter_leaves_just_the_capital_letter():
 
 
 def test_numbers_and_punctuation_said_with_spelling_join_it():
-    assert join_spelling("My password is capital C-H-E-N-E-Y 0021!") == "My password is CHENEY0021!"
+    assert join_spelling("My password is capital C-H-E-N-E-Y 0021!") == "My password is Cheney0021!"
     assert join_spelling("It's capital A 1 2 3") == "It's A123"
     assert join_spelling("user m-r-g-n underscore 96") == "user mrgn_96"
     assert join_spelling("C-A-T 42 exclamation point 7") == "CAT42!7"

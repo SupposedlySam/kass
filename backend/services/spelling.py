@@ -4,7 +4,7 @@ Whisper writes spelled letters with dashes between them ("m-r-g-n") and keeps
 "capital" as a word ("capital C"). Said in one run with numbers and spoken
 punctuation, as in a password or a username, the pieces also come out
 separated by spaces ("capital C-H-E-N-E-Y 0021!"). This joins them into the
-one string the speaker spelled ("CHENEY0021!").
+one string the speaker spelled ("Cheney0021!").
 """
 
 import re
@@ -42,13 +42,16 @@ _SYMBOLS = {
 _SYMBOL_WORD = "|".join(sorted((re.escape(word) for word in _SYMBOLS), key=len, reverse=True))
 _SYMBOL_WORDS = re.compile(rf"\b(?:{_SYMBOL_WORD})\b", re.IGNORECASE)
 
-# "capital" said before a letter, or before spelled-out letters, becomes that
-# letter in upper case: "capital c" is "C". Before a word it's left alone, and
-# so is a letter that is itself a word going on into more words: "the capital
-# I visited" is the city, not the letter. A symbol word after the letter
-# ("capital A dash") means the speaker is still spelling.
+# "capital" said before a letter becomes that letter in upper case: "capital
+# c" is "C". Before spelled-out letters it is the first one only, the way a
+# name is spelled: "capital C-H-E-N-E-Y" is "Cheney". Before a word it's left
+# alone, and so is a letter that is itself a word going on into more words:
+# "the capital I visited" is the city, not the letter. A symbol word after the letter
+# ("capital A dash") means the speaker is still spelling. "with a capital L"
+# asks for the case of a word already said, so it is kept for
+# ``apply_spoken_case``.
 _CAPITAL_LETTER = re.compile(
-    rf"\b[Cc]apital\s+(?![AaIiOo]\s+(?!(?i:{_SYMBOL_WORD})\b){_LETTER})({_LETTER})(?=(?:-{_LETTER})*(?![\w-]))"
+    rf"(?<![Ww]ith a )(?<![Ww]ith an )(?<![Ww]ith )\b[Cc]apital\s+(?![AaIiOo]\s+(?!(?i:{_SYMBOL_WORD})\b){_LETTER})({_LETTER})((?:-{_LETTER})*)(?![\w-])"
 )
 
 # One piece of a spelled run: spelled letters, a number, or a symbol said as a
@@ -68,7 +71,7 @@ def _join_run(match: re.Match) -> str:
 
 def join_spelling(text: str) -> str:
     """Join spelled letters, and the numbers and punctuation said with them."""
-    marked = _CAPITAL_LETTER.sub(lambda match: _SPELLED + match.group(1).upper(), text)
+    marked = _CAPITAL_LETTER.sub(lambda match: _SPELLED + match.group(1).upper() + match.group(2).lower(), text)
     marked = _SPELLED_LETTERS.sub(lambda match: _SPELLED + match.group().replace("-", "").lstrip(_SPELLED), marked)
     if _SPELLED not in marked:
         return text
