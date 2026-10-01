@@ -8,6 +8,8 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Kass',
+      // The 404 page is src/pages/404.astro.
+      disable404Route: true,
       description: 'Private, local dictation for Apple Silicon Macs.',
       logo: { src: './src/assets/icon.png', alt: '' },
       favicon: '/favicon.svg',
