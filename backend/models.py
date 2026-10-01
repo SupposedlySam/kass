@@ -479,6 +479,8 @@ class CaptureFeedbackCreate(BaseModel):
     snapshot: CaptureResponse
     # See CaptureFeedback.source (docs/plans/CORRECTION_LEARNING.md).
     source: CaptureFeedbackSource = "manual"
+    # A report of the same capture and target this one amends; it is replaced.
+    replaces: str | None = None
 
 
 class WritingStyleStatus(BaseModel):

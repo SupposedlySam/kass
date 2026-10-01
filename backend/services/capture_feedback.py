@@ -30,7 +30,9 @@ def to_response(row: CaptureFeedback) -> CaptureFeedbackResponse:
 
 def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session, filed_by: str | None = None):
     """Keep a correction and what it teaches. ``filed_by`` is the voice edit
-    capture that filed it, which takes it back when deleted."""
+    capture that filed it, which takes it back when deleted. A request that
+    ``replaces`` an earlier report of the capture amends it: the earlier one
+    goes, with what it taught, in the same commit."""
     if request.source != "manual" and not beta.enabled("voice_edits"):
         raise ValueError("Voice fixes are a beta feature.")
     capture = get_capture(capture_id, db)
@@ -48,6 +50,12 @@ def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session, 
         expected = join_spelling(expected)
     if expected == original:
         raise ValueError("Expected output must differ from the model output.")
+    replaced = None
+    if request.replaces is not None:
+        replaced = db.get(CaptureFeedback, request.replaces)
+        if replaced is None or replaced.capture_id != capture_id or replaced.target != request.target:
+            raise ValueError("The correction being amended is gone. Refresh the capture.")
+        db.delete(replaced)
     row = CaptureFeedback(
         capture_id=capture_id,
         target=request.target,
@@ -60,7 +68,7 @@ def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session, 
     db.add(row)
     db.commit()
     db.refresh(row)
-    _reports_changed(row.target, row.source, db)
+    _reports_changed(row.target, row.source, db, withdrawn=replaced is not None)
     return to_response(row)
 
 

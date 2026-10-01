@@ -588,6 +588,8 @@ export interface CaptureFeedbackCreate {
   notes: string;
   snapshot: CaptureResponse;
   source?: CaptureFeedbackSource;
+  /** A report of the same capture and target this one amends; it is replaced. */
+  replaces?: string | null;
 }
 
 export interface CaptureFeedbackResponse extends CaptureFeedbackCreate {

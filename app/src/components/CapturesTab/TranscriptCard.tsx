@@ -155,7 +155,7 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
         </p>
       )}
       {learned ? (
-        <p className={cn('m-0 whitespace-pre-wrap break-words', textClass)}>
+        <p data-transcript className={cn('m-0 whitespace-pre-wrap break-words', textClass)}>
           {corrected ? <Marked segments={corrected} mark="corrected" /> : shown}
         </p>
       ) : (

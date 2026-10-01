@@ -29,8 +29,23 @@ const P = 'captures.dictionary';
 interface Picked {
   text: string;
   rect: DOMRect;
-  /** Where it was picked in the correction's edit box, when it was. */
+  /** Where it was picked in the transcript or its edit box, when it was. */
   field?: { text: string; start: number; end: number };
+}
+
+/**
+ * Where `range` sits in the transcript it was selected in, if it was: the
+ * element showing it is marked `data-transcript`.
+ */
+function transcriptField(range: Range): Picked['field'] {
+  const node = range.commonAncestorContainer;
+  const shown = (node instanceof Element ? node : node.parentElement)?.closest('[data-transcript]');
+  if (!shown) return undefined;
+  const before = document.createRange();
+  before.selectNodeContents(shown);
+  before.setEnd(range.startContainer, range.startOffset);
+  const start = before.toString().length;
+  return { text: shown.textContent ?? '', start, end: start + range.toString().length };
 }
 
 /**
@@ -118,7 +133,9 @@ function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
       const text = root.contains(range.commonAncestorContainer)
         ? selectionPhrase(selection.toString())
         : '';
-      setPicked(text ? { text, rect: range.getBoundingClientRect() } : null);
+      setPicked(
+        text ? { text, rect: range.getBoundingClientRect(), field: transcriptField(range) } : null,
+      );
     };
     document.addEventListener('selectionchange', update);
     // A textarea's selection doesn't always report through the document.
@@ -139,8 +156,9 @@ function useSelectedPhrase(container: RefObject<HTMLElement>): Picked | null {
 /**
  * Selecting a word or phrase in a capture's text, or while correcting it,
  * offers to add it to the dictionary: the user types how it should be
- * spelled, and may narrow where it applies. Picked while correcting, the
- * correction is saved too, with the word spelled the way it was added.
+ * spelled, and may narrow where it applies. Picked in the transcript, the
+ * correction is saved too, with the word spelled the way it was added; a
+ * correction already saved is amended, so each word added lands in it.
  */
 export function SelectionToDictionary({
   children,
@@ -170,7 +188,7 @@ export function SelectionToDictionary({
     if (!teach || !field) return;
     // The edit box closes when the dialog takes focus if nothing was changed
     // yet, so the text picked from may be the capture's own.
-    const current = teach.draft ?? teach.original;
+    const current = teach.current;
     if (current !== field.text) return;
     teach.saveText(
       written === word?.written

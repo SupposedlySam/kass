@@ -46,7 +46,7 @@ export function useTeachCorrection(
   };
 
   const save = useMutation({
-    mutationFn: (body: { expected_text: string; notes: string }) =>
+    mutationFn: (body: { expected_text: string; notes: string; replaces?: string }) =>
       apiClient.reportCaptureOutput(capture.id, { snapshot: capture, target, ...body }),
     onSuccess: (report) => {
       setLearned(report);
@@ -89,6 +89,8 @@ export function useTeachCorrection(
   const submit = (text: string) => {
     if (text !== original && !save.isPending) save.mutate({ expected_text: text, notes });
   };
+  /** The text as it reads now: the edit, else the saved correction, else Kass's. */
+  const current = draft ?? learned?.expected_text ?? original;
 
   return {
     target,
@@ -119,9 +121,19 @@ export function useTeachCorrection(
     save: () => {
       if (draft !== null) submit(draft);
     },
-    /** Saves `text` as the fix, showing it in the edit box while it saves. */
+    current,
+    /**
+     * Saves `text` as the fix, showing it in the edit box while it saves.
+     * With a correction already saved, it amends that one instead of adding
+     * another, keeping its note.
+     */
     saveText: (text: string) => {
-      if (text === original) return;
+      if (text === original || save.isPending) return;
+      if (learned) {
+        if (text === learned.expected_text) return;
+        save.mutate({ expected_text: text, notes: learned.notes, replaces: learned.id });
+        return;
+      }
       setDraft(text);
       submit(text);
     },
@@ -240,6 +252,7 @@ export function EditableTranscript({
       <div
         role="button"
         tabIndex={0}
+        data-transcript
         title={t('captures.teach.editHint')}
         aria-label={t('captures.teach.editHint')}
         onClick={edit}

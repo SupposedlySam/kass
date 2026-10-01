@@ -92,6 +92,23 @@ def test_refined_report_and_missing_refinement(db):
         save_feedback("take", draft, db)
 
 
+def test_amended_report_replaces_the_one_it_amends(db):
+    first = save_feedback("take", request(db), db)
+    amended = request(db, replaces=first.id)
+    amended.expected_text = "Right words, Postgres"
+    second = save_feedback("take", amended, db)
+    assert [report.id for report in list_feedback(db, "take")] == [second.id]
+    assert second.expected_text == "Right words, Postgres"
+    # Gone already, or of another target: nothing is saved.
+    with pytest.raises(ValueError, match="being amended is gone"):
+        save_feedback("take", amended, db)
+    other = request(db, replaces=second.id)
+    other.target = "refined"
+    with pytest.raises(ValueError, match="being amended is gone"):
+        save_feedback("take", other, db)
+    assert [report.id for report in list_feedback(db, "take")] == [second.id]
+
+
 def test_capture_deletion_removes_reports(db, monkeypatch):
     from backend import config
 
