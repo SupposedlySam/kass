@@ -137,7 +137,7 @@ async def test_audio_without_a_voice_never_reaches_whisper(stt, monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_empty_samples_are_rejected_before_inference(stt):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="No audio samples"):
         await stt.transcribe_array(np.zeros(0, dtype=np.int16), 16000, "en", "turbo")
     assert stt.model.calls == []
 

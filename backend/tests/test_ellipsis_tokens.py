@@ -83,4 +83,5 @@ def test_batch_and_per_token_decoding_agree_on_the_real_whisper_vocabulary():
     tokenizer = HFTokenizerWrapper(hf, multilingual=True, num_languages=100, language="en")
     per_token = base.ellipsis_token_ids("a", tokenizer.decode, tokenizer.eot)
     batched = base.ellipsis_token_ids("b", tokenizer.decode, tokenizer.eot, vocabulary_decoder(tokenizer))
-    assert batched == per_token and per_token
+    assert batched == per_token
+    assert per_token

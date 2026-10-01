@@ -158,7 +158,8 @@ async def test_release_during_a_phrase_only_adds_the_remaining_audio(tmp_path, m
     release.set()
     await worker
     assert heard == [3 * session.rate, 1 * session.rate]
-    assert session.raw.startswith("phrase 1") and "phrase 2" in session.raw
+    assert session.raw.startswith("phrase 1")
+    assert "phrase 2" in session.raw
     session.close()
 
 

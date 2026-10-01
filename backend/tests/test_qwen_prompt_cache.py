@@ -33,22 +33,26 @@ def call(model, tokens, generated):
 
 def test_switching_prompts_reuses_each_prompts_own_cache(monkeypatch):
     model = backend(monkeypatch)
-    cleanup, _ = call(model, CLEANUP + [1, 2], [3])
-    command, reused = call(model, COMMAND + [4], [5])
-    assert command is not cleanup and reused == 0
+    cleanup, _ = call(model, [*CLEANUP, 1, 2], [3])
+    command, reused = call(model, [*COMMAND, 4], [5])
+    assert command is not cleanup
+    assert reused == 0
     # Back to dictation: its system prompt and examples are still cached.
-    again, reused = call(model, CLEANUP + [6], [7])
-    assert again is cleanup and reused == len(CLEANUP)
+    again, reused = call(model, [*CLEANUP, 6], [7])
+    assert again is cleanup
+    assert reused == len(CLEANUP)
     # And the command's prompt is still cached for the next command.
-    back, reused = call(model, COMMAND + [8], [9])
-    assert back is command and reused == len(COMMAND)
+    back, reused = call(model, [*COMMAND, 8], [9])
+    assert back is command
+    assert reused == len(COMMAND)
 
 
 def test_the_same_prompt_keeps_trimming_one_cache(monkeypatch):
     model = backend(monkeypatch)
-    first, _ = call(model, CLEANUP + [1, 2], [3])
-    second, reused = call(model, CLEANUP + [1, 2, 4], [5])
-    assert second is first and reused == len(CLEANUP) + 2
+    first, _ = call(model, [*CLEANUP, 1, 2], [3])
+    second, reused = call(model, [*CLEANUP, 1, 2, 4], [5])
+    assert second is first
+    assert reused == len(CLEANUP) + 2
     assert len(model._prompt_caches) == 1
 
 
@@ -68,4 +72,5 @@ def test_unloading_forgets_every_cache(monkeypatch):
     model.tokenizer = object()
     monkeypatch.setattr("backend.backends.qwen_llm_backend.clear_mlx_cache", lambda: None)
     model.unload_model()
-    assert model._prompt_caches == [] and model._entry is None
+    assert model._prompt_caches == []
+    assert model._entry is None

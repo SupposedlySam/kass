@@ -19,7 +19,6 @@ from .models import (
 from .session import SessionLocal, _db_path, engine, get_db, init_db
 
 __all__ = [
-    # Models
     "AppStyle",
     "Base",
     "Capture",
@@ -28,11 +27,10 @@ __all__ = [
     "DictionaryEntry",
     "KnownName",
     "RetiredCapture",
-    "WritingStyle",
-    # Session
-    "engine",
     "SessionLocal",
+    "WritingStyle",
     "_db_path",
-    "init_db",
+    "engine",
     "get_db",
+    "init_db",
 ]

@@ -130,7 +130,8 @@ async def test_runs_whisper_once_so_the_first_dictation_is_warm(startup, tmp_pat
     stt.transcribe_array.assert_awaited_once()
     samples, rate = stt.transcribe_array.await_args.args[:2]
     # One second at a Mac microphone's rate, so resampling is warmed too.
-    assert rate == 48000 and len(samples) == 48000
+    assert rate == 48000
+    assert len(samples) == 48000
     # Warmed as the first phrase of a dictation (no earlier text), the call
     # streaming makes, so its one-time setup is paid here and not after release.
     # Whisper runs even if the newest recording is silent: warming it is the point.
@@ -206,4 +207,5 @@ async def test_unreadable_recordings_fall_back_to_noise(startup, tmp_path, monke
     (config.get_captures_dir() / "broken.wav").write_bytes(b"not audio")
     await model_startup.load_startup_models()
     samples, rate = stt.transcribe_array.await_args.args[:2]
-    assert rate == 48000 and len(samples) == 48000
+    assert rate == 48000
+    assert len(samples) == 48000

@@ -3,14 +3,15 @@
 import asyncio
 import logging
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from typing import ClassVar
 
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter to add colors matching uvicorn's style."""
 
-    COLORS = {
+    COLORS: ClassVar[dict[str, str]] = {
         "DEBUG": "\033[36m",  # Cyan
         "INFO": "\033[32m",  # Green
         "WARNING": "\033[33m",  # Yellow
@@ -68,10 +69,8 @@ def create_app() -> FastAPI:
             for task in tasks:
                 task.cancel()
             for task in tasks:
-                try:
+                with suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
             # Runs whether or not startup finished, so a partial startup
             # still unloads whatever models were loaded.
             await _run_shutdown()

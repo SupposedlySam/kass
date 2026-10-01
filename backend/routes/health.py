@@ -1,6 +1,7 @@
 """Health and infrastructure endpoints."""
 
 import asyncio
+import contextlib
 import os
 import resource
 import signal
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import config, models
 from ..database import get_db
 from ..services import transcribe
+from ..services.task_queue import create_background_task
 from ..utils.platform_detect import BACKEND_TYPE, GPU_TYPE
 
 router = APIRouter()
@@ -36,7 +38,8 @@ async def shutdown():
         await asyncio.sleep(0.1)
         os.kill(os.getpid(), signal.SIGTERM)
 
-    asyncio.create_task(shutdown_async())
+    # Held so the event loop can't drop the task before it runs.
+    create_background_task(shutdown_async())
     return {"message": "Shutting down..."}
 
 
@@ -120,10 +123,8 @@ async def filesystem_health():
             except OSError as e:
                 error = str(e)
             finally:
-                try:
+                with contextlib.suppress(Exception):
                     probe.unlink(missing_ok=True)
-                except Exception:
-                    pass
         else:
             error = "Directory does not exist"
 

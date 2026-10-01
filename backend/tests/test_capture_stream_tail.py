@@ -169,7 +169,7 @@ async def test_a_long_tail_without_a_sentence_end_is_settled_anyway(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_a_correction_reopens_the_last_finished_sentence(tmp_path, monkeypatch):
-    refine, prompts = scripted(
+    refine, _prompts = scripted(
         {
             "the meeting is on Tuesday. Bring snacks": "The meeting is on Tuesday. Bring snacks.",
         }
@@ -241,7 +241,8 @@ async def test_release_keeps_a_cleanup_nothing_follows(tmp_path, monkeypatch):
     session.finish()
     await asyncio.wait_for(worker, 2)
     session.close()
-    assert len(stops) == 1 and not stops[0].is_set()
+    assert len(stops) == 1
+    assert not stops[0].is_set()
     assert session.refined == "All of it."
 
 

@@ -109,10 +109,10 @@ async def create_capture_endpoint(
             app_name=name,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to create capture")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     # A command recording always goes on to its rewrite (POST /commands/run),
     # which replaces the selection whatever the paste setting says.
@@ -237,7 +237,7 @@ async def refine_capture_endpoint(
         )
     except Exception as e:
         logger.exception("Refinement failed for capture %s", capture_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     if not capture:
         raise HTTPException(status_code=404, detail="Capture not found")
@@ -311,10 +311,10 @@ async def retranscribe_capture_endpoint(
             db=db,
         )
     except FileNotFoundError as e:
-        raise HTTPException(status_code=410, detail=str(e))
+        raise HTTPException(status_code=410, detail=str(e)) from e
     except Exception as e:
         logger.exception("Retranscribe failed for capture %s", capture_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     if not capture:
         raise HTTPException(status_code=404, detail="Capture not found")
@@ -332,7 +332,7 @@ async def report_capture_output(
     try:
         feedback = save_feedback(capture_id, request, db)
     except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise HTTPException(status_code=409, detail=str(error)) from error
     if feedback is None:
         raise HTTPException(status_code=404, detail="Capture not found")
     return feedback

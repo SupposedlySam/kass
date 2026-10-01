@@ -1,5 +1,7 @@
 """Cleanup output checked several tokens per model call (prompt lookup decoding)."""
 
+from typing import ClassVar
+
 import mlx.core as mx
 import pytest
 
@@ -82,7 +84,7 @@ class Detokenizer:
 
 
 class Tokenizer:
-    eos_token_ids = [EOS]
+    eos_token_ids: ClassVar[list[int]] = [EOS]
     detokenizer = Detokenizer()
 
     def encode(self, text, add_special_tokens=False):

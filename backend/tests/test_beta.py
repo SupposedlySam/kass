@@ -30,5 +30,5 @@ def test_follows_the_setting_without_a_restart(data_dir):
 
 
 def test_a_feature_not_in_the_list_is_an_error(data_dir):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="isn't in BETA_FEATURES"):
         beta.enabled("gone_public")

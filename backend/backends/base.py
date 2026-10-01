@@ -55,10 +55,7 @@ def is_model_cached(
 
         if required_files:
             # Check that every required filename exists somewhere in snapshots
-            for fname in required_files:
-                if not any(snapshots_dir.rglob(fname)):
-                    return False
-            return True
+            return all(any(snapshots_dir.rglob(fname)) for fname in required_files)
 
         # Check that at least one weight file exists
         for ext in weight_extensions:
