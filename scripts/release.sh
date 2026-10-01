@@ -34,7 +34,11 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   echo "$tag already exists." >&2
   exit 1
 fi
+# A public release only has to be newer than the last public one: a hotfix
+# can go out while a newer beta is out, and beta copies stay on the beta.
+# A beta has to be newer than everything, or beta copies would never get it.
 tags=$(git tag --list 'v[0-9]*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' || true)
+[[ "$version" == *-beta.* ]] || tags=$(echo "$tags" | grep -v -- '-beta\.' || true)
 latest=
 [ -z "$tags" ] || latest="v$(./scripts/newest-version.py $tags)"
 if [ -n "$latest" ] && [ "$(./scripts/newest-version.py "${latest#v}" "$version")" != "$version" ]; then
