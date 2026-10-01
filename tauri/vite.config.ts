@@ -35,5 +35,8 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG,
     sourcemap: !!process.env.TAURI_DEBUG,
     outDir: 'dist',
+    // The bundle loads from disk inside the app, not over a network, so
+    // Vite's 500 kB warning (meant for websites) doesn't apply here.
+    chunkSizeWarningLimit: 1600,
   },
 });

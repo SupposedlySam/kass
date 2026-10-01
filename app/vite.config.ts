@@ -10,4 +10,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    // This code ships inside the desktop app (tauri/) and loads from disk, not
+    // over a network, so Vite's 500 kB warning (meant for websites) doesn't apply.
+    chunkSizeWarningLimit: 1600,
+  },
 });
