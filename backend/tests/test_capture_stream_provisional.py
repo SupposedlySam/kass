@@ -136,7 +136,10 @@ async def test_phrases_cleaned_while_speaking_are_offered_at_release(tmp_path, m
         capture_stream,
         "refine_transcript",
         streaming_refine(
-            [["The", " first", " part", " is", " done", ".", " And", " then", "."], ["And", " then", " the", " rest", "."]]
+            [
+                ["The", " first", " part", " is", " done", ".", " And", " then", "."],
+                ["And", " then", " the", " rest", "."],
+            ]
         ),
     )
     heard = []

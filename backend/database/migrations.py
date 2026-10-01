@@ -51,6 +51,7 @@ def run_migrations(engine) -> None:
 
 # -- helpers ---------------------------------------------------------------
 
+
 def _get_columns(inspector, table: str) -> set[str]:
     return {col["name"] for col in inspector.get_columns(table)}
 
@@ -64,6 +65,7 @@ def _add_column(engine, table: str, column_sql: str, label: str) -> None:
 
 
 # -- per-table migrations --------------------------------------------------
+
 
 def _migrate_captures(engine, inspector, tables: set[str]) -> None:
     if "captures" not in tables:

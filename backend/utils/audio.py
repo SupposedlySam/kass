@@ -15,12 +15,12 @@ def load_audio(
 ) -> Tuple[np.ndarray, int]:
     """
     Load audio file with normalization.
-    
+
     Args:
         path: Path to audio file
         sample_rate: Target sample rate
         mono: Convert to mono
-        
+
     Returns:
         Tuple of (audio_array, sample_rate)
     """
@@ -58,7 +58,7 @@ def save_audio(
 
         # Write to temporary file first (explicit format since .tmp
         # extension is not recognised by soundfile)
-        sf.write(temp_path, audio, sample_rate, format='WAV')
+        sf.write(temp_path, audio, sample_rate, format="WAV")
 
         # Atomic rename to final path
         os.replace(temp_path, path)

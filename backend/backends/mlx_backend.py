@@ -239,7 +239,9 @@ class MLXSTTBackend:
             if previous_text is not None:
                 decode_options["suppress_tokens"] = [
                     -1,
-                    *ellipsis_token_ids(self.model_size, tokenizer.decode, tokenizer.eot, vocabulary_decoder(tokenizer)),
+                    *ellipsis_token_ids(
+                        self.model_size, tokenizer.decode, tokenizer.eot, vocabulary_decoder(tokenizer)
+                    ),
                 ]
             terms = self._terms_prompt(tokenizer, vocabulary) if vocabulary else ""
             if prompt := phrase_prompt(tokenizer, terms, previous_text):

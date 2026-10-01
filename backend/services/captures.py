@@ -171,9 +171,7 @@ async def create_capture(
                 audio, sr = load_audio(str(raw_path))
                 duration_ms = int((len(audio) / sr) * 1000) if sr else None
         except Exception as decode_err:
-            logger.warning(
-                "Could not decode capture %s (%s): %r", capture_id, suffix, decode_err
-            )
+            logger.warning("Could not decode capture %s (%s): %r", capture_id, suffix, decode_err)
             audio, sr = None, None
             duration_ms = None
 
@@ -182,9 +180,7 @@ async def create_capture(
             # source is a format its miniaudio loader can still read — webm,
             # m4a, etc. would just 500 later. Surface a clean error instead.
             if suffix not in WHISPER_NATIVE_FORMATS:
-                raise ValueError(
-                    f"Could not decode {suffix} audio — the recording may be empty or corrupt"
-                )
+                raise ValueError(f"Could not decode {suffix} audio — the recording may be empty or corrupt")
             audio_path = raw_path
         elif suffix == ".wav":
             audio_path = raw_path
@@ -202,6 +198,7 @@ async def create_capture(
         whisper = get_whisper_model()
         resolved_stt = stt_model or whisper.model_size
         from .model_improvement.manager import speech_model
+
         resolved_stt = speech_model(resolved_stt)
         transcription_started = time.monotonic()
         from . import dictionary
@@ -211,7 +208,12 @@ async def create_capture(
             await whisper.transcribe(str(audio_path), language, resolved_stt, vocabulary=terms), app_bundle_id
         )
         transcript = mark_commands(transcript)
-        logger.info("Capture %s transcription (including model load/queue): %.3fs for %sms audio", capture_id, time.monotonic() - transcription_started, duration_ms)
+        logger.info(
+            "Capture %s transcription (including model load/queue): %.3fs for %sms audio",
+            capture_id,
+            time.monotonic() - transcription_started,
+            duration_ms,
+        )
 
         from .audio_retention import discard, discards_now
         from .settings import get_capture_settings
@@ -264,13 +266,7 @@ def list_captures(
     elif app_bundle_id:
         query = query.filter(DBCapture.app_bundle_id == app_bundle_id)
     total = query.count()
-    rows = (
-        query
-        .order_by(DBCapture.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
+    rows = query.order_by(DBCapture.created_at.desc()).limit(limit).offset(offset).all()
     return [_to_response(r) for r in rows], total
 
 

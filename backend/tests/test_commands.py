@@ -58,7 +58,9 @@ def test_selection_comes_first_so_it_can_be_prefilled_before_the_instruction():
 def test_every_example_stays_in_the_passage_language():
     # An example in another language pulled "more formal" into that language on
     # 0.6B wherever it sat; the rules alone keep translation working.
-    assert all(result.isascii() and "translate" not in instruction for _, instruction, result in commands.COMMAND_EXAMPLES)
+    assert all(
+        result.isascii() and "translate" not in instruction for _, instruction, result in commands.COMMAND_EXAMPLES
+    )
     examples = commands.command_examples()
     assert len(examples) == len(commands.COMMAND_EXAMPLES)
     assert all(user.startswith("<text>\n") and "\nInstruction: " in user for user, _ in examples)
@@ -189,7 +191,9 @@ def test_databases_with_the_retired_command_model_column_keep_working(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE capture_settings ADD COLUMN command_llm_model VARCHAR NOT NULL DEFAULT '1.7B'"))
+        connection.execute(
+            text("ALTER TABLE capture_settings ADD COLUMN command_llm_model VARCHAR NOT NULL DEFAULT '1.7B'")
+        )
     run_migrations(engine)
     with Session(engine) as db:
         get_capture_settings(db)

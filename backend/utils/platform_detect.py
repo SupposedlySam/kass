@@ -21,8 +21,7 @@ def require_apple_silicon() -> None:
     """
     if not is_apple_silicon():
         raise RuntimeError(
-            "Kass requires an Apple Silicon Mac (arm64 macOS); "
-            f"this is {platform.system()} {platform.machine()}."
+            f"Kass requires an Apple Silicon Mac (arm64 macOS); this is {platform.system()} {platform.machine()}."
         )
     try:
         import mlx.core  # noqa: F401 — triggers native lib loading

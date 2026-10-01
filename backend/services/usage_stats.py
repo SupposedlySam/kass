@@ -258,13 +258,17 @@ def _sum_by(slots: Iterable[_Slot], key: Callable[[_Slot], object]) -> dict:
     return sums
 
 
-def _series(period: Period, current: _Window, previous: _Window | None, scope: AppScope, now: datetime) -> list[UsagePoint]:
+def _series(
+    period: Period, current: _Window, previous: _Window | None, scope: AppScope, now: datetime
+) -> list[UsagePoint]:
     """The words chart: hours for Today, days for 7 and 30 days, weeks for All time."""
     cur = [s for s in current.slots if scope.matches(s.app)]
     if period == "today":
         prev_day = previous.start if previous else None
         by_hour = _sum_by(cur, lambda s: s.hour)
-        prev_by_hour = _sum_by((s for s in previous.slots if scope.matches(s.app)), lambda s: s.hour) if previous else {}
+        prev_by_hour = (
+            _sum_by((s for s in previous.slots if scope.matches(s.app)), lambda s: s.hour) if previous else {}
+        )
         return [
             UsagePoint(
                 start=f"{current.start.isoformat()}T{hour:02d}:00",

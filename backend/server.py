@@ -76,6 +76,7 @@ except Exception as e:
     logger.error(f"Failed to import required modules: {e}", exc_info=True)
     sys.exit(1)
 
+
 def _log_to_file(data_dir):
     """Keep server logs on disk; the desktop app discards the sidecar's stderr."""
     from logging.handlers import RotatingFileHandler
@@ -83,9 +84,7 @@ def _log_to_file(data_dir):
     try:
         log_dir = os.path.join(data_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
-        handler = RotatingFileHandler(
-            os.path.join(log_dir, "server.log"), maxBytes=2 * 1024 * 1024, backupCount=3
-        )
+        handler = RotatingFileHandler(os.path.join(log_dir, "server.log"), maxBytes=2 * 1024 * 1024, backupCount=3)
         handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logging.getLogger().addHandler(handler)
     except Exception:

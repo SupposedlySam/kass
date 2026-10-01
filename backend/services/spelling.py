@@ -55,9 +55,7 @@ _CAPITAL_LETTER = re.compile(
 # word or written as itself, with any punctuation Whisper stuck on. Sentence
 # punctuation ends the run, so "C-A-T, 3 dogs" doesn't become "CAT,3 dogs".
 _PIECE = rf"(?:{_SPELLED}{_LETTER}+|\d+|(?i:{_SYMBOL_WORD})\b|[^\w\s{_SPELLED}])"
-_RUN = re.compile(
-    rf"(?<![\w{_SPELLED}])(?:{_PIECE}[^\w\s,;:.?!{_SPELLED}]*[ \t]+)+{_PIECE}[^\w\s{_SPELLED}]*"
-)
+_RUN = re.compile(rf"(?<![\w{_SPELLED}])(?:{_PIECE}[^\w\s,;:.?!{_SPELLED}]*[ \t]+)+{_PIECE}[^\w\s{_SPELLED}]*")
 
 
 def _join_run(match: re.Match) -> str:

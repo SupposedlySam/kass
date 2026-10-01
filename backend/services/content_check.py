@@ -205,8 +205,6 @@ def check(said: str, cleaned: str, allow_retractions: bool = False) -> Verdict:
     return Verdict("ok")
 
 
-
-
 # This many consecutive output words the speaker never said, found in an
 # example the model was shown, means it copied the example.
 COPIED_RUN = 3

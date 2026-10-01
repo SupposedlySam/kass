@@ -78,7 +78,10 @@ async def test_disabled_corrections_skip_deterministic_edit(monkeypatch):
             "Alright, my favorite candy is Bubblegum. No, no, no, it's Reese's Pieces.",
             "Alright, my favorite candy is Reese's Pieces.",
         ),
-        ("My favorite candy is Bubblegum no no no it\u2019s Reese\u2019s Pieces.", "My favorite candy is Reese\u2019s Pieces."),
+        (
+            "My favorite candy is Bubblegum no no no it\u2019s Reese\u2019s Pieces.",
+            "My favorite candy is Reese\u2019s Pieces.",
+        ),
         (
             "Keep the receipt. My favorite candy is Bubblegum. No, no, it's Reese's Pieces. Buy two bags.",
             "Keep the receipt. My favorite candy is Reese's Pieces. Buy two bags.",

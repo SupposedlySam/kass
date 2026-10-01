@@ -24,9 +24,16 @@ def db():
 
 def add(db, n, bundle_id, name, minutes=0):
     for i in range(n):
-        db.add(Capture(audio_path="captures/x.wav", source="dictation", transcript_raw="hi",
-                       app_bundle_id=bundle_id, app_name=name,
-                       created_at=START + timedelta(minutes=minutes + i)))
+        db.add(
+            Capture(
+                audio_path="captures/x.wav",
+                source="dictation",
+                transcript_raw="hi",
+                app_bundle_id=bundle_id,
+                app_name=name,
+                created_at=START + timedelta(minutes=minutes + i),
+            )
+        )
     db.commit()
 
 

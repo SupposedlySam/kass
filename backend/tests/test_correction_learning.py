@@ -234,6 +234,7 @@ def test_corrupt_state_falls_back_to_no_rules(storage):
 
 def test_learning_http_controls(storage, monkeypatch):
     from backend.services.model_improvement import manager
+
     monkeypatch.setattr(manager, "start", lambda: {"can_rollback": False})
     monkeypatch.setattr(manager, "status", lambda: {"can_rollback": False})
     from fastapi import FastAPI
@@ -270,9 +271,7 @@ def test_status_identifies_only_reports_evaluated_by_a_completed_job(storage, mo
     with storage() as db:
         pending = save_feedback(
             "0",
-            CaptureFeedbackCreate(
-                target="refined", expected_text="Another correction", snapshot=get_capture("0", db)
-            ),
+            CaptureFeedbackCreate(target="refined", expected_text="Another correction", snapshot=get_capture("0", db)),
             db,
         )
     assert pending.id not in learning.status()["evaluated_report_ids"]
@@ -303,9 +302,7 @@ def beta_on(storage):
 
 def report(storage, capture_id, original, expected, source="manual"):
     with storage() as db:
-        db.add(
-            Capture(id=capture_id, audio_path="unused.wav", transcript_raw=original, transcript_refined=original)
-        )
+        db.add(Capture(id=capture_id, audio_path="unused.wav", transcript_raw=original, transcript_refined=original))
         db.commit()
         return save_feedback(
             capture_id,

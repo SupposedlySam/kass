@@ -19,13 +19,7 @@ def test_progress_manager_basic():
     pm = ProgressManager()
 
     # Test update_progress
-    pm.update_progress(
-        model_name="test-model",
-        current=50,
-        total=100,
-        filename="test.bin",
-        status="downloading"
-    )
+    pm.update_progress(model_name="test-model", current=50, total=100, filename="test.bin", status="downloading")
 
     # Test get_progress
     progress = pm.get_progress("test-model")
@@ -82,11 +76,7 @@ async def test_progress_manager_sse():
         for i in range(0, 101, 20):
             print(f"  Backend: Updating progress to {i}%")
             pm.update_progress(
-                model_name="test-model-sse",
-                current=i,
-                total=100,
-                filename=f"file_{i}.bin",
-                status="downloading"
+                model_name="test-model-sse", current=i, total=100, filename=f"file_{i}.bin", status="downloading"
             )
             await asyncio.sleep(0.1)
 
@@ -95,10 +85,7 @@ async def test_progress_manager_sse():
         pm.mark_complete("test-model-sse")
 
     # Run SSE client and download simulation concurrently
-    await asyncio.gather(
-        sse_client(),
-        simulate_download()
-    )
+    await asyncio.gather(sse_client(), simulate_download())
 
     # Verify we got events
     print(f"\n  Collected {len(collected_events)} events")
@@ -188,13 +175,7 @@ async def test_full_integration():
         tracker = HFProgressTracker(progress_callback)
 
         # Initialize progress
-        pm.update_progress(
-            model_name="integration-test",
-            current=0,
-            total=1,
-            filename="",
-            status="downloading"
-        )
+        pm.update_progress(model_name="integration-test", current=0, total=1, filename="", status="downloading")
 
         # Simulate download with tqdm patching
         with tracker.patch_download():
@@ -225,10 +206,7 @@ async def test_full_integration():
                 pm.mark_error("integration-test", "tqdm not available")
 
     # Run both
-    await asyncio.gather(
-        sse_client(),
-        simulate_real_download()
-    )
+    await asyncio.gather(sse_client(), simulate_real_download())
 
     # Verify
     print(f"\n  Collected {len(collected_events)} events")

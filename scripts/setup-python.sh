@@ -53,5 +53,7 @@ echo "Installing Python dependencies..."
 # transformers<=4.57.x cap, so install them --no-deps (their runtime deps
 # are covered by requirements.txt — see the note there)
 "$pip" install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1
-"$pip" install pyinstaller ruff pytest pytest-asyncio -q
+# ruff is pinned: another version formats and lints differently, so just check
+# would pass on one Mac and fail on the next.
+"$pip" install pyinstaller ruff==0.16.9 pytest pytest-asyncio -q
 echo "Python environment ready."

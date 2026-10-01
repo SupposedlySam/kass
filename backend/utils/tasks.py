@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 @dataclass
 class DownloadTask:
     """Represents an active download task."""
+
     model_name: str
     status: str = "downloading"  # downloading, extracting, complete, error
     started_at: datetime = field(default_factory=datetime.utcnow)
@@ -18,28 +19,28 @@ class DownloadTask:
 
 class TaskManager:
     """Manages active model downloads."""
-    
+
     def __init__(self):
         self._active_downloads: Dict[str, DownloadTask] = {}
-    
+
     def start_download(self, model_name: str) -> None:
         """Mark a download as started."""
         self._active_downloads[model_name] = DownloadTask(
             model_name=model_name,
             status="downloading",
         )
-    
+
     def complete_download(self, model_name: str) -> None:
         """Mark a download as complete."""
         if model_name in self._active_downloads:
             del self._active_downloads[model_name]
-    
+
     def error_download(self, model_name: str, error: str) -> None:
         """Mark a download as failed."""
         if model_name in self._active_downloads:
             self._active_downloads[model_name].status = "error"
             self._active_downloads[model_name].error = error
-    
+
     def get_active_downloads(self) -> List[DownloadTask]:
         """Get all active downloads."""
         return list(self._active_downloads.values())
@@ -51,12 +52,8 @@ class TaskManager:
         error/retry UI can show them but must not be reported as
         "downloading" by /models/status.
         """
-        return [
-            task
-            for task in self._active_downloads.values()
-            if task.status in ("downloading", "extracting")
-        ]
-    
+        return [task for task in self._active_downloads.values() if task.status in ("downloading", "extracting")]
+
     def cancel_download(self, model_name: str) -> bool:
         """Cancel/dismiss a download task (removes it from active list)."""
         return self._active_downloads.pop(model_name, None) is not None

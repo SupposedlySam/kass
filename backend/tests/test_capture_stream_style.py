@@ -21,9 +21,7 @@ def seeded(engine):
     with Session(engine) as db:
         styles.ensure_styles(db)
         chat = styles.create_style(db, "Chat")
-        db.query(WritingStyle).filter(WritingStyle.id == chat.id).update(
-            {"id": "chat", "punctuation_style": "casual"}
-        )
+        db.query(WritingStyle).filter(WritingStyle.id == chat.id).update({"id": "chat", "punctuation_style": "casual"})
         db.commit()
         styles.invalidate()
         styles.assign_app(db, SLACK, "Slack", "chat")

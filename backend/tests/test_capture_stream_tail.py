@@ -44,9 +44,7 @@ async def test_a_sentence_split_by_pauses_is_cleaned_as_one(tmp_path, monkeypatc
             "Wait, but if I pause": "Wait, but if I pause.",
             "Wait, but if I pause for a": "Wait, but if I pause for a.",
             "Wait, but if I pause for a second": "Wait, but if I pause for a second.",
-            "Wait, but if I pause for a second does that mean": (
-                "Wait, but if I pause for a second, does that mean."
-            ),
+            "Wait, but if I pause for a second does that mean": ("Wait, but if I pause for a second, does that mean."),
             "Wait, but if I pause for a second does that mean that my pauses cannot be cleaned?": (
                 "Wait, but if I pause for a second, does that mean my pauses can't be cleaned?"
             ),
@@ -60,7 +58,13 @@ async def test_a_sentence_split_by_pauses_is_cleaned_as_one(tmp_path, monkeypatc
         }
     )
     session, _ = refining_session(tmp_path, monkeypatch, refine)
-    for phrase in ["Wait, but if I pause-", "for a-", "second.", "Does that mean-", "that my pauses cannot be cleaned?"]:
+    for phrase in [
+        "Wait, but if I pause-",
+        "for a-",
+        "second.",
+        "Does that mean-",
+        "that my pauses cannot be cleaned?",
+    ]:
         await session.accept(phrase, paused=True)
     await session.accept("From in between.", paused=True)
     session.finish()

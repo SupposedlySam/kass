@@ -73,6 +73,9 @@ combine-as-imports = true
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+# Ruff formats Python inside Markdown too; the style guide's examples are
+# aligned by hand to teach, so leave Markdown alone.
+exclude = ["*.md"]
 
 # ---------------------------------------------------------------------------
 # pytest

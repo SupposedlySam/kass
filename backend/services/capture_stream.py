@@ -570,9 +570,7 @@ class StreamingCapture:
             ensure_model_ready(self.settings.llm_model)
             started = time.monotonic()
             try:
-                self.refined, self.llm_model = await rewrite(
-                    self.selection, instruction, self.settings.llm_model
-                )
+                self.refined, self.llm_model = await rewrite(self.selection, instruction, self.settings.llm_model)
             finally:
                 self._spent("refine", started)
             self.command = (instruction, transform)

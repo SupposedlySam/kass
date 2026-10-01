@@ -67,7 +67,7 @@ def _resample_channel(x: np.ndarray, up: int, down: int, h: np.ndarray, start: i
                 strides=(down * padded_x.strides[0], padded_x.strides[0]),
                 writeable=False,
             )
-            acc = windows @ padded_h[phase :: up][::-1]
+            acc = windows @ padded_h[phase::up][::-1]
         y[r::up] = acc
     return y
 

@@ -239,9 +239,7 @@ async def _distance(examples, flags, model_size, candidate, generation) -> int |
     for example in examples:
         if manager.interrupted(generation):
             return None
-        text, _ = await refine_transcript(
-            example["said"], flags, model_size=model_size, correction_notes=candidate
-        )
+        text, _ = await refine_transcript(example["said"], flags, model_size=model_size, correction_notes=candidate)
         total += loss(text, example["meant"])
     return total
 

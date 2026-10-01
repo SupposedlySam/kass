@@ -15,9 +15,17 @@ def db():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
-        session.add(Capture(id="take", audio_path="captures/take.wav", source="dictation",
-                            transcript_raw="wrong words", transcript_refined="Wrong words.",
-                            stt_model="turbo", llm_model="0.6B"))
+        session.add(
+            Capture(
+                id="take",
+                audio_path="captures/take.wav",
+                source="dictation",
+                transcript_raw="wrong words",
+                transcript_refined="Wrong words.",
+                stt_model="turbo",
+                llm_model="0.6B",
+            )
+        )
         session.commit()
         yield session
     engine.dispose()
@@ -32,8 +40,7 @@ def beta_on(tmp_path, monkeypatch):
 
 
 def request(db, **kwargs):
-    return CaptureFeedbackCreate(snapshot=get_capture("take", db), target="raw",
-                                 expected_text="Right words", **kwargs)
+    return CaptureFeedbackCreate(snapshot=get_capture("take", db), target="raw", expected_text="Right words", **kwargs)
 
 
 def test_report_survives_reprocessing_and_session_reload(db):
@@ -87,6 +94,7 @@ def test_refined_report_and_missing_refinement(db):
 
 def test_capture_deletion_removes_reports(db, monkeypatch):
     from backend import config
+
     monkeypatch.setattr(config, "resolve_storage_path", lambda _: None)
     save_feedback("take", request(db), db)
     assert delete_capture("take", db)

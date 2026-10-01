@@ -22,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Set around a generate call to receive the text generated so far after each
 # token. Called on the MLX worker thread; it must be quick and thread-safe.
-generation_listener: ContextVar[Optional[Callable[[str], None]]] = ContextVar(
-    "generation_listener", default=None
-)
+generation_listener: ContextVar[Optional[Callable[[str], None]]] = ContextVar("generation_listener", default=None)
 
 # Set around a generate call to end it early: generation stops before the next
 # token once the event is set, and returns the text so far. Streaming dictation
@@ -251,9 +249,10 @@ class MLXQwenLLMBackend:
         if self._adapter_path:
             import json
             from pathlib import Path
-            adapter_config = json.loads((Path(self._adapter_path) / 'adapter_config.json').read_text())
+
+            adapter_config = json.loads((Path(self._adapter_path) / "adapter_config.json").read_text())
             # Adapters trained before the rename from Herga name it herga_base_path.
-            repo = adapter_config.get('kass_base_path') or adapter_config['herga_base_path']
+            repo = adapter_config.get("kass_base_path") or adapter_config["herga_base_path"]
 
         with model_load_progress(progress_model_name, is_cached):
             logger.info("Loading Qwen3 %s via MLX...", model_size)
@@ -457,7 +456,9 @@ class MLXQwenLLMBackend:
                     fed += step
                     pending = pending[len(step) :]
             while not stopped and len(generated) < max_tokens:
-                draft = propose_draft(generated, sources, min(LOOKUP_DRAFT_TOKENS, max_tokens - len(generated) - 1), cursor)
+                draft = propose_draft(
+                    generated, sources, min(LOOKUP_DRAFT_TOKENS, max_tokens - len(generated) - 1), cursor
+                )
                 with mx.stream(generation_stream):
                     logits = self.model(mx.array(pending + draft)[None], cache=cache)[0, -(len(draft) + 1) :, :]
                     logprobs = logits - mx.logsumexp(logits, axis=-1, keepdims=True)

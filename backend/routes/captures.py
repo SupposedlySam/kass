@@ -19,48 +19,54 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get('/capture/learning')
+@router.get("/capture/learning")
 def correction_learning_status():
     from ..services.correction_learning import status
     from ..services.model_improvement import manager
+
     result = status()
-    result['model'] = manager.status()
+    result["model"] = manager.status()
     return result
 
 
-@router.post('/capture/learning/run')
+@router.post("/capture/learning/run")
 def run_correction_learning():
     from ..services.correction_learning import run_job
     from ..services.model_improvement import manager
+
     result = run_job()
-    result['model'] = manager.start()
+    result["model"] = manager.start()
     return result
 
 
-@router.post('/capture/learning/activity')
+@router.post("/capture/learning/activity")
 def pause_learning_for_recording():
     from ..services.model_improvement.manager import foreground_activity
+
     foreground_activity(recording=True)
-    return {'paused': True}
+    return {"paused": True}
 
 
-@router.post('/capture/learning/cancel')
+@router.post("/capture/learning/cancel")
 def cancel_model_learning():
     from ..services.model_improvement.manager import cancel
+
     return cancel()
 
 
-@router.post('/capture/learning/rollback')
+@router.post("/capture/learning/rollback")
 def rollback_correction_learning():
     from ..services.correction_learning import rollback
     from ..services.model_improvement import manager
+
     try:
-        if manager.status()['can_rollback']:
+        if manager.status()["can_rollback"]:
             manager.rollback()
             return correction_learning_status()
         return rollback()
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MB
 
@@ -135,7 +141,11 @@ async def list_captures_endpoint(
         raise HTTPException(status_code=400, detail="offset must be >= 0")
 
     items, total = captures_service.list_captures(
-        db, limit=limit, offset=offset, app_bundle_id=app_bundle_id, unknown_app=unknown_app,
+        db,
+        limit=limit,
+        offset=offset,
+        app_bundle_id=app_bundle_id,
+        unknown_app=unknown_app,
     )
     return models.CaptureListResponse(items=items, total=total)
 

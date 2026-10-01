@@ -138,11 +138,9 @@ class LLMBackend(Protocol):
         """
         ...
 
-    def unload_model(self) -> None:
-        ...
+    def unload_model(self) -> None: ...
 
-    def is_loaded(self) -> bool:
-        ...
+    def is_loaded(self) -> bool: ...
 
 
 # Global backend instances
@@ -208,7 +206,16 @@ def _get_qwen_llm_configs() -> list[ModelConfig]:
     repo_4 = "mlx-community/Qwen3-4B-4bit"
 
     common_languages = [
-        "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it",
+        "en",
+        "zh",
+        "ja",
+        "ko",
+        "de",
+        "fr",
+        "ru",
+        "pt",
+        "es",
+        "it",
     ]
 
     return [

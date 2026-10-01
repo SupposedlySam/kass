@@ -274,8 +274,7 @@ def test_moved_corrections_become_pending_rules_for_the_new_style(storage, monke
 
 def snapshot_with(apps, *names):
     made = tuple(
-        styles.Style(name.lower(), name, index, index == 0, "standard", True)
-        for index, name in enumerate(names)
+        styles.Style(name.lower(), name, index, index == 0, "standard", True) for index, name in enumerate(names)
     )
     return styles.Snapshot(made, apps)
 
@@ -398,10 +397,24 @@ def test_style_endpoints(storage, monkeypatch):
     seed(storage)
     with storage() as db:
         db.add(CaptureSettings(id=1, llm_model="4B"))
-        db.add(Capture(id="w", audio_path="a.wav", transcript_raw="hi", app_bundle_id="net.whatsapp.WhatsApp",
-                       app_name="WhatsApp", app_category="public.app-category.social-networking"))
-        db.add(CaptureFeedback(capture_id="w", target="refined", expected_text="Hi.",
-                               snapshot=json.dumps({"transcript_raw": "hi", "app_bundle_id": "net.whatsapp.WhatsApp"})))
+        db.add(
+            Capture(
+                id="w",
+                audio_path="a.wav",
+                transcript_raw="hi",
+                app_bundle_id="net.whatsapp.WhatsApp",
+                app_name="WhatsApp",
+                app_category="public.app-category.social-networking",
+            )
+        )
+        db.add(
+            CaptureFeedback(
+                capture_id="w",
+                target="refined",
+                expected_text="Hi.",
+                snapshot=json.dumps({"transcript_raw": "hi", "app_bundle_id": "net.whatsapp.WhatsApp"}),
+            )
+        )
         db.commit()
 
     def override():

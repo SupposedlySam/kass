@@ -275,12 +275,8 @@ class CaptureSettingsResponse(BaseModel):
         default=None, description="Configured audio input deviceId (None means default microphone)"
     )
     hotkey_enabled: bool = False
-    chord_push_to_talk_keys: List[str] = Field(
-        default_factory=default_push_to_talk_chord
-    )
-    chord_toggle_to_talk_keys: List[str] = Field(
-        default_factory=default_toggle_to_talk_chord
-    )
+    chord_push_to_talk_keys: List[str] = Field(default_factory=default_push_to_talk_chord)
+    chord_toggle_to_talk_keys: List[str] = Field(default_factory=default_toggle_to_talk_chord)
     chord_command_keys: List[str] = Field(default_factory=default_command_chord)
     command_transforms: List[Transform] = Field(default_factory=default_transforms)
     # Days of capture history to keep; 0 keeps it forever.

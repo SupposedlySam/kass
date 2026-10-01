@@ -48,7 +48,9 @@ _TALKED_ABOUT = frozenset(
     " of on in at to into onto with for by from per what which whose".split()
 )
 # Before "open quote" or "end quote", only these do: "the end quote".
-_NAMED = frozenset("a an the this that these those each every another any some no our my your his her its their".split())
+_NAMED = frozenset(
+    "a an the this that these those each every another any some no our my your his her its their".split()
+)
 _PREVIOUS_WORD = re.compile(r"([\w'\u2019]+)\W*$")
 # A spoken mark: "open quote", "end quote", "unquote", "open paren", "close
 # bracket", "open curly brace", "open angle bracket" or "open caret", or a bare
@@ -235,7 +237,9 @@ def _ends_sentence(text: str, match: re.Match) -> bool:
     sentence ("He said. Quote. I'm tired.") is Whisper's pause after it.
     """
     before = text[: match.start()].rstrip(" \t,")
-    return bool(before) and before[-1] not in ".!?:;\n" and re.match(r"[ \t]*(?:[.!?]|$)", text[match.end() :]) is not None
+    return (
+        bool(before) and before[-1] not in ".!?:;\n" and re.match(r"[ \t]*(?:[.!?]|$)", text[match.end() :]) is not None
+    )
 
 
 def _mark_roles(text: str, matches: list[re.Match]) -> dict[int, str]:

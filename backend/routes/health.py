@@ -19,6 +19,7 @@ router = APIRouter()
 # When this server process started, for the uptime the status bar shows.
 STARTED_AT = time.time()
 
+
 @router.get("/")
 async def root():
     """Root endpoint."""

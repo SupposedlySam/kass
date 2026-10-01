@@ -8,6 +8,7 @@ import httpx
 import time
 from typing import List, Dict
 
+
 async def monitor_sse_stream(model_name: str, timeout: int = 300):
     """Monitor SSE stream for a model download."""
     events: List[Dict] = []
@@ -151,8 +152,8 @@ async def main():
     print(f"Last event: {events[-1]}")
 
     # Check if we got meaningful progress
-    has_progress = any(e.get('progress', 0) > 0 for e in events)
-    has_complete = any(e.get('status') == 'complete' for e in events)
+    has_progress = any(e.get("progress", 0) > 0 for e in events)
+    has_complete = any(e.get("status") == "complete" for e in events)
 
     if has_progress:
         print("✓ Progress updates received")

@@ -54,12 +54,8 @@ class CaptureSettings(Base):
     hotkey_enabled = Column(Boolean, nullable=False, default=False)
     # Lists of keytap key names (e.g. "MetaRight", "ControlRight"). Right-hand
     # modifiers by default so they don't collide with left-hand shortcuts.
-    chord_push_to_talk_keys = Column(
-        JSON, nullable=False, default=default_push_to_talk_chord
-    )
-    chord_toggle_to_talk_keys = Column(
-        JSON, nullable=False, default=default_toggle_to_talk_chord
-    )
+    chord_push_to_talk_keys = Column(JSON, nullable=False, default=default_push_to_talk_chord)
+    chord_toggle_to_talk_keys = Column(JSON, nullable=False, default=default_toggle_to_talk_chord)
     # Command Mode (docs/plans/COMMAND_MODE.md): its chord (empty = off) and
     # the saved transforms ({id, name, instruction}). It rewrites on the
     # cleanup model, llm_model.

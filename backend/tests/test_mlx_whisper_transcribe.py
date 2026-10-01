@@ -83,11 +83,15 @@ async def test_transcribe_array_uses_the_same_phrase_options_as_files(stt, tmp_p
     await stt.transcribe_array(samples, 16000, "en", "turbo", previous_text="We met and")
 
     (_, file_audio, file_options), (_, array_audio, array_options) = stt.model.calls
-    assert array_options == file_options == {
-        "language": "en",
-        "suppress_tokens": [-1, 1131],
-        "initial_prompt": "We met and",
-    }
+    assert (
+        array_options
+        == file_options
+        == {
+            "language": "en",
+            "suppress_tokens": [-1, 1131],
+            "initial_prompt": "We met and",
+        }
+    )
     np.testing.assert_array_equal(array_audio, file_audio)
 
 
