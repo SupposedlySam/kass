@@ -53,7 +53,6 @@ class TauriLifecycle implements PlatformLifecycle {
       await listen<null>('window-close-requested', async () => {
         // Only stop the server if this app instance started it; a server
         // started by hand for development keeps running.
-        // @ts-expect-error - accessing module-level variable from another module
         const serverStartedByApp = window.__kassServerStartedByApp ?? false;
 
         console.log(
