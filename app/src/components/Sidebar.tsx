@@ -68,9 +68,10 @@ export function Sidebar() {
           onRestart={update.restart}
         />
       ) : (
-        <span className="mt-auto font-mono text-[10px] text-muted-foreground/60">
-          v{update.version}
-        </span>
+        <VersionLabel
+          version={update.version}
+          className="mt-auto text-[10px] text-muted-foreground/60"
+        />
       )}
     </nav>
   );
@@ -103,8 +104,24 @@ function UpdateButton({
     >
       <Icon className={cn('h-[18px] w-[18px]', restarting && 'animate-spin')} strokeWidth={1.7} />
       {restarting ? t('nav.update.restartingLabel') : t('nav.update.label')}
-      <span className="font-mono text-[9px] opacity-80">v{latest}</span>
+      <VersionLabel version={latest} className="text-[9px] opacity-80" />
     </button>
+  );
+}
+
+/**
+ * The version, centered, with any prerelease tag ("beta.2") on its own line so
+ * it fits the narrow rail instead of overflowing it.
+ */
+function VersionLabel({ version, className }: { version: string; className?: string }) {
+  const dash = version.indexOf('-');
+  const release = dash === -1 ? version : version.slice(0, dash);
+  const prerelease = dash === -1 ? undefined : version.slice(dash + 1);
+  return (
+    <span className={cn('flex flex-col items-center font-mono leading-tight', className)}>
+      <span>v{release}</span>
+      {prerelease && <span>{prerelease}</span>}
+    </span>
   );
 }
 
