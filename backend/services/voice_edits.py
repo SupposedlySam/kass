@@ -1,20 +1,28 @@
-"""Voice edits: fix what Kass just typed by saying so (docs/plans/VOICE_EDITS.md).
+"""Voice edits: fix the text before the cursor by saying so (docs/plans/VOICE_EDITS.md).
 
-A take that opens with "fix that", "edit" or "Kass" and says what to change
-is an instruction for the text Kass typed last, not text to type:
+A take that opens with "fix that", "fix", "edit" or "Kass" and says what to
+change is an instruction for the text before the caret, not text to type:
 
 - "Fix that, Morgan not Megan" and "Morgan, not Megan": the wrong word, after "not".
 - "Edit, change Tuesday to Thursday", "replace X with Y".
 - "Fix that, delete actually", "add tomorrow after meeting".
 - "Fix that, Meghan, M-E-G-H-A-N": the spelled word replaces the word it is
   close to. Spelling reaches here joined ("MEGHAN", services/spelling.py).
+- "Fix, it's Tuesday", "fix that, Morgan": one word replaces the word of its
+  kind (a day, a month, a number or time), or else the one word that sounds
+  most like it.
+
+A bare "fix" opens so many sentences ("Fix the login bug") that it counts
+only when set apart ("Fix, ...") or followed by "it's", "should be" and the
+like.
 
 It is read from the raw transcript. Cleanup would swap the words of "change
 Tuesday to Thursday", drop "fix that", or resolve "Morgan, no, Megan" as a
 self-correction, so an edit never reaches it.
 
-The app sends the end of its last take (``last_take``), still intact in the
-field, and applies the result only where it can verify the write. Anything
+The app sends the text before the caret (``last_take``), whoever wrote it,
+and applies the result only where it can verify the write. Only a fix of
+the part Kass's last take wrote is learned from. Anything
 this can't resolve (the word isn't there, two are equally close, Whisper
 heard both words the same) is declined with a message, and nothing changes.
 """
@@ -36,17 +44,17 @@ logger = logging.getLogger(__name__)
 COMMAND_TERMS = ("Kass",)
 
 TRANSFORM_NAME = "Voice edit"
-NOTHING_TO_FIX = "Nothing to fix: Kass can only fix what it just typed"
+NOTHING_TO_FIX = "Nothing to fix: Kass can't read the text before the cursor here"
 SAY_WHAT = "Say what to fix after “fix that”"
 
 _FILLER = r"(?:um+|uh+|uhm|erm?|so|okay|ok|oh|hey|and)"
-_TRIGGER = r"(?:fix\s+that|edit|[kc]a+s+)"
+_TRIGGER = r"(?:fix(?:\s+that)?|edit|[kc]a+s+)"
 _OPENING = re.compile(
     rf"^[^\w]*(?:{_FILLER}\b[^\w]*)*(?P<triggers>(?:{_TRIGGER}\b(?P<sep>[^\w]*)){{1,2}})",
     re.IGNORECASE,
 )
-# A word, with "p.m.", "don't" and unjoined spelling ("M-E-G") kept whole.
-_WORD = re.compile(r"\w+(?:['\u2019.\-]\w+)*")
+# A word, with "p.m.", "don't", "3:30" and unjoined spelling ("M-E-G") kept whole.
+_WORD = re.compile(r"\w+(?:['\u2019.\-]\w+|(?<=\d):\d\d\b)*")
 _TIME = re.compile(r"\d{1,2}(?::\d\d)?")
 
 # Longest sides a spoken edit has: longer is a sentence being dictated.
@@ -65,6 +73,24 @@ _VERBS = {
 }
 # Words around the spelled letters that aren't the word being fixed.
 _SPELLING = {"spelled", "spelt", "spell", "like", "as", "it's", "its", "that's", "is", "with", "a", "an", "the"}
+# Kinds of word one said word replaces another of: "it's Tuesday" fixes
+# "Monday". Months and days count only capitalized in the text ("we may").
+_DAYS = {
+    *("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
+    *("today", "tonight", "tomorrow", "yesterday"),
+}
+_MONTHS = {
+    *("january", "february", "march", "april", "may", "june", "july"),
+    *("august", "september", "october", "november", "december"),
+}
+_NUMBER_WORDS = {
+    *("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"),
+    *("eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen"),
+    *("eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy"),
+    *("eighty", "ninety", "hundred", "noon", "midnight"),
+}
+_HALF_DAY = re.compile(r"\s*[ap]\.?m\.?$", re.IGNORECASE)
+_NUMBER = re.compile(r"\d+(?:[:,]\d+)*(?:am|pm|st|nd|rd|th)?")
 _LEAD_INS = (
     ("please",),
     ("it's",),
@@ -107,6 +133,8 @@ class Instruction:
     spelled: bool = False
     # "X, no, Y": whichever of the two the take has is the wrong one.
     either: bool = False
+    # One word said alone: it replaces the word like it in the take.
+    alike: bool = False
     # Add ``write`` "before" or "after" ``find`` instead of replacing it.
     place: str | None = None
     said: str = ""
@@ -168,14 +196,16 @@ def words(text: str) -> list[Word]:
     return merged
 
 
-def opening(text: str) -> tuple[str, bool] | None:
-    """What follows an opening "fix that", "edit" or "Kass", and whether a
-    mark (or the end) set it apart; None when the text doesn't open with one."""
+def opening(text: str) -> tuple[str, bool, bool] | None:
+    """What follows an opening "fix that", "fix", "edit" or "Kass", whether a
+    mark (or the end) set it apart, and whether it was a bare "fix"; None
+    when the text doesn't open with one."""
     match = _OPENING.match(text)
     if match is None:
         return None
     rest = text[match.end() :]
-    return rest, bool(match.group("sep").strip()) or not rest.strip()
+    bare = re.fullmatch(r"fix\W*", match.group("triggers"), re.IGNORECASE) is not None
+    return rest, bool(match.group("sep").strip()) or not rest.strip(), bare
 
 
 def starts_edit(text: str) -> bool:
@@ -184,7 +214,7 @@ def starts_edit(text: str) -> bool:
     found = opening(text)
     if found is None:
         return False
-    _, marked = found
+    _, marked, _ = found
     return marked or parse(text) is not None
 
 
@@ -207,8 +237,9 @@ def _index(found: list[Word], keys: set[str], last: bool = False) -> int | None:
     return (hits[-1] if last else hits[0]) if hits else None
 
 
-def _instruction(found: list[Word], said: str) -> Instruction | None:
-    """The edit ``found`` (the words after the trigger) says, by its general forms."""
+def _instruction(found: list[Word], said: str, alone: bool = True) -> Instruction | None:
+    """The edit ``found`` (the words after the trigger) says, by its general
+    forms; with ``alone``, also by one word on its own."""
     if not found:
         return None
     head = found[0].key
@@ -245,6 +276,8 @@ def _instruction(found: list[Word], said: str) -> Instruction | None:
         hint = [w for w in found[:-1] if w.key not in _SPELLING]
         if len(hint) <= 2:
             return Instruction(tuple(hint), (found[-1],), spelled=True, said=said)
+    if alone and len(found) == 1:
+        return Instruction((), (found[0],), alike=True, said=said)
     return None
 
 
@@ -261,10 +294,17 @@ def parse(said: str) -> Instruction | Declined | None:
     found = opening(said)
     if found is None:
         return None
-    rest, marked = found
+    rest, marked, bare = found
     after = words(said)
     offset = len(said) - len(rest)
-    instruction = _instruction(_strip_lead_ins([w for w in after if w.start >= offset]), said)
+    told = [w for w in after if w.start >= offset]
+    stripped = _strip_lead_ins(told)
+    led = len(stripped) < len(told)
+    if bare and not marked and not led:
+        # "Fix the login bug": a sentence, whatever its words look like.
+        return None
+    # A word alone is an edit only where it can't be the start of a sentence.
+    instruction = _instruction(stripped, said, alone=marked or led)
     if instruction is None:
         return Declined(SAY_WHAT) if marked and not rest.strip(" \t.,!?;:") else None
     find, write = instruction.find, instruction.write
@@ -278,7 +318,7 @@ def _joined(found: tuple[Word, ...], said: str) -> str:
     return said[found[0].start : found[-1].end] if found else ""
 
 
-# -- matching in the last take --------------------------------------------------
+# -- matching in the text ------------------------------------------------------
 
 
 def _distance(a: str, b: str, limit: int) -> int:
@@ -388,6 +428,9 @@ def _written(instruction: Instruction, take: str, start: int, end: int) -> str:
         text = (text[:1].upper() if upper else text[:1].lower()) + text[1:]
     if _opens(take, start) and target[:1].isupper() and not instruction.place:
         text = text[:1].upper() + text[1:]
+    if instruction.alike and (half := _HALF_DAY.search(target)) and not _HALF_DAY.search(text):
+        # "It's 3:30" keeps the "p.m." of the time it fixes.
+        text += half.group() if text[-1:].isdigit() else " " + half.group().lstrip()
     return text
 
 
@@ -420,10 +463,46 @@ def _apply(instruction: Instruction, take: str, start: int, end: int) -> str:
     return take[:start] + _written(instruction, take, start, end) + take[end:]
 
 
+def _kind(word: Word) -> str | None:
+    """The kind of word ``word`` is, for one said alone to replace."""
+    if word.key in _DAYS:
+        return "day"
+    if word.key in _MONTHS:
+        return "month"
+    if word.key in _NUMBER_WORDS or _NUMBER.fullmatch(word.key):
+        return "number"
+    return None
+
+
+def _find_alike(said: Word, take: str, found: list[Word]) -> tuple[int, int] | Declined | None:
+    """The word in the take that ``said`` replaces: the one of its kind
+    nearest the caret, or else the one that sounds most like it, when no
+    other sounds as close."""
+    kind = _kind(said)
+    if kind is not None:
+        candidates = [
+            ((len(take) - heard.end,), heard.start, heard.end)
+            for heard in found
+            if _kind(heard) == kind and heard.key != said.key and (kind == "number" or heard.text[:1].isupper())
+        ]
+        return _best(candidates)
+    if len(said.key) < 3 or not said.key.isalpha():
+        return None
+    candidates = []
+    for heard in found:
+        level = _spelled_level(said.key, heard)
+        if level is not None:
+            candidates.append((level, heard.start, heard.end))
+    candidates.sort(key=lambda c: c[0])
+    if len(candidates) > 1 and candidates[0][0] == candidates[1][0]:
+        return Declined(f"More than one word sounds like “{said.text}”, so nothing changed")
+    return (candidates[0][1], candidates[0][2]) if candidates else None
+
+
 def _target(instruction: Instruction, take: str, found: list[Word]) -> tuple[int, int, bool] | Declined:
     """Where the edit goes in the take, and whether an "X, no, Y" edit found
     its second side there (so that side is the wrong one)."""
-    missing = Declined(f"Couldn't find “{_joined(instruction.find, instruction.said)}” in what Kass typed")
+    missing = Declined(f"Couldn't find “{_joined(instruction.find, instruction.said)}” in the text before the cursor")
     if instruction.either:
         sides = [_find(instruction.find, take, found), _find(instruction.write, take, found)]
         if declined := next((side for side in sides if isinstance(side, Declined)), None):
@@ -433,6 +512,19 @@ def _target(instruction: Instruction, take: str, found: list[Word]) -> tuple[int
             return Declined("Heard both words, so nothing changed") if hits else missing
         (start, end), swap = hits[0]
         return start, end, bool(swap)
+    if instruction.alike:
+        said = instruction.write[0]
+        span = _find_alike(said, take, found)
+        if span is None:
+            if any(heard.key == said.key for heard in found):
+                return Declined(f"“{said.text}” is already written that way")
+            like = {"day": "day", "month": "month", "number": "number or time"}.get(_kind(said) or "")
+            return Declined(
+                f"No {like} in the text before the cursor"
+                if like
+                else f"Nothing like “{said.text}” in the text before the cursor"
+            )
+        return span if isinstance(span, Declined) else (*span, False)
     if instruction.spelled:
         letters = instruction.write[0].key
         span = _find(instruction.find, take, found) if instruction.find else None
@@ -441,14 +533,14 @@ def _target(instruction: Instruction, take: str, found: list[Word]) -> tuple[int
             span = None
         span = span or _find_spelled(letters, take, found)
         if span is None:
-            return Declined(f"Nothing close to “{_shaped(letters, 'Aa')}” in what Kass typed")
+            return Declined(f"Nothing close to “{_shaped(letters, 'Aa')}” in the text before the cursor")
     else:
         span = _find(instruction.find, take, found) or missing
     return span if isinstance(span, Declined) else (*span, False)
 
 
 def plan(said: str, take: str | None) -> Planned | Declined | None:
-    """The edit ``said`` makes to ``take``, the end of Kass's last take;
+    """The edit ``said`` makes to ``take``, the text before the caret;
     None when ``said`` isn't an edit."""
     instruction = parse(said)
     if not isinstance(instruction, Instruction):
@@ -474,6 +566,19 @@ def plan(said: str, take: str | None) -> Planned | Declined | None:
         described = f"“{replaced}” → “{written}”"
     spelled = instruction.write[0].text if instruction.spelled else None
     return Planned(take, after, described, replaced, spelled)
+
+
+def changes_end(planned: Planned, chars: int) -> bool:
+    """Whether the edit changes only the last ``chars`` of the text: the
+    part Kass's last take wrote."""
+    before, after = planned.before, planned.after
+    start = 0
+    while start < min(len(before), len(after)) and before[start] == after[start]:
+        start += 1
+    # Whole words: a change that starts mid-word starts at the word.
+    while start > 0 and before[start - 1].isalnum():
+        start -= 1
+    return chars > 0 and start >= len(before) - chars
 
 
 def learn_from(

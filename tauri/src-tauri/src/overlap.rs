@@ -10,7 +10,8 @@
 //!
 //! 1. The caret continues a sentence (the same rule as the backend's
 //!    `phrase_seams.continues_sentence`) and is not inside a word. A side
-//!    that can't be read trims nothing.
+//!    that can't be read trims nothing. A repeat of the whole rest of the
+//!    sentence (see 4) may also follow a sentence end or the field's start.
 //! 2. Only the rest of the caret's sentence counts: the text after the caret
 //!    up to `.?!…` before a capital or the end, or up to a line break. It
 //!    must start right at the caret, after nothing but whitespace.
@@ -19,6 +20,9 @@
 //!    whitespace, hyphens, slashes and digit/letter changes
 //!    (`3pm` = `3 pm` = `3 p.m.`, curly and straight apostrophes alike).
 //! 4. At least two field words overlap, and at least one dictated word stays.
+//!    One word is enough when it is the whole rest of the field's sentence
+//!    and the dictation ends its sentence on it too: `Thanks. | Morgan.` +
+//!    "See you Tuesday, Morgan."
 //! 5. A word may differ by one edit (Levenshtein) when both are at least five
 //!    characters, start with the same letter and hold no digits: at most one
 //!    such word in three, and never all of them.
@@ -241,11 +245,11 @@ fn continues_sentence(before: &str) -> bool {
 /// the field on each side of the caret, `None` where unreadable.
 fn kept(before: Option<&str>, text: &str, after: Option<&str>) -> Option<usize> {
     let (before, after) = (before?, after?);
-    if !continues_sentence(before) {
-        return None;
-    }
+    let mid_sentence = continues_sentence(before);
     // A caret inside a word is not where a phrase is said again from.
-    if before.chars().last()?.is_alphanumeric() && after.chars().next()?.is_alphanumeric() {
+    if before.chars().last().is_some_and(char::is_alphanumeric)
+        && after.chars().next().is_some_and(char::is_alphanumeric)
+    {
         return None;
     }
     let said = tokenize(text);
@@ -291,8 +295,11 @@ fn kept(before: Option<&str>, text: &str, after: Option<&str>) -> Option<usize> 
             .collect();
         field_words.dedup();
         let adds_a_word = said[..said.len() - k].iter().any(Token::alnum);
+        // The whole rest of the field's sentence, said to the end of one.
+        let whole = field_start[k - 1].ends_sentence && said_end[k - 1].ends_sentence;
+        let enough = whole || (mid_sentence && field_words.len() >= 2);
         // A shorter overlap would match fewer words: the longest decides.
-        if field_words.len() < 2 || !adds_a_word || fuzzy * 3 > k + 1 || fuzzy == k {
+        if !enough || !adds_a_word || fuzzy * 3 > k + 1 || fuzzy == k {
             return None;
         }
         return Some(text[..said_end[0].start].trim_end().len());
@@ -475,11 +482,41 @@ mod tests {
             "At noon tomorrow we ship.",
             "Done. We meet at noon tomorrow. At noon tomorrow we ship.",
         );
-        keeps(
+    }
+
+    #[test]
+    fn a_repeat_of_the_whole_rest_of_the_sentence_is_dropped() {
+        // One word, after a sentence end: the dictation was said through it.
+        trims(
+            "Thanks. ",
+            "See you on Tuesday, Morgan.",
+            "Morgan.",
+            "Thanks. See you on Tuesday, Morgan.",
+        );
+        trims(
             "",
             "We meet at noon tomorrow.",
             "at noon tomorrow.",
-            "We meet at noon tomorrow at noon tomorrow.",
+            "We meet at noon tomorrow.",
+        );
+        trims(
+            "He said ",
+            "it's done, thanks.",
+            "thanks.",
+            "He said it's done, thanks.",
+        );
+        // The dictation goes on past the word, or the field's sentence does.
+        keeps(
+            "Thanks. ",
+            "See you, Morgan",
+            "Morgan.",
+            "Thanks. See you, Morgan Morgan.",
+        );
+        keeps(
+            "Thanks. ",
+            "See you, Morgan.",
+            "Morgan will call.",
+            "Thanks. See you, Morgan. Morgan will call.",
         );
     }
 

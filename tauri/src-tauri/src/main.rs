@@ -1296,6 +1296,16 @@ pub(crate) async fn paste_around_clipboard(
 /// windows and restoring its last-focused field before keys arrive.
 const POST_ACTIVATE_SETTLE: std::time::Duration = std::time::Duration::from_millis(120);
 
+/// Make `pid` frontmost, for steps that send key events. Blocking.
+fn bring_to_front(pid: i32) -> Result<(), String> {
+    if focus_capture::frontmost_pid() == Some(pid) {
+        return Ok(());
+    }
+    focus_capture::activate_pid(pid)?;
+    std::thread::sleep(POST_ACTIVATE_SETTLE);
+    Ok(())
+}
+
 /// The insertion chain for a target app, and with `track` the text as
 /// owned where the Accessibility step wrote it. Blocking.
 fn run_insert_chain(
@@ -1306,14 +1316,7 @@ fn run_insert_chain(
     prepared: Option<clipboard::ClipboardSnapshot>,
     track: bool,
 ) -> (insert_chain::Report, Option<text_insert::Owned>) {
-    let bring_front = || {
-        if focus_capture::frontmost_pid() == Some(pid) {
-            return Ok(());
-        }
-        focus_capture::activate_pid(pid)?;
-        std::thread::sleep(POST_ACTIVATE_SETTLE);
-        Ok(())
-    };
+    let bring_front = || bring_to_front(pid);
     let in_front = |inner| insert_chain::InFront {
         inner,
         bring_front: &bring_front,
@@ -1351,6 +1354,38 @@ fn run_insert_chain(
         .then(|| text_insert::owned_before_focused(pid, bundle_id, text))
         .flatten();
     (report, owned)
+}
+
+/// Type or paste `text` over the selection in `pid`'s focused field, for a
+/// voice edit where Accessibility can't write it. True when it was sent; the
+/// edit reads the field back. Blocking.
+pub(crate) fn type_over_selection(
+    pid: i32,
+    bundle_id: Option<&str>,
+    role: Option<&str>,
+    text: &str,
+) -> bool {
+    let bring_front = || bring_to_front(pid);
+    let in_front = |inner| insert_chain::InFront {
+        inner,
+        bring_front: &bring_front,
+    };
+    let keys = keystroke_insert::Keystrokes::new();
+    let paste = clipboard::Paste::new(None);
+    let (keys, paste) = (in_front(&keys), in_front(&paste));
+    let chain: [&dyn insert_chain::Inserter; 2] = [&keys, &paste];
+    let report = insert_chain::deliver(
+        &chain,
+        &insert_chain::Request {
+            pid,
+            bundle_id,
+            role,
+            text,
+        },
+    );
+    let app = bundle_id.unwrap_or("unknown app");
+    eprintln!("[kass] voice edit typed into {app}: {}", report.summary());
+    matches!(report.delivery(), insert_chain::Delivery::Inserted { .. })
 }
 
 /// Inspect the currently focused UI element. Returns the owning app's PID,

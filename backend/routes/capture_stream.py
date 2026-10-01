@@ -171,8 +171,8 @@ async def stream_capture(websocket: WebSocket):
                 session.set_context(command.get("before"))
                 continue
             if command.get("type") == "last_take":
-                # The end of the take Kass typed last, which a voice edit may change.
-                session.set_last_take(command.get("text"), command.get("capture_id"))
+                # The text before the caret, which a voice edit may change.
+                session.set_last_take(command.get("text"), command.get("capture_id"), command.get("own_chars"))
                 continue
             if command.get("type") == "app":
                 # The target app, from the focus snapshot at key-down.

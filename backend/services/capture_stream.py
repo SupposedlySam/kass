@@ -28,8 +28,9 @@ for a style by name ("use formal mode", "make this more personal") is written
 in that style instead; the words themselves are dropped.
 
 A dictation that opens with "fix that", "edit" or "Kass" and says what to
-change is a voice edit of the take Kass typed last, which the client sends
-in a ``last_take`` message (docs/plans/VOICE_EDITS.md). Its words are never
+change is a voice edit of the text before the caret, whoever wrote it, which
+the client sends in a ``last_take`` message with how much of its end Kass's
+last take wrote (docs/plans/VOICE_EDITS.md). Its words are never
 cleaned up; at finish they become the take's text before and after the
 edit, which the client applies.
 
@@ -195,10 +196,12 @@ class StreamingCapture:
         # (docs/plans/MID_SENTENCE_DICTATION.md). Never saved.
         self.field_before = ""
         self.continues = False
-        # The end of the take Kass typed last, still in the field, and its
-        # capture, from the last_take command. Never saved but in an edit's.
+        # The text before the caret, which a voice edit may change, from the
+        # last_take command, and how many of its last chars Kass's last take
+        # wrote, with that take's capture. Never saved but in an edit's.
         self.last_take = None
         self.last_take_capture_id = None
+        self.last_take_own_chars = 0
         # A voice edit: the take opened with one, and whether the client was
         # told while the user speaks. At finish, what it changes.
         self.editing = False
@@ -473,14 +476,21 @@ class StreamingCapture:
         self.field_before = before[-FIELD_CONTEXT_CHARS:]
         self.continues = continues_sentence(self.field_before)
 
-    def set_last_take(self, text, capture_id=None) -> None:
-        """The end of the take Kass typed last, still in the field, which a
-        voice edit may change; known shortly after the take starts."""
+    def set_last_take(self, text, capture_id=None, own_chars=None) -> None:
+        """The text before the caret, which a voice edit may change, known
+        shortly after the take starts; ``own_chars`` of its end were written
+        by the capture ``capture_id`` (all of it when not given, as older
+        clients sent only Kass's own take)."""
         if not isinstance(text, str) or len(text) > LAST_TAKE_CHARS:
             raise ValueError(f"The last take must be text of at most {LAST_TAKE_CHARS} characters")
         if capture_id is not None and not isinstance(capture_id, str):
             raise ValueError("Invalid capture id")
+        if own_chars is None:
+            own_chars = len(text) if capture_id else 0
+        if isinstance(own_chars, bool) or not isinstance(own_chars, int) or not 0 <= own_chars <= len(text):
+            raise ValueError("Invalid own_chars")
         self.last_take, self.last_take_capture_id = text, capture_id
+        self.last_take_own_chars = own_chars
 
     @property
     def edit_possible(self) -> bool:
@@ -538,7 +548,10 @@ class StreamingCapture:
         """What the edit teaches (a report on the take it fixed, a spelled
         word). Blocking: run after the final event is sent."""
         if isinstance(self.edit, voice_edits.Planned):
-            voice_edits.learn_from(self.edit, self.last_take_capture_id, self.app_bundle_id, self.id)
+            # Only a fix of what Kass wrote is reported on its capture.
+            fixed_own = voice_edits.changes_end(self.edit, self.last_take_own_chars)
+            capture_id = self.last_take_capture_id if fixed_own else None
+            voice_edits.learn_from(self.edit, capture_id, self.app_bundle_id, self.id)
 
     @property
     def is_command(self) -> bool:

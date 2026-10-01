@@ -88,17 +88,20 @@ Start a dictation by naming a [writing style](/docs/writing-styles/) and Kass us
 
 "Formal" also matches a style called Professional, and "casual" matches Informal or Relaxed. The instruction itself is left out of the text. The pill shows the style's name and plays a short sound so you know it switched.
 
-## Fix what Kass just typed
+## Fix text by voice
 
 *Beta: turn on **Beta updates** in **Settings › General**.*
 
-Hold your dictation keys and start with **"fix that"** or **"edit"** to change your last dictation instead of adding to it. No need to select anything:
+Hold your dictation keys and start with **"fix that"**, **"fix"** or **"edit"** to change the text before your cursor instead of adding to it. It works on any text there, whether Kass typed it or you did. No need to select anything:
 
 - "fix that, Morgan not Megan"
 - "edit, change Tuesday to Thursday"
 - "fix that, delete actually"
 - "fix that, add tomorrow after meeting"
+- "fix, it's Thursday"
+
+Say just the right word and Kass replaces the word of the same kind: "it's Thursday" fixes the day, "it's 3:30" the time, "it's April" the month. For a name, Kass picks the word that sounds most like it: "fix that, Morgan" fixes "Megan". If two words are equally close, nothing changes. A plain "fix" needs a pause after it or "it's", so "Fix the login bug" is still typed as usual.
 
 For a name Kass keeps hearing wrong, say it and spell it: "fix that, Meghan, M-E-G-H-A-N". Kass also adds the name to your dictionary, marked **spelled aloud**, so it's heard right from then on without changing a real Megan. You can also start with "Kass": "Kass, change Tuesday to Thursday".
 
-Kass fixes only its last dictation, and only while it's still as Kass left it, with the cursor right after it. If you've typed since, or the app doesn't let Kass edit its text (Safari pages, Firefox), you hear the error sound and nothing changes. Each fix shows in Captures with the text before and after. Turn it off with **Voice edits** in **Settings › Dictation**.
+Kass looks at the text right before the cursor, up to about a page. If the app doesn't let Kass read or edit its text (terminals, Safari pages, Firefox), or the text changes while you speak, you hear the error sound and nothing changes. When the fix is in something Kass just dictated, Kass also learns from it. Each fix shows in Captures with the text before and after. Turn it off with **Voice edits** in **Settings › Dictation**.

@@ -98,11 +98,18 @@ pub fn context_message(before: &str) -> String {
     serde_json::json!({ "type": "context", "before": before }).to_string()
 }
 
-/// The end of the take Kass typed last and the capture that wrote it,
-/// which a voice edit may change (docs/plans/VOICE_EDITS.md). Older servers
-/// reject unknown messages, so it is only sent while voice edits are on.
-pub fn last_take_message(text: &str, capture_id: Option<&str>) -> String {
-    serde_json::json!({ "type": "last_take", "text": text, "capture_id": capture_id }).to_string()
+/// The text before the caret, which a voice edit may change, and how many
+/// of its last chars Kass's last take wrote, with the capture that wrote
+/// them (docs/plans/VOICE_EDITS.md). Older servers reject unknown messages,
+/// so it is only sent while voice edits are on.
+pub fn last_take_message(text: &str, capture_id: Option<&str>, own_chars: usize) -> String {
+    serde_json::json!({
+        "type": "last_take",
+        "text": text,
+        "capture_id": capture_id,
+        "own_chars": own_chars,
+    })
+    .to_string()
 }
 
 /// The text a command take rewrites, read just after key-down.

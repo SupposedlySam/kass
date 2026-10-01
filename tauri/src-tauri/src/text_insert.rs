@@ -134,6 +134,9 @@ pub(crate) const CLIPBOARD_ONLY_BUNDLES: &[&str] = &[
 /// successful set, and how long to wait between reads.
 pub const VERIFY_POLLS: u32 = 3;
 pub const VERIFY_POLL_INTERVAL: Duration = Duration::from_millis(15);
+/// Polls for words typed or pasted over the selection instead: a paste can
+/// take a few hundred milliseconds to land (`clipboard::PASTE_CONSUME`).
+const TYPED_VERIFY_POLLS: u32 = 40;
 
 /// UTF-16 length of `text`, the unit AX ranges and counts use.
 pub fn utf16_len(text: &str) -> i64 {
@@ -551,7 +554,7 @@ impl Owned {
         }
     }
 
-    fn end(&self) -> i64 {
+    pub fn end(&self) -> i64 {
         self.start + utf16_len(&self.text)
     }
 }
@@ -628,16 +631,24 @@ fn mid_word(text: &str, at: usize) -> bool {
     matches!(around, (Some(a), Some(b)) if a.is_alphanumeric() && b.is_alphanumeric())
 }
 
+/// Types or pastes text over the selection of the focused app, for a field
+/// whose `AXSelectedText` can't be set (Messages). False when nothing was
+/// sent. Blocking.
+pub type TypeIn<'a> = &'a dyn Fn(&str) -> bool;
+
 /// Make the owned text read `text`, rewriting only the part after what the
 /// two share, and with `keep_tail` also leaving the end they share in place
 /// (a voice edit changes one word), then putting the caret back after it.
-/// `before` is the [`intact`] state of the field.
+/// `before` is the [`intact`] state of the field. With `typed`, the new part
+/// is typed or pasted over the selection instead of set over Accessibility,
+/// and read back the same way.
 fn rewrite<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     before: Observation,
     text: &str,
     keep_tail: bool,
+    typed: Option<TypeIn>,
     mut sleep: impl FnMut(Duration),
 ) -> Result<Owned, LiveError> {
     let mut keep = common_prefix(&owned.text, text);
@@ -659,6 +670,14 @@ fn rewrite<T: AxTextTarget>(
                 .unwrap_or(shared.len());
         }
     }
+    if typed.is_some() && keep + tail == text.len() {
+        // Nothing to type for a removal: retype the character before it.
+        if let Some((at, _)) = owned.text[..keep].char_indices().next_back() {
+            keep = at;
+        } else if let Some(c) = owned.text[owned.text.len() - tail..].chars().next() {
+            tail -= c.len_utf8();
+        }
+    }
     let kept16 = utf16_len(&owned.text[..keep]);
     let tail16 = utf16_len(&owned.text[owned.text.len() - tail..]);
     let new_part = &text[keep..text.len() - tail];
@@ -676,7 +695,10 @@ fn rewrite<T: AxTextTarget>(
             )),
         };
     }
-    let set_ok = target.set_selected_text(new_part).is_ok();
+    let set_ok = match typed {
+        Some(type_in) => type_in(new_part),
+        None => target.set_selected_text(new_part).is_ok(),
+    };
     let count0 = before.char_count.unwrap_or_default();
     let written = Owned {
         start: owned.start,
@@ -699,7 +721,11 @@ fn rewrite<T: AxTextTarget>(
         }),
         char_count: Some(count0),
     };
-    let mut polls_left = VERIFY_POLLS;
+    let mut polls_left = if typed.is_some() {
+        TYPED_VERIFY_POLLS
+    } else {
+        VERIFY_POLLS
+    };
     loop {
         let after = target.observe();
         if after == expected && text_in(target, written.range()).as_deref() == Some(text) {
@@ -709,7 +735,9 @@ fn rewrite<T: AxTextTarget>(
             }
             return Ok(written);
         }
-        if after != untouched {
+        // Typed words land a few at a time; only the last read counts.
+        let settled = typed.is_none() || !set_ok || polls_left == 0;
+        if after != untouched && settled {
             return Err(LiveError::Uncertain(
                 "The dictated text did not read back as written.".into(),
             ));
@@ -781,7 +809,7 @@ pub fn extend_live<T: AxTextTarget>(
     if text.len() == owned.text.len() {
         return Ok(owned.clone());
     }
-    rewrite(target, owned, before, text, false, sleep)
+    rewrite(target, owned, before, text, false, None, sleep)
 }
 
 /// Make the owned text exactly `final_text`, fitted to the text around it
@@ -810,7 +838,7 @@ pub fn finish_live<T: AxTextTarget>(
         return Ok(owned.clone());
     }
     let before = state.ok_or(LiveError::Edited)?;
-    rewrite(target, owned, before, final_text, false, sleep)
+    rewrite(target, owned, before, final_text, false, None, sleep)
 }
 
 /// [`begin_live`] on the focused element of the app with `pid`. Blocking.
@@ -878,6 +906,56 @@ pub fn owned_before_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Op
     owned_before_caret(&element, bundle_id, text)
 }
 
+/// UTF-16 units before the caret a voice edit may change. Within the
+/// server's `LAST_TAKE_CHARS`.
+pub const EDITABLE_BEFORE: i64 = 1000;
+
+/// The text right before a bare caret, up to `units` of it from the start
+/// of a word: what a voice edit may change, whoever wrote it. `None` where
+/// it can't be read or there is none.
+pub fn owned_near_caret<T: AxTextTarget>(
+    target: &T,
+    bundle_id: Option<&str>,
+    units: i64,
+) -> Option<Owned> {
+    if !context_readable(target, bundle_id) {
+        return None;
+    }
+    let caret = target.observe().selection.filter(|s| s.length == 0)?;
+    let from = (caret.location - units).max(0);
+    let read = text_in(
+        target,
+        TextRange {
+            location: from,
+            length: caret.location - from,
+        },
+    )?;
+    // Cut short, the first word may be partial.
+    let cut = match from {
+        0 => 0,
+        _ => read.find(char::is_whitespace)?,
+    };
+    let text = read[cut..].trim_start();
+    if text.trim().is_empty() {
+        return None;
+    }
+    Some(Owned {
+        start: from + utf16_len(&read[..read.len() - text.len()]),
+        text: text.to_string(),
+        join: join::Context::default(),
+    })
+}
+
+/// [`owned_near_caret`] in `pid`'s focused element, where an edit could be
+/// written back. Blocking.
+pub fn owned_near_focused(pid: i32, bundle_id: Option<&str>) -> Option<Owned> {
+    if !writes_at_caret(pid) {
+        return None;
+    }
+    let element = macos::FocusedElement::of_app(pid)?;
+    owned_near_caret(&element, bundle_id, EDITABLE_BEFORE)
+}
+
 /// Why a voice edit changed nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditError {
@@ -895,13 +973,15 @@ pub enum EditError {
 /// Make the owned take end in `after` instead of `before` (the part the
 /// server saw), changing only what differs. Nothing is written unless the
 /// field still shows the take with the caret after it, and a write the app
-/// ignores leaves the field as it was.
+/// ignores leaves the field as it was. Where `AXSelectedText` can't be set,
+/// the new words go in with `type_in`.
 pub fn edit_owned<T: AxTextTarget>(
     target: &T,
     owned: &Owned,
     before: &str,
     after: &str,
     writes_at_caret: bool,
+    type_in: TypeIn,
     sleep: impl FnMut(Duration),
 ) -> Result<Owned, EditError> {
     if !writes_at_caret {
@@ -913,7 +993,8 @@ pub fn edit_owned<T: AxTextTarget>(
     if text == owned.text {
         return Ok(owned.clone());
     }
-    rewrite(target, owned, now, &text, true, sleep).map_err(|error| match error {
+    let typed = (!target.is_selected_text_settable()).then_some(type_in);
+    rewrite(target, owned, now, &text, true, typed, sleep).map_err(|error| match error {
         LiveError::Edited => EditError::Changed,
         LiveError::NotApplied => EditError::NotApplied,
         LiveError::Uncertain(message) => EditError::Uncertain(message),
@@ -927,10 +1008,19 @@ pub fn edit_focused(
     owned: &Owned,
     before: &str,
     after: &str,
+    type_in: TypeIn,
 ) -> Result<Owned, EditError> {
     let writes = writes_at_caret(pid);
     match macos::FocusedElement::of_app(pid) {
-        Some(element) => edit_owned(&element, owned, before, after, writes, std::thread::sleep),
+        Some(element) => edit_owned(
+            &element,
+            owned,
+            before,
+            after,
+            writes,
+            type_in,
+            std::thread::sleep,
+        ),
         None => Err(EditError::Changed),
     }
 }
@@ -2427,7 +2517,7 @@ mod tests {
         before: &str,
         after: &str,
     ) -> Result<Owned, EditError> {
-        edit_owned(field, owned, before, after, true, |_| {})
+        edit_owned(field, owned, before, after, true, &|_| false, |_| {})
     }
 
     #[test]
@@ -2442,6 +2532,40 @@ mod tests {
         let field = FakeField::new("ls -la", range(6, 0));
         assert_eq!(
             owned_before_caret(&field, Some("com.apple.Terminal"), "ls -la"),
+            None
+        );
+    }
+
+    #[test]
+    fn any_text_before_the_caret_can_be_edited() {
+        let text = "I typed this. Hi Megan";
+        let field = FakeField::new(text, range(utf16_len(text), 0));
+        let owned = owned_near_caret(&field, Some("com.apple.MobileSMS"), 1000).unwrap();
+        assert_eq!((owned.start, owned.text.as_str()), (0, text));
+        let after = edit(&field, &owned, text, "I typed this. Hi Morgan").unwrap();
+        assert_eq!(field.contents(), "I typed this. Hi Morgan");
+        assert_eq!(after.end(), utf16_len("I typed this. Hi Morgan"));
+    }
+
+    #[test]
+    fn text_before_the_caret_starts_at_a_whole_word() {
+        let text = "one two three four";
+        let field = FakeField::new(text, range(utf16_len(text), 0));
+        let owned = owned_near_caret(&field, None, 12).unwrap();
+        // 12 units start inside "two", so it is left out.
+        assert_eq!((owned.start, owned.text.as_str()), (8, "three four"));
+        assert_eq!(owned.end(), utf16_len(text));
+    }
+
+    #[test]
+    fn nothing_to_edit_without_text_before_a_bare_caret() {
+        let field = FakeField::new("Hi Megan", range(0, 2));
+        assert_eq!(owned_near_caret(&field, None, 1000), None);
+        let field = FakeField::new("  ", range(2, 0));
+        assert_eq!(owned_near_caret(&field, None, 1000), None);
+        let field = FakeField::new("ls -la", range(6, 0));
+        assert_eq!(
+            owned_near_caret(&field, Some("com.apple.Terminal"), 1000),
             None
         );
     }
@@ -2520,11 +2644,72 @@ mod tests {
         ));
     }
 
+    /// [`edit`] in a field like Messages', whose `AXSelectedText` can't be
+    /// set: the new words are typed over the selection instead, landing
+    /// unless `lands` is false. Returns what was typed.
+    fn edit_typed(
+        field: &FakeField,
+        owned: &Owned,
+        after: &str,
+        lands: bool,
+    ) -> (Result<Owned, EditError>, Vec<String>) {
+        let typed = RefCell::new(Vec::new());
+        let type_in = |text: &str| {
+            typed.borrow_mut().push(text.to_string());
+            if lands {
+                field.apply(text);
+            }
+            true
+        };
+        let result = edit_owned(field, owned, TAKE, after, true, &type_in, |_| {});
+        (result, typed.into_inner())
+    }
+
+    #[test]
+    fn a_fix_is_typed_where_accessibility_cannot_write_it() {
+        let (mut field, owned) = after_a_take();
+        field.settable = false;
+        let (result, typed) = edit_typed(&field, &owned, &TAKE.replace("Megan", "Morgan"), true);
+        assert_eq!(result.unwrap().text, TAKE.replace("Megan", "Morgan"));
+        assert_eq!(typed, ["Morgan"]);
+        assert_eq!(field.set_calls.get(), 0);
+        assert_eq!(field.contents(), "Note: Hi Morgan, see you Tuesday.");
+        assert_eq!(field.sel.get(), range(utf16_len(&field.contents()), 0));
+    }
+
+    #[test]
+    fn a_removal_retypes_the_character_before_it() {
+        let (mut field, owned) = after_a_take();
+        field.settable = false;
+        let (result, typed) = edit_typed(&field, &owned, "Hi Megan, see you.", true);
+        assert_eq!(result.unwrap().text, "Hi Megan, see you.");
+        assert_eq!(typed, ["u"]);
+        assert_eq!(field.contents(), "Note: Hi Megan, see you.");
+    }
+
+    #[test]
+    fn typing_that_never_lands_changes_nothing() {
+        let (mut field, owned) = after_a_take();
+        field.settable = false;
+        let (result, _) = edit_typed(&field, &owned, &TAKE.replace("Megan", "Morgan"), false);
+        assert_eq!(result, Err(EditError::NotApplied));
+        assert_eq!(field.contents(), format!("Note: {TAKE}"));
+        assert_eq!(field.sel.get(), range(utf16_len(&field.contents()), 0));
+    }
+
     #[test]
     fn apps_that_write_away_from_the_caret_are_never_edited() {
         let (field, owned) = after_a_take();
         assert_eq!(
-            edit_owned(&field, &owned, TAKE, "Hi Morgan.", false, |_| {}),
+            edit_owned(
+                &field,
+                &owned,
+                TAKE,
+                "Hi Morgan.",
+                false,
+                &|_| false,
+                |_| {}
+            ),
             Err(EditError::Unsupported)
         );
         assert_eq!(field.set_calls.get(), 0);

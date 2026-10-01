@@ -8,6 +8,12 @@ Notable changes to Kass for users. Each release gets a section here, newest firs
 
 - **Keep the text, not the recording.** Turn on **Delete voice recordings** in Settings › General to delete each recording as soon as its text is saved. Captures keep their text and say **Voice recording deleted automatically** where the player was. It applies to dictations from then on; earlier ones keep their audio until **Keep history** removes them. Corrections without a recording still teach your dictionary and rules, but no longer count toward model updates.
 
+### Improved
+
+- **Fix any text by voice, not just Kass's (beta).** "Fix that" now works on the text before your cursor, whoever wrote it: words you typed, an older message, or a dictation Kass couldn't track. Only fixes to what Kass dictated teach it.
+- **Fix with just the right word (beta).** "Fix, it's Thursday" changes the day, "it's 3:30" the time, and "fix that, Morgan" the name that sounds like it. "Fix" alone now starts a fix too.
+- **Fix text in Messages (beta).** Where an app won't let Kass replace words directly, Kass selects them and types the fix.
+
 ## 0.7.1 — September 30, 2026
 
 ### New

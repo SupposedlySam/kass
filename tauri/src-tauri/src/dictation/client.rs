@@ -39,8 +39,17 @@ pub enum Outcome {
     Declined(String),
 }
 
-/// The last take's text and capture, once the take's target is known.
-type LastTakeSource = Box<dyn Fn() -> Option<(String, Option<String>)> + Send>;
+/// The text a voice edit may change, once read from the take's target.
+type LastTakeSource = Box<dyn Fn() -> Option<LastTakeText> + Send>;
+
+/// The text before the caret a voice edit may change, and how much of its
+/// end Kass's last take wrote, with that take's capture.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LastTakeText {
+    pub text: String,
+    pub capture_id: Option<String>,
+    pub own_chars: usize,
+}
 
 pub struct StreamClient {
     sample_rate: Option<u32>,
@@ -262,12 +271,12 @@ impl StreamClient {
         Some(Action::Text(protocol::context_message(&before)))
     }
 
-    /// Send the end of the take Kass typed last, and its capture, once
-    /// known (it must be the app this take goes to), so the take can be a
-    /// voice edit of it (docs/plans/VOICE_EDITS.md).
+    /// Send the text before the caret in the app this take goes to, once
+    /// read, so the take can be a voice edit of it
+    /// (docs/plans/VOICE_EDITS.md).
     pub fn with_last_take(
         mut self,
-        last_take: impl Fn() -> Option<(String, Option<String>)> + Send + 'static,
+        last_take: impl Fn() -> Option<LastTakeText> + Send + 'static,
     ) -> Self {
         self.last_take = Some(Box::new(last_take));
         self
@@ -277,11 +286,12 @@ impl StreamClient {
         if self.last_take_sent || !self.ready {
             return None;
         }
-        let (text, capture_id) = self.last_take.as_ref().and_then(|f| f())?;
+        let last = self.last_take.as_ref().and_then(|f| f())?;
         self.last_take_sent = true;
         Some(Action::Text(protocol::last_take_message(
-            &text,
-            capture_id.as_deref(),
+            &last.text,
+            last.capture_id.as_deref(),
+            last.own_chars,
         )))
     }
 
@@ -878,7 +888,11 @@ mod tests {
         let known = std::sync::Arc::new(std::sync::Mutex::new(false));
         let read = known.clone();
         let mut client = StreamClient::new(1 << 20).with_last_take(move || {
-            (*read.lock().unwrap()).then(|| ("Hi Megan.".to_string(), Some("c1".to_string())))
+            (*read.lock().unwrap()).then(|| LastTakeText {
+                text: "I typed this. Hi Megan.".into(),
+                capture_id: Some("c1".into()),
+                own_chars: 9,
+            })
         });
         client.set_format(48_000);
         client.on_open();
@@ -887,7 +901,12 @@ mod tests {
         *known.lock().unwrap() = true;
         assert_eq!(
             texts(&client.push_audio(&[2])),
-            vec![serde_json::json!({"type": "last_take", "text": "Hi Megan.", "capture_id": "c1"})]
+            vec![serde_json::json!({
+                "type": "last_take",
+                "text": "I typed this. Hi Megan.",
+                "capture_id": "c1",
+                "own_chars": 9,
+            })]
         );
         assert!(texts(&client.push_audio(&[3])).is_empty());
     }

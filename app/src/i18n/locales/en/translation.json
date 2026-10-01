@@ -682,7 +682,7 @@
         },
         "voiceEdits": {
           "title": "Voice edits",
-          "description": "Start with “fix that” to change what Kass just typed: “fix that, Morgan not Megan”, “fix that, delete actually”, or spell the word out."
+          "description": "Start with “fix that” or “fix” to change the text before your cursor: “fix that, Morgan not Megan”, “fix, it's Thursday”, “fix that, delete actually”, or spell the word out."
         }
       },
       "transcription": {

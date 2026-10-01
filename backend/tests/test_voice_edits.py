@@ -144,6 +144,9 @@ def test_no_takes_the_side_the_text_has_as_the_wrong_one():
         "Kass is not the app I meant.",
         "Cassie said she would call back.",
         "Replace Megan with Morgan.",
+        "Fix the login bug before Friday.",
+        "Fix Morgan not Megan.",
+        "Fix it.",
     ],
 )
 def test_ordinary_dictation_is_not_an_edit(said):
@@ -166,6 +169,45 @@ def test_a_marked_trigger_holds_the_take_for_an_edit_that_may_follow():
 def test_a_negated_verb_is_a_sentence_not_a_correction():
     assert parse("Fix that, the bug is not in the parser.") is None
     assert parse("Fix that, it doesn't not work.") is None
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Fix that, it's Thursday.",
+        "Fix, it's Thursday.",
+        "fix it's Thursday",
+        "Fix it should be Thursday.",
+        "Kass, Thursday.",
+        "Edit. It was Thursday.",
+    ],
+)
+def test_a_word_said_alone_replaces_the_word_of_its_kind(said):
+    assert after(said) == TAKE.replace("Tuesday", "Thursday")
+
+
+def test_kinds_of_word_are_days_months_and_numbers():
+    take = "See you Monday in March. We may start at 2:30 p.m. or 4pm."
+    assert after("Fix, it's tomorrow.", take) == take.replace("Monday", "tomorrow")
+    assert after("Fix, it's April.", take) == take.replace("March", "April")
+    # The verb "may" isn't a month.
+    assert after("Fix, it's May.", take) == take.replace("March", "May")
+    # Nearest the caret, keeping its half of the day.
+    assert after("Fix, it's 3:30.", take) == take.replace("4pm", "3:30pm")
+    assert after("Fix, it's 5 a.m.", take) == take.replace("4pm", "5 a.m")
+
+
+def test_a_name_said_alone_replaces_the_one_that_sounds_like_it():
+    assert after("Fix that, Morgan.") == TAKE.replace("Megan", "Morgan")
+    declined = plan("Fix, Morgan.", "Megan and Meagan came.")
+    assert isinstance(declined, Declined)
+    assert "More than one" in declined.message
+
+
+def test_a_word_said_alone_with_nothing_like_it_is_declined():
+    assert plan("Fix, it's Thursday.", "No days here.") == Declined("No day in the text before the cursor")
+    assert plan("Fix, Sarah.", TAKE) == Declined("Nothing like “Sarah” in the text before the cursor")
+    assert plan("Fix, Tuesday.", TAKE) == Declined("“Tuesday” is already written that way")
 
 
 def test_the_nearest_match_to_the_caret_wins():
@@ -344,6 +386,55 @@ def test_the_last_take_must_be_short_text(tmp_path, monkeypatch):
             session.set_last_take(bad)
     with pytest.raises(ValueError, match="capture id"):
         session.set_last_take("hi", 3)
+    session.close()
+
+
+def test_kass_s_part_of_the_text_defaults_to_all_of_a_take_with_a_capture(tmp_path, monkeypatch):
+    session, _ = make_session(tmp_path, monkeypatch)
+    session.set_last_take("Hi Megan.", "c1")
+    assert session.last_take_own_chars == 9
+    session.set_last_take("I typed this.")
+    assert session.last_take_own_chars == 0
+    session.set_last_take("I typed this. Hi Megan.", "c1", 9)
+    assert session.last_take_own_chars == 9
+    for bad in (-1, 24, "9", True):
+        with pytest.raises(ValueError, match="own_chars"):
+            session.set_last_take("I typed this. Hi Megan.", "c1", bad)
+    session.close()
+
+
+def test_only_a_fix_in_kass_s_part_is_its_own():
+    from backend.services.voice_edits import changes_end
+
+    text = "I typed Megan here. Hi Megan."
+    own = len("Hi Megan.")
+    in_kass_part = Planned(text, "I typed Megan here. Hi Morgan.", "", "Megan")
+    in_user_part = Planned(text, "I typed Morgan here. Hi Megan.", "", "Megan")
+    assert changes_end(in_kass_part, own)
+    assert not changes_end(in_user_part, own)
+    assert not changes_end(in_kass_part, 0)
+    # A change that starts mid-word counts from the word.
+    assert not changes_end(Planned("Hi Megan.", "Hi Megane.", "", "Megan"), 3)
+
+
+@pytest.mark.asyncio
+async def test_text_kass_did_not_write_is_fixed_but_not_reported(tmp_path, monkeypatch):
+    learned = []
+    monkeypatch.setattr(capture_stream.voice_edits, "learn_from", lambda *args: learned.append(args))
+    session, _ = make_session(tmp_path, monkeypatch)
+    session.settings.auto_refine = True
+    monkeypatch.setattr(capture_stream, "known_names", lambda: frozenset())
+    session.recognize = AsyncMock(return_value="Fix that, Morgan not Megan.")
+    # The user typed "Megan"; Kass wrote only "See you soon."
+    session.set_last_take("Thanks Megan. See you soon.", "capture-1", len("See you soon."))
+    worker = asyncio.create_task(session.run())
+    append(session, 1)
+    session.finish()
+    await worker
+    assert session.edit_result() == dict(before="Thanks Megan. See you soon.", after="Thanks Morgan. See you soon.")
+    session.learn_from_edit()
+    (args,) = learned
+    assert args[1] is None
     session.close()
 
 

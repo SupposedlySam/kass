@@ -105,6 +105,9 @@ struct ActiveTake {
     focus: Arc<Mutex<Option<FocusSnapshot>>>,
     /// The focused field's text before the caret, read after key-down.
     field_before: Arc<Mutex<Option<String>>>,
+    /// The text a voice edit may change, read after key-down; `None` with
+    /// voice edits off.
+    editable: Option<Arc<Mutex<Option<last_take::Editable>>>>,
     /// Key-up time, for the release-to-final log.
     released: Arc<OnceLock<Instant>>,
 }
@@ -179,7 +182,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
     // A beta feature: off, nothing is tracked, sent or applied.
     let voice_edits =
         config.voice_edits && mode == TakeMode::Dictation && crate::updater::beta_features_on();
-    let last = voice_edits.then(last_take::current).flatten();
+    let editable = voice_edits.then(|| Arc::new(Mutex::new(None)));
     let take_id = state.next_take_id();
     let selection: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let focus: Arc<Mutex<Option<FocusSnapshot>>> = Arc::new(Mutex::new(None));
@@ -207,6 +210,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         selection: selection.clone(),
         cancel: cancel.clone(),
         voice_edits,
+        editable: editable.clone(),
         capture_id: Arc::new(Mutex::new(None)),
         written,
     };
@@ -291,16 +295,18 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             TakeMode::Dictation => client,
             TakeMode::Command => client.with_command(),
         };
-        let client = match last {
-            // Sent once the take's target is known to be the app it went to.
-            Some(last) => {
-                let edit_focus = env.focus.clone();
+        let client = match env.editable.clone() {
+            // Sent once read from the app the take goes to.
+            Some(editable) => {
                 let edit_env = env.clone();
                 client
                     .with_last_take(move || {
-                        let pid = edit_focus.lock().ok()?.as_ref()?.pid;
-                        (pid == last.pid)
-                            .then(|| (last.tail().to_string(), last.capture_id.clone()))
+                        let editable = editable.lock().ok()?.clone()?;
+                        Some(client::LastTakeText {
+                            text: editable.owned.text.clone(),
+                            capture_id: editable.capture_id(),
+                            own_chars: editable.own_chars(),
+                        })
                     })
                     .with_edit(
                         crate::sound_cues::EDIT_CUE_DELAY_MS,
@@ -367,6 +373,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             stop,
             focus,
             field_before,
+            editable,
             released,
         },
     );
@@ -483,6 +490,7 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
         let (pid, bundle_id) = (focus.pid, focus.bundle_id.clone());
         let in_kass = bundle_id.as_deref() == Some(crate::KASS_BUNDLE_ID);
         let field_before = take.field_before.clone();
+        let editable = take.editable.clone();
         tauri::async_runtime::spawn_blocking(move || {
             // Turn on an Electron target's accessibility tree now, while the
             // user speaks, so it is built by the time the text is inserted.
@@ -495,6 +503,18 @@ pub fn set_focus(app: &AppHandle, take_id: u64, focus: Option<FocusSnapshot>) {
             let before = crate::text_insert::sentence_before_focused(pid, bundle_id.as_deref());
             if let (Some(before), Ok(mut slot)) = (before, field_before.lock()) {
                 *slot = Some(before);
+            }
+            // What a voice edit may change: the text before the caret,
+            // whoever wrote it (docs/plans/VOICE_EDITS.md).
+            let Some(editable) = editable else {
+                return;
+            };
+            let near = crate::text_insert::owned_near_focused(pid, bundle_id.as_deref());
+            if let Some(near) = near {
+                let found = last_take::Editable::new(pid, near, last_take::current());
+                if let Ok(mut slot) = editable.lock() {
+                    *slot = Some(found);
+                }
             }
         });
     }
@@ -672,6 +692,8 @@ struct AppEnv {
     /// Whether what this take pastes is kept as the last take, for a voice
     /// edit (docs/plans/VOICE_EDITS.md).
     voice_edits: bool,
+    /// The text a voice edit may change, once read ([`ActiveTake`]).
+    editable: Option<Arc<Mutex<Option<last_take::Editable>>>>,
     /// The take's capture, once the server saved it.
     capture_id: Arc<Mutex<Option<String>>>,
     /// The live text as it ended, shared with [`AxLive`].
@@ -959,20 +981,31 @@ impl TakeEnv for AppEnv {
     ) -> impl Future<Output = Result<(), String>> + Send {
         let focus = self.focus.lock().ok().and_then(|f| f.clone());
         let take_id = self.take_id;
-        let voice_edits = self.voice_edits;
+        let editable = self
+            .editable
+            .as_ref()
+            .and_then(|e| e.lock().ok().and_then(|e| e.clone()));
         async move {
             let focus = focus.ok_or_else(|| delivery::NO_FOCUS_MESSAGE.to_string())?;
-            let last = last_take::current()
-                .filter(|last| voice_edits && last.pid == focus.pid)
+            let editable = editable
+                .filter(|editable| editable.pid == focus.pid)
                 .ok_or_else(|| last_take::NOTHING_TO_FIX.to_string())?;
-            let owned = last.owned.clone();
+            let owned = editable.owned.clone();
             let result = tauri::async_runtime::spawn_blocking(move || {
-                crate::text_insert::edit_focused(focus.pid, &owned, &before, &after)
+                let type_in = |text: &str| {
+                    crate::type_over_selection(
+                        focus.pid,
+                        focus.bundle_id.as_deref(),
+                        focus.role.as_deref(),
+                        text,
+                    )
+                };
+                crate::text_insert::edit_focused(focus.pid, &owned, &before, &after, &type_in)
             })
             .await
             .unwrap_or_else(|e| Err(crate::text_insert::EditError::Uncertain(e.to_string())));
             eprintln!("[dictation] take {take_id}: voice edit {result:?}");
-            last_take::edited(&last, &result);
+            last_take::edited(&editable, &result);
             // TODO(voice-edits): the automatic report on the capture that
             // wrote the text is filed by the server (voice_edits.learn_from),
             // which can't know whether this write landed; confirm it here if

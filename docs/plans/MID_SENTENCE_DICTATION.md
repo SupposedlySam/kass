@@ -99,7 +99,7 @@ The rules are general, with no word lists (the module doc has the details):
 - The caret continues a sentence (`continues_sentence`, as in section 2) and is not inside a word. A side that can't be read trims nothing.
 - Only the rest of the caret's sentence counts: up to `.?!…` before a capital or the end, or a line break. It must start at the caret, after nothing but whitespace.
 - The overlap is the longest end of the dictation equal to a start of that text. Words compare ignoring case and punctuation, split at whitespace, hyphens, slashes and digit/letter changes (`3pm` = `3 pm` = `3 p.m.`).
-- At least two field words overlap, and at least one dictated word stays.
+- At least two field words overlap, and at least one dictated word stays. One word is enough, and the caret may follow a sentence end or start the field, when the overlap is the whole rest of the field's sentence and the dictation ends its sentence on it too: `Thanks. | Morgan.` + "See you on Tuesday, Morgan." (seen in Messages, 2026-10-01).
 - One edit per word is allowed when both words have five or more letters, start the same and hold no digits: at most one such word in three, never all. Emoji match exactly. No overlap crosses a sentence end in the dictation.
 
 Where it runs:
