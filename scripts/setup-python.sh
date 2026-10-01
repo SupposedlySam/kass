@@ -45,15 +45,17 @@ if ! is_312 "$venv/bin/python"; then
   "$python" -m venv "$venv"
 fi
 
-pip="$venv/bin/pip"
+# Through python, not bin/pip: a venv's scripts keep the path it was made at,
+# so they break when the checkout moves.
+pip=("$venv/bin/python" -m pip)
 echo "Installing Python dependencies..."
-"$pip" install --upgrade pip -q
-"$pip" install -r backend/requirements.txt
+"${pip[@]}" install --upgrade pip -q
+"${pip[@]}" install -r backend/requirements.txt
 # mlx-lm and mlx-audio declare transformers>=5.x, which conflicts with our
 # transformers<=4.57.x cap, so install them --no-deps (their runtime deps
 # are covered by requirements.txt — see the note there)
-"$pip" install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1
+"${pip[@]}" install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1
 # ruff is pinned: another version formats and lints differently, so just check
 # would pass on one Mac and fail on the next.
-"$pip" install pyinstaller ruff==0.16.9 pytest pytest-asyncio -q
+"${pip[@]}" install pyinstaller ruff==0.16.9 pytest pytest-asyncio -q
 echo "Python environment ready."
