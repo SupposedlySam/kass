@@ -39,10 +39,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__, config, database
-from .services import transcribe, llm
+from .routes import register_routers
+from .services import llm, transcribe
 from .utils.platform_detect import BACKEND_TYPE, GPU_TYPE, require_apple_silicon
 from .utils.progress import get_progress_manager
-from .routes import register_routers
 
 
 def create_app() -> FastAPI:

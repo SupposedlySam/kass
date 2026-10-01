@@ -41,6 +41,7 @@ class TestAudioopRuntime:
     def test_load_audio_does_not_fail_on_missing_audioop(self, tmp_path):
         import numpy as np
         import soundfile as sf
+
         from utils.audio import load_audio
 
         sr = 24000

@@ -17,7 +17,6 @@ from ..utils.capture_chords import (
     default_toggle_to_talk_chord,
 )
 
-
 SINGLETON_ID = 1
 
 

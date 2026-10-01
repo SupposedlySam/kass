@@ -386,16 +386,13 @@ def test_finish_records_the_app_dictated_into(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
     app, engine = socket_app(tmp_path, monkeypatch)
-    with TestClient(app) as client:
-        with client.websocket_connect("/captures/stream") as socket:
-            socket.send_json(
-                dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le")
-            )
-            socket.receive_json()
-            socket.send_bytes(struct.pack("<II", 0, 0) + np.ones(1600, dtype="<i2").tobytes())
-            socket.send_json(dict(type="finish", app=dict(bundle_id="com.tinyspeck.slackmacapp", name=" Slack ")))
-            while (event := socket.receive_json())["type"] != "final":
-                pass
+    with TestClient(app) as client, client.websocket_connect("/captures/stream") as socket:
+        socket.send_json(dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le"))
+        socket.receive_json()
+        socket.send_bytes(struct.pack("<II", 0, 0) + np.ones(1600, dtype="<i2").tobytes())
+        socket.send_json(dict(type="finish", app=dict(bundle_id="com.tinyspeck.slackmacapp", name=" Slack ")))
+        while (event := socket.receive_json())["type"] != "final":
+            pass
     assert event["capture"]["app_bundle_id"] == "com.tinyspeck.slackmacapp"
     assert event["capture"]["app_name"] == "Slack"
     with Session(engine) as db:

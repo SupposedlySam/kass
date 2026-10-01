@@ -109,7 +109,7 @@ def import_whisper_only() -> None:
         return
     package = importlib.util.module_from_spec(spec)
     sys.modules[_MODELS_PACKAGE] = package
-    setattr(sys.modules["mlx_audio.stt"], "models", package)
+    sys.modules["mlx_audio.stt"].models = package
 
 
 def _load_tokenizer(model_path):
@@ -149,8 +149,8 @@ def load_whisper(model_path):
     global _mlx_audio_hook
 
     import_whisper_only()
-    from mlx_audio.stt.models.whisper import whisper
     from mlx_audio.stt import load
+    from mlx_audio.stt.models.whisper import whisper
 
     original = whisper.Model.__dict__["post_load_hook"]
     _mlx_audio_hook = whisper.Model.post_load_hook

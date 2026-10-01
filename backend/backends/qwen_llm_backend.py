@@ -8,27 +8,27 @@ STT engine.
 import logging
 import threading
 import time
+from collections.abc import Callable
 from contextvars import ContextVar
-from typing import Callable, Optional
 
-from . import LLMBackend, DEFAULT_LLM_MAX_TOKENS, DEFAULT_LLM_TEMPERATURE
+from ..services.mlx_thread import clear_mlx_cache, run_on_mlx_thread
+from . import DEFAULT_LLM_MAX_TOKENS, DEFAULT_LLM_TEMPERATURE
 from .base import (
     is_model_cached,
     model_load_progress,
 )
-from ..services.mlx_thread import run_on_mlx_thread, clear_mlx_cache
 
 logger = logging.getLogger(__name__)
 
 # Set around a generate call to receive the text generated so far after each
 # token. Called on the MLX worker thread; it must be quick and thread-safe.
-generation_listener: ContextVar[Optional[Callable[[str], None]]] = ContextVar("generation_listener", default=None)
+generation_listener: ContextVar[Callable[[str], None] | None] = ContextVar("generation_listener", default=None)
 
 # Set around a generate call to end it early: generation stops before the next
 # token once the event is set, and returns the text so far. Streaming dictation
 # sets it when a cleanup started while speaking is superseded at release, so
 # the final cleanup doesn't wait for work it would throw away.
-generation_stop: ContextVar[Optional[threading.Event]] = ContextVar("generation_stop", default=None)
+generation_stop: ContextVar[threading.Event | None] = ContextVar("generation_stop", default=None)
 
 # Set around a generate call whose output mostly copies text the caller has:
 # a cleanup copies the transcript, and a cleanup of a transcript that grew
@@ -37,14 +37,14 @@ generation_stop: ContextVar[Optional[threading.Event]] = ContextVar("generation_
 # from the prompt several tokens per model call (prompt lookup decoding).
 # Proposals only decide how many tokens are checked at once; every token is
 # still sampled from the model's own distribution, so the output is unchanged.
-generation_hint: ContextVar[Optional[str]] = ContextVar("generation_hint", default=None)
+generation_hint: ContextVar[str | None] = ContextVar("generation_hint", default=None)
 
 # Set around a generate call to name the prompt it continues, such as a
 # writing style's cleanup prompt. Each name keeps its own KV cache, so a
 # dictation in one app never trims away another app's cached prompt
 # (docs/plans/PER_APP_STYLE.md). Styles' prompts can share most of their
 # tokens, so they need names; unnamed calls are told apart by their start.
-prompt_cache_key: ContextVar[Optional[str]] = ContextVar("prompt_cache_key", default=None)
+prompt_cache_key: ContextVar[str | None] = ContextVar("prompt_cache_key", default=None)
 
 # Calls with the same system prompt share hundreds of tokens; calls with
 # different ones (dictation cleanup, Command Mode) share only the chat
@@ -73,7 +73,7 @@ KV_CACHE_STEP = 256
 class _PromptCache:
     """A KV cache, the tokens it holds, its name, and the adapter they were computed with."""
 
-    def __init__(self, cache, key: object, adapter: Optional[str]):
+    def __init__(self, cache, key: object, adapter: str | None):
         self.cache = cache
         self.tokens: list[int] = []
         self.key = key
@@ -96,7 +96,7 @@ def propose_draft(generated: list[int], sources: list[list[int]], limit: int, cu
         for index, source in enumerate(sources):
             last = len(source) - size
             start = cursor.get(index, 0)
-            for position in [*range(start, last + 1), *range(0, min(start, last + 1))]:
+            for position in [*range(start, last + 1), *range(min(start, last + 1))]:
                 if source[position : position + size] == tail and position + size < len(source):
                     cursor[index] = position + size
                     return list(source[position + size : position + size + limit])
@@ -132,8 +132,8 @@ def _progress_name(model_size: str) -> str:
 
 def _build_messages(
     prompt: str,
-    system: Optional[str],
-    examples: Optional[list[tuple[str, str]]] = None,
+    system: str | None,
+    examples: list[tuple[str, str]] | None = None,
 ) -> list[dict]:
     messages: list[dict] = []
     if system:
@@ -155,28 +155,28 @@ class MLXQwenLLMBackend:
         self.model = None
         self.tokenizer = None
         self.model_size = model_size
-        self._current_model_size: Optional[str] = None
+        self._current_model_size: str | None = None
         # The adapter in effect, and the one loaded into the model. They differ
         # while a loaded adapter is switched off (``_set_adapter_enabled``).
-        self._adapter_path: Optional[str] = None
-        self._loaded_adapter: Optional[str] = None
+        self._adapter_path: str | None = None
+        self._loaded_adapter: str | None = None
         # KV caches of recent prompts, most recently used last. Refinement
         # repeats a ~2k-token system prompt and examples on every call;
         # reusing them keeps a warm 4B dictation cleanup well under a second,
         # and one per prompt keeps it that way across writing styles.
         self._prompt_caches: list[_PromptCache] = []
         # The cache the current (or last) call used, and the tokens it holds.
-        self._entry: Optional[_PromptCache] = None
+        self._entry: _PromptCache | None = None
         self._cached_tokens: list[int] = []
-        self._listener: Optional[Callable[[str], None]] = None
-        self._stop: Optional[threading.Event] = None
-        self._hint: Optional[str] = None
-        self._cache_key: Optional[str] = None
+        self._listener: Callable[[str], None] | None = None
+        self._stop: threading.Event | None = None
+        self._hint: str | None = None
+        self._cache_key: str | None = None
 
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def kv_bytes_per_token(self, model_size: str) -> Optional[int]:
+    def kv_bytes_per_token(self, model_size: str) -> int | None:
         """What one cached token costs for ``model_size``: keys and values in
         every layer, in the model's 2-byte activations. None if not downloaded."""
         import json
@@ -194,7 +194,7 @@ class MLXQwenLLMBackend:
         except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError):
             return None
 
-    def prompt_tokens(self, system: str, examples: list[tuple[str, str]], model_size: str) -> Optional[int]:
+    def prompt_tokens(self, system: str, examples: list[tuple[str, str]], model_size: str) -> int | None:
         """How many tokens a prompt of ``system`` and ``examples`` takes, when
         ``model_size`` is loaded to count them. Called off the MLX thread; the
         tokenizer doesn't touch the GPU."""
@@ -217,7 +217,7 @@ class MLXQwenLLMBackend:
             weight_extensions=(".safetensors", ".bin", ".npz"),
         )
 
-    def _ensure_loaded_sync(self, model_size: Optional[str]) -> None:
+    def _ensure_loaded_sync(self, model_size: str | None) -> None:
         """Load the model if the requested size isn't already resident.
 
         Runs on the MLX worker thread so it stays serialized with generation.
@@ -233,7 +233,7 @@ class MLXQwenLLMBackend:
 
         self._load_model_sync(model_size)
 
-    async def load_model(self, model_size: Optional[str] = None) -> None:
+    async def load_model(self, model_size: str | None = None) -> None:
         await run_on_mlx_thread(self._ensure_loaded_sync, model_size)
 
     async def unload(self) -> None:
@@ -290,12 +290,12 @@ class MLXQwenLLMBackend:
     async def generate(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         max_tokens: int = DEFAULT_LLM_MAX_TOKENS,
         temperature: float = DEFAULT_LLM_TEMPERATURE,
-        model_size: Optional[str] = None,
-        examples: Optional[list[tuple[str, str]]] = None,
-        adapter_path: Optional[str] = None,
+        model_size: str | None = None,
+        examples: list[tuple[str, str]] | None = None,
+        adapter_path: str | None = None,
     ) -> str:
         listener = generation_listener.get()
         stop = generation_stop.get()
@@ -320,7 +320,7 @@ class MLXQwenLLMBackend:
 
         return await run_on_mlx_thread(_load_and_generate)
 
-    async def prepare(self, model_size: Optional[str] = None, adapter_path: Optional[str] = None) -> None:
+    async def prepare(self, model_size: str | None = None, adapter_path: str | None = None) -> None:
         """Load what a later ``generate`` with these arguments needs, without generating.
 
         A dictation loads its model and personal adapter while the user
@@ -328,7 +328,7 @@ class MLXQwenLLMBackend:
         """
         await run_on_mlx_thread(self._ensure_ready_sync, model_size, adapter_path)
 
-    def _ensure_ready_sync(self, model_size: Optional[str], adapter_path: Optional[str]) -> None:
+    def _ensure_ready_sync(self, model_size: str | None, adapter_path: str | None) -> None:
         size = model_size or self.model_size
         loaded = self.model is not None and self._current_model_size == size
         if loaded and self._loaded_adapter is not None and adapter_path in (None, self._loaded_adapter):
@@ -359,10 +359,10 @@ class MLXQwenLLMBackend:
     def _generate_sync(
         self,
         prompt: str,
-        system: Optional[str],
+        system: str | None,
         max_tokens: int,
         temperature: float,
-        examples: Optional[list[tuple[str, str]]] = None,
+        examples: list[tuple[str, str]] | None = None,
     ) -> str:
         from mlx_lm import stream_generate
         from mlx_lm.sample_utils import make_sampler

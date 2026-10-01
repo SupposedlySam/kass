@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .. import config, models
-from ..services import transcribe
 from ..database import get_db
+from ..services import transcribe
 from ..utils.platform_detect import BACKEND_TYPE, GPU_TYPE
 
 router = APIRouter()

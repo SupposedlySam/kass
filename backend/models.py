@@ -2,9 +2,10 @@
 Pydantic models for request/response validation.
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from .services.commands import default_transforms
 from .utils.capture_chords import (
@@ -17,8 +18,8 @@ from .utils.capture_chords import (
 class TranscriptionRequest(BaseModel):
     """Request model for audio transcription."""
 
-    language: Optional[str] = Field(None, pattern="^(en|zh|ja|ko|de|fr|ru|pt|es|it)$")
-    model: Optional[str] = Field(None, pattern="^(base|small|medium|large|turbo)$")
+    language: str | None = Field(None, pattern="^(en|zh|ja|ko|de|fr|ru|pt|es|it)$")
+    model: str | None = Field(None, pattern="^(base|small|medium|large|turbo)$")
 
 
 class TranscriptionResponse(BaseModel):
@@ -37,16 +38,16 @@ class RefinementFlagsModel(BaseModel):
     punctuation_style: str = Field(default="standard", pattern="^(standard|casual|learned)$")
     capitalize_first: bool = True
     # The writing style whose habits, examples and rules were used.
-    style: Optional[str] = None
+    style: str | None = None
 
 
 class RefinementReviewModel(BaseModel):
     """Why a capture's cleanup is flagged for the user to check."""
 
     outcome: Literal["review", "reject"]
-    added: List[str] = []
-    missing: List[str] = []
-    reasons: List[str] = []
+    added: list[str] = []
+    missing: list[str] = []
+    reasons: list[str] = []
 
 
 class CaptureResponse(BaseModel):
@@ -55,22 +56,22 @@ class CaptureResponse(BaseModel):
     id: str
     audio_path: str
     source: str
-    language: Optional[str] = None
-    duration_ms: Optional[int] = None
+    language: str | None = None
+    duration_ms: int | None = None
     transcript_raw: str
-    transcript_refined: Optional[str] = None
-    stt_model: Optional[str] = None
-    llm_model: Optional[str] = None
-    refinement_flags: Optional[RefinementFlagsModel] = None
-    refinement_review: Optional[RefinementReviewModel] = None
-    app_bundle_id: Optional[str] = None
-    app_name: Optional[str] = None
+    transcript_refined: str | None = None
+    stt_model: str | None = None
+    llm_model: str | None = None
+    refinement_flags: RefinementFlagsModel | None = None
+    refinement_review: RefinementReviewModel | None = None
+    app_bundle_id: str | None = None
+    app_name: str | None = None
     # Command captures (docs/plans/COMMAND_MODE.md).
-    command_selection: Optional[str] = None
-    command_instruction: Optional[str] = None
-    command_transform: Optional[str] = None
+    command_selection: str | None = None
+    command_instruction: str | None = None
+    command_transform: str | None = None
     # The writing style the capture was cleaned up with.
-    style_id: Optional[str] = None
+    style_id: str | None = None
     # The recording was deleted once its transcript was saved.
     audio_deleted: bool = False
     created_at: datetime
@@ -82,7 +83,7 @@ class CaptureResponse(BaseModel):
 class CaptureListResponse(BaseModel):
     """Response model for paginated capture list."""
 
-    items: List[CaptureResponse]
+    items: list[CaptureResponse]
     total: int
 
 
@@ -94,13 +95,13 @@ class CaptureAppCount(BaseModel):
     """
 
     app_bundle_id: str
-    app_name: Optional[str] = None
+    app_name: str | None = None
     count: int
-    last_captured_at: Optional[datetime] = None
-    style_id: Optional[str] = None
+    last_captured_at: datetime | None = None
+    style_id: str | None = None
     confirmed: bool = False
     # Until confirmed: the style most apps of its App Store category use.
-    suggested_style_id: Optional[str] = None
+    suggested_style_id: str | None = None
 
 
 class CaptureAppsResponse(BaseModel):
@@ -112,7 +113,7 @@ class CaptureAppsResponse(BaseModel):
 
     total: int
     unknown_count: int
-    apps: List[CaptureAppCount]
+    apps: list[CaptureAppCount]
 
 
 class UsageDay(BaseModel):
@@ -216,21 +217,21 @@ class CaptureCreateResponse(CaptureResponse):
 class CaptureRefineRequest(BaseModel):
     """Request to refine a capture's transcript via the LLM."""
 
-    flags: Optional[RefinementFlagsModel] = None
-    model_size: Optional[str] = Field(default=None, pattern="^(0\\.6B|1\\.7B|4B)$")
+    flags: RefinementFlagsModel | None = None
+    model_size: str | None = Field(default=None, pattern="^(0\\.6B|1\\.7B|4B)$")
 
 
 class CaptureRetranscribeRequest(BaseModel):
     """Request to re-run STT on a capture's audio with a different model."""
 
-    model: Optional[str] = Field(None, pattern="^(base|small|medium|large|turbo)$")
-    language: Optional[str] = Field(None, pattern="^(en|zh|ja|ko|de|fr|ru|pt|es|it)$")
+    model: str | None = Field(None, pattern="^(base|small|medium|large|turbo)$")
+    language: str | None = Field(None, pattern="^(en|zh|ja|ko|de|fr|ru|pt|es|it)$")
 
 
 class Transform(BaseModel):
     """A saved Command Mode instruction, run by saying its name."""
 
-    id: Optional[str] = None
+    id: str | None = None
     name: str
     instruction: str
 
@@ -271,14 +272,14 @@ class CaptureSettingsResponse(BaseModel):
     voice_edits: bool = True
     sound_cues: bool = True
     sound_cue_volume: float = Field(default=0.5, ge=0, le=1)
-    input_device_id: Optional[str] = Field(
+    input_device_id: str | None = Field(
         default=None, description="Configured audio input deviceId (None means default microphone)"
     )
     hotkey_enabled: bool = False
-    chord_push_to_talk_keys: List[str] = Field(default_factory=default_push_to_talk_chord)
-    chord_toggle_to_talk_keys: List[str] = Field(default_factory=default_toggle_to_talk_chord)
-    chord_command_keys: List[str] = Field(default_factory=default_command_chord)
-    command_transforms: List[Transform] = Field(default_factory=default_transforms)
+    chord_push_to_talk_keys: list[str] = Field(default_factory=default_push_to_talk_chord)
+    chord_toggle_to_talk_keys: list[str] = Field(default_factory=default_toggle_to_talk_chord)
+    chord_command_keys: list[str] = Field(default_factory=default_command_chord)
+    command_transforms: list[Transform] = Field(default_factory=default_transforms)
     # Days of capture history to keep; 0 keeps it forever.
     history_retention_days: HistoryRetentionDays = 30
     # Set by saving history_retention_days; the sweep deletes nothing until then.
@@ -294,31 +295,31 @@ class CaptureSettingsResponse(BaseModel):
 class CaptureSettingsUpdate(BaseModel):
     """Partial update for capture settings — every field is optional."""
 
-    stt_model: Optional[str] = Field(default=None, pattern="^(base|small|medium|large|turbo)$")
-    language: Optional[str] = None
-    auto_refine: Optional[bool] = None
-    llm_model: Optional[str] = Field(default=None, pattern="^(0\\.6B|1\\.7B|4B)$")
-    smart_cleanup: Optional[bool] = None
-    self_correction: Optional[bool] = None
-    preserve_technical: Optional[bool] = None
-    punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
-    allow_auto_paste: Optional[bool] = None
-    live_text: Optional[bool] = None
-    voice_edits: Optional[bool] = None
-    sound_cues: Optional[bool] = None
-    sound_cue_volume: Optional[float] = Field(default=None, ge=0, le=1)
-    input_device_id: Optional[str] = Field(
+    stt_model: str | None = Field(default=None, pattern="^(base|small|medium|large|turbo)$")
+    language: str | None = None
+    auto_refine: bool | None = None
+    llm_model: str | None = Field(default=None, pattern="^(0\\.6B|1\\.7B|4B)$")
+    smart_cleanup: bool | None = None
+    self_correction: bool | None = None
+    preserve_technical: bool | None = None
+    punctuation_style: str | None = Field(default=None, pattern="^(standard|casual|learned)$")
+    allow_auto_paste: bool | None = None
+    live_text: bool | None = None
+    voice_edits: bool | None = None
+    sound_cues: bool | None = None
+    sound_cue_volume: float | None = Field(default=None, ge=0, le=1)
+    input_device_id: str | None = Field(
         default=None, description="Configured audio input deviceId (None means default microphone)"
     )
-    hotkey_enabled: Optional[bool] = None
-    chord_push_to_talk_keys: Optional[List[str]] = Field(default=None, min_length=1, max_length=6)
-    chord_toggle_to_talk_keys: Optional[List[str]] = Field(default=None, min_length=1, max_length=6)
+    hotkey_enabled: bool | None = None
+    chord_push_to_talk_keys: list[str] | None = Field(default=None, min_length=1, max_length=6)
+    chord_toggle_to_talk_keys: list[str] | None = Field(default=None, min_length=1, max_length=6)
     # Empty turns Command Mode's chord off.
-    chord_command_keys: Optional[List[str]] = Field(default=None, max_length=6)
-    command_transforms: Optional[List[Transform]] = None
-    history_retention_days: Optional[HistoryRetentionDays] = None
-    onboarding_completed: Optional[bool] = None
-    discard_audio: Optional[bool] = None
+    chord_command_keys: list[str] | None = Field(default=None, max_length=6)
+    command_transforms: list[Transform] | None = None
+    history_retention_days: HistoryRetentionDays | None = None
+    onboarding_completed: bool | None = None
+    discard_audio: bool | None = None
 
 
 class CommandRunRequest(BaseModel):
@@ -329,25 +330,25 @@ class CommandRunRequest(BaseModel):
     """
 
     selection: str
-    instruction: Optional[str] = None
-    capture_id: Optional[str] = None
-    app_bundle_id: Optional[str] = None
-    app_name: Optional[str] = None
+    instruction: str | None = None
+    capture_id: str | None = None
+    app_bundle_id: str | None = None
+    app_name: str | None = None
 
 
 class LLMGenerateRequest(BaseModel):
     """Request model for LLM text generation."""
 
     prompt: str = Field(..., min_length=1, max_length=50000)
-    system: Optional[str] = Field(None, max_length=4000)
-    model_size: Optional[str] = Field(default="0.6B", pattern="^(0\\.6B|1\\.7B|4B)$")
+    system: str | None = Field(None, max_length=4000)
+    model_size: str | None = Field(default="0.6B", pattern="^(0\\.6B|1\\.7B|4B)$")
     max_tokens: int = Field(default=512, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     # Few-shot (user, assistant) pairs prepended as real chat turns.
     # Used by the refinement service to pin tricky rules (imperatives
     # staying imperatives, technical-term punctuation) that small models
     # lose when the examples live inline in the system prompt.
-    examples: Optional[List[List[str]]] = Field(default=None, max_length=8)
+    examples: list[list[str]] | None = Field(default=None, max_length=8)
 
 
 class LLMGenerateResponse(BaseModel):
@@ -370,7 +371,7 @@ class ModelReadiness(BaseModel):
     model_name: str
     display_name: str
     size: str
-    size_mb: Optional[int] = None
+    size_mb: int | None = None
 
 
 class CaptureReadinessResponse(BaseModel):
@@ -390,15 +391,15 @@ class HealthResponse(BaseModel):
 
     status: str
     model_loaded: bool  # Whether a Whisper model is loaded
-    model_downloaded: Optional[bool] = None  # Whether the configured Whisper model is cached
-    model_size: Optional[str] = None  # Loaded Whisper model size
+    model_downloaded: bool | None = None  # Whether the configured Whisper model is cached
+    model_size: str | None = None  # Loaded Whisper model size
     gpu_available: bool
-    gpu_type: Optional[str] = None  # "Metal (Apple Silicon via MLX)", "MPS (Apple Silicon)", or None
-    backend_type: Optional[str] = None  # Always "mlx"
-    version: Optional[str] = None
-    started_at: Optional[float] = None  # Server process start, Unix seconds
-    pid: Optional[int] = None
-    peak_memory_mb: Optional[int] = None  # Peak resident memory of the server process
+    gpu_type: str | None = None  # "Metal (Apple Silicon via MLX)", "MPS (Apple Silicon)", or None
+    backend_type: str | None = None  # Always "mlx"
+    version: str | None = None
+    started_at: float | None = None  # Server process start, Unix seconds
+    pid: int | None = None
+    peak_memory_mb: int | None = None  # Peak resident memory of the server process
 
 
 class DirectoryCheck(BaseModel):
@@ -407,16 +408,16 @@ class DirectoryCheck(BaseModel):
     path: str
     exists: bool
     writable: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class FilesystemHealthResponse(BaseModel):
     """Response model for filesystem health check."""
 
     healthy: bool
-    disk_free_mb: Optional[float] = None
-    disk_total_mb: Optional[float] = None
-    directories: List[DirectoryCheck]
+    disk_free_mb: float | None = None
+    disk_total_mb: float | None = None
+    directories: list[DirectoryCheck]
 
 
 class ModelStatus(BaseModel):
@@ -424,17 +425,17 @@ class ModelStatus(BaseModel):
 
     model_name: str
     display_name: str
-    hf_repo_id: Optional[str] = None  # HuggingFace repository ID
+    hf_repo_id: str | None = None  # HuggingFace repository ID
     downloaded: bool
     downloading: bool = False  # True if download is in progress
-    size_mb: Optional[float] = None
+    size_mb: float | None = None
     loaded: bool = False
 
 
 class ModelStatusListResponse(BaseModel):
     """Response model for model status list."""
 
-    models: List[ModelStatus]
+    models: list[ModelStatus]
 
 
 class ModelDownloadRequest(BaseModel):
@@ -455,17 +456,17 @@ class ActiveDownloadTask(BaseModel):
     model_name: str
     status: str
     started_at: datetime
-    error: Optional[str] = None
-    progress: Optional[float] = None  # 0-100 percentage
-    current: Optional[int] = None  # bytes downloaded
-    total: Optional[int] = None  # total bytes
-    filename: Optional[str] = None  # current file being downloaded
+    error: str | None = None
+    progress: float | None = None  # 0-100 percentage
+    current: int | None = None  # bytes downloaded
+    total: int | None = None  # total bytes
+    filename: str | None = None  # current file being downloaded
 
 
 class ActiveTasksResponse(BaseModel):
     """Response model for active tasks."""
 
-    downloads: List[ActiveDownloadTask]
+    downloads: list[ActiveDownloadTask]
 
 
 CaptureFeedbackSource = Literal["manual", "voice_fix", "redictation"]
@@ -485,9 +486,9 @@ class WritingStyleStatus(BaseModel):
 
     ready: bool
     runs: int
-    last_run_at: Optional[str] = None
+    last_run_at: str | None = None
     example_count: int
-    habits: List[str]
+    habits: list[str]
 
 
 class PersonalExample(BaseModel):
@@ -497,10 +498,10 @@ class PersonalExample(BaseModel):
     source: Literal["correction", "calibration"]
     said: str
     meant: str
-    created_at: Optional[str] = None
+    created_at: str | None = None
     # The app a correction was made in.
-    app_bundle_id: Optional[str] = None
-    app_name: Optional[str] = None
+    app_bundle_id: str | None = None
+    app_name: str | None = None
 
 
 class WritingStyleModel(BaseModel):
@@ -524,20 +525,20 @@ class StyledApp(BaseModel):
     """
 
     bundle_id: str
-    name: Optional[str] = None
+    name: str | None = None
     style_id: str
     confirmed: bool
     count: int = 0
     corrections: int = 0
-    suggested_style_id: Optional[str] = None
+    suggested_style_id: str | None = None
 
 
 class WritingStylesResponse(BaseModel):
-    styles: List[WritingStyleModel]
-    apps: List[StyledApp]
+    styles: list[WritingStyleModel]
+    apps: list[StyledApp]
     max_styles: int
     # Memory each style's cached prompt takes in the cleanup model, estimated.
-    cache_mb_per_style: Optional[int] = None
+    cache_mb_per_style: int | None = None
 
 
 class WritingStyleCreate(BaseModel):
@@ -545,24 +546,24 @@ class WritingStyleCreate(BaseModel):
 
 
 class WritingStyleUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=80)
-    punctuation_style: Optional[str] = Field(default=None, pattern="^(standard|casual|learned)$")
-    preserve_technical: Optional[bool] = None
-    description: Optional[str] = Field(default=None, max_length=2000)
+    name: str | None = Field(default=None, max_length=80)
+    punctuation_style: str | None = Field(default=None, pattern="^(standard|casual|learned)$")
+    preserve_technical: bool | None = None
+    description: str | None = Field(default=None, max_length=2000)
     # Only true is meaningful: another style becomes the default by being made it.
-    is_default: Optional[bool] = None
+    is_default: bool | None = None
 
 
 class AppStyleAssign(BaseModel):
     style_id: str
-    app_name: Optional[str] = Field(default=None, max_length=255)
+    app_name: str | None = Field(default=None, max_length=255)
     # The app's corrections: "bring" them to the new style, or "leave" them teaching the current one.
     corrections: Literal["bring", "leave"] = "bring"
 
 
 class AppToConfirm(BaseModel):
     bundle_id: str = Field(min_length=1, max_length=255)
-    app_name: Optional[str] = Field(default=None, max_length=255)
+    app_name: str | None = Field(default=None, max_length=255)
 
 
 class AppsConfirm(BaseModel):
@@ -581,9 +582,9 @@ class CorrectionNote(BaseModel):
 class CorrectionNotesStatus(BaseModel):
     """Rules cleanup follows from examples too old to show the model."""
 
-    notes: List[CorrectionNote]
+    notes: list[CorrectionNote]
     pending: int
-    last_run: Optional[str] = None
+    last_run: str | None = None
     outcome: str
 
 
@@ -607,11 +608,11 @@ class TeachAnswer(BaseModel):
 class TeachNote(BaseModel):
     """The facts for the user's next reply, so they only choose the words."""
 
-    facts: Optional[str] = None
-    answers: List[TeachAnswer] = []
+    facts: str | None = None
+    answers: list[TeachAnswer] = []
     # A teaching trick to try, with an example when the opener has one.
-    trick: Optional[Literal["change_of_mind", "long"]] = None
-    example: Optional[str] = None
+    trick: Literal["change_of_mind", "long"] | None = None
+    example: str | None = None
 
 
 class TeachMessage(BaseModel):
@@ -623,7 +624,7 @@ class TeachChip(BaseModel):
     """Something a reply showed about how the user writes; the app words ``code``."""
 
     code: str
-    value: Optional[str] = None
+    value: str | None = None
 
 
 class TeachConversation(BaseModel):
@@ -631,11 +632,11 @@ class TeachConversation(BaseModel):
     kind: TeachKind
     persona: str
     relation: str
-    title: Optional[str] = None
-    messages: List[TeachMessage]
-    note: Optional[TeachNote] = None
+    title: str | None = None
+    messages: list[TeachMessage]
+    note: TeachNote | None = None
     reply_count: int
-    chips: List[TeachChip]
+    chips: list[TeachChip]
     wrapped: bool
 
 
@@ -647,8 +648,8 @@ class TeachSession(BaseModel):
     target: int
     replies: int
     # The kinds that match the style's apps.
-    suggested_kinds: List[TeachKind]
-    conversations: List[TeachConversation]
+    suggested_kinds: list[TeachKind]
+    conversations: list[TeachConversation]
 
 
 class TeachConversationCreate(BaseModel):
@@ -660,13 +661,13 @@ class TeachReplyRequest(BaseModel):
 
 
 class TeachDictated(BaseModel):
-    text: Optional[str] = None
+    text: str | None = None
 
 
 class TeachFinishResult(BaseModel):
     status: WritingStyleStatus
-    before: Optional[str] = None
-    after: Optional[str] = None
+    before: str | None = None
+    after: str | None = None
     replies: int
     # Replies that were dictated, and so teach cleanup.
     dictated: int

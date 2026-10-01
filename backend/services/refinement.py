@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
-from .spoken_cleanup import apply_spoken_cleanup
 from .spelling import join_spelling
+from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
 from .voice_commands import commands_alone
 

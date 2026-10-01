@@ -2,9 +2,9 @@
 MLX backend implementation for Whisper STT using mlx-audio.
 """
 
-from collections.abc import Sequence
-from typing import Optional
 import logging
+from collections.abc import Sequence
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -15,17 +15,15 @@ from ..utils.hf_offline_patch import patch_huggingface_hub_offline
 
 patch_huggingface_hub_offline()
 
-from . import WHISPER_HF_REPOS
+from ..services import dictionary, speech_detect
+from ..services.mlx_thread import clear_mlx_cache, run_on_mlx_thread
+from ..services.refinement import strip_stt_artifacts
+from . import WHISPER_HF_REPOS, mlx_whisper_loader, whisper_audio
 from .base import (
-    is_model_cached,
     ellipsis_token_ids,
+    is_model_cached,
     model_load_progress,
 )
-from ..services import speech_detect
-from ..services.refinement import strip_stt_artifacts
-from ..services.mlx_thread import run_on_mlx_thread, clear_mlx_cache
-from ..services import dictionary
-from . import mlx_whisper_loader, whisper_audio
 
 # Whisper keeps only the last tokens of its prompt (mlx-audio decoding, n_ctx // 2 - 1).
 PROMPT_TOKENS = 223
@@ -81,7 +79,7 @@ class MLXSTTBackend:
         hf_repo = WHISPER_HF_REPOS.get(model_size, f"openai/whisper-{model_size}")
         return is_model_cached(hf_repo, weight_extensions=(".safetensors", ".bin", ".npz"))
 
-    def _ensure_loaded_sync(self, model_size: Optional[str]):
+    def _ensure_loaded_sync(self, model_size: str | None):
         """Load the model if the requested size isn't already resident.
 
         Runs on the MLX worker thread so it stays serialized with transcription.
@@ -94,7 +92,7 @@ class MLXSTTBackend:
 
         self._load_model_sync(model_size)
 
-    async def load_model_async(self, model_size: Optional[str] = None):
+    async def load_model_async(self, model_size: str | None = None):
         """
         Lazy load the MLX Whisper model.
 
@@ -138,9 +136,9 @@ class MLXSTTBackend:
     async def transcribe(
         self,
         audio_path: str,
-        language: Optional[str] = None,
-        model_size: Optional[str] = None,
-        previous_text: Optional[str] = None,
+        language: str | None = None,
+        model_size: str | None = None,
+        previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
     ) -> str:
@@ -174,9 +172,9 @@ class MLXSTTBackend:
         self,
         samples: np.ndarray,
         sample_rate: int,
-        language: Optional[str] = None,
-        model_size: Optional[str] = None,
-        previous_text: Optional[str] = None,
+        language: str | None = None,
+        model_size: str | None = None,
+        previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
     ) -> str:

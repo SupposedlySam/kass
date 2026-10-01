@@ -6,8 +6,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from .. import config
-from .models import Base
 from .migrations import run_migrations
+from .models import Base
 
 logger = logging.getLogger(__name__)
 

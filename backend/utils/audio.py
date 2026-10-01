@@ -2,17 +2,16 @@
 Audio processing utilities.
 """
 
+import librosa
 import numpy as np
 import soundfile as sf
-import librosa
-from typing import Tuple
 
 
 def load_audio(
     path: str,
     sample_rate: int = 24000,
     mono: bool = True,
-) -> Tuple[np.ndarray, int]:
+) -> tuple[np.ndarray, int]:
     """
     Load audio file with normalization.
 
@@ -48,8 +47,8 @@ def save_audio(
     Raises:
         OSError: If file cannot be written
     """
-    from pathlib import Path
     import os
+    from pathlib import Path
 
     temp_path = f"{path}.tmp"
     try:

@@ -6,13 +6,12 @@ and model loading progress tracking.
 """
 
 import logging
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
 
-
-from ..utils.progress import get_progress_manager
 from ..utils.hf_progress import HFProgressTracker, create_hf_progress_callback
+from ..utils.progress import get_progress_manager
 from ..utils.tasks import get_task_manager
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ def is_model_cached(
     hf_repo: str,
     *,
     weight_extensions: tuple[str, ...] = (".safetensors", ".bin"),
-    required_files: Optional[list[str]] = None,
+    required_files: list[str] | None = None,
 ) -> bool:
     """
     Check if a HuggingFace model is fully cached locally.
@@ -74,15 +73,15 @@ def is_model_cached(
         return False
 
 
-_ELLIPSIS_TOKEN_IDS: dict[tuple[str, int], Tuple[int, ...]] = {}
+_ELLIPSIS_TOKEN_IDS: dict[tuple[str, int], tuple[int, ...]] = {}
 
 
 def ellipsis_token_ids(
     model_key: str,
-    decode: Callable[[List[int]], str],
+    decode: Callable[[list[int]], str],
     vocab_size: int,
-    decode_batch: Optional[Callable[[List[List[int]]], List[str]]] = None,
-) -> Tuple[int, ...]:
+    decode_batch: Callable[[list[list[int]]], list[str]] | None = None,
+) -> tuple[int, ...]:
     """Whisper token ids whose text contains an ellipsis ("..." or "…").
 
     Whisper writes an ellipsis wherever audio trails off into silence, so a
@@ -104,7 +103,7 @@ def ellipsis_token_ids(
 def model_load_progress(
     model_name: str,
     is_cached: bool,
-    filter_non_downloads: Optional[bool] = None,
+    filter_non_downloads: bool | None = None,
 ):
     """
     Context manager for model loading with HF download progress tracking.

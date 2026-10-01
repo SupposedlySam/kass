@@ -2,9 +2,8 @@
 Task tracking for active model downloads.
 """
 
-from typing import Optional, Dict, List
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass
@@ -14,14 +13,14 @@ class DownloadTask:
     model_name: str
     status: str = "downloading"  # downloading, extracting, complete, error
     started_at: datetime = field(default_factory=datetime.utcnow)
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class TaskManager:
     """Manages active model downloads."""
 
     def __init__(self):
-        self._active_downloads: Dict[str, DownloadTask] = {}
+        self._active_downloads: dict[str, DownloadTask] = {}
 
     def start_download(self, model_name: str) -> None:
         """Mark a download as started."""
@@ -41,11 +40,11 @@ class TaskManager:
             self._active_downloads[model_name].status = "error"
             self._active_downloads[model_name].error = error
 
-    def get_active_downloads(self) -> List[DownloadTask]:
+    def get_active_downloads(self) -> list[DownloadTask]:
         """Get all active downloads."""
         return list(self._active_downloads.values())
 
-    def get_pending_downloads(self) -> List[DownloadTask]:
+    def get_pending_downloads(self) -> list[DownloadTask]:
         """Get downloads that are still in flight.
 
         Excludes errored tasks, which stay in the active list so the
@@ -68,7 +67,7 @@ class TaskManager:
 
 
 # Global task manager instance
-_task_manager: Optional[TaskManager] = None
+_task_manager: TaskManager | None = None
 
 
 def get_task_manager() -> TaskManager:

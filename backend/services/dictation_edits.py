@@ -44,12 +44,69 @@ _BREAK_COMMAND = re.compile(
 # Before a phrase with no lead verb, these make it something talked about:
 # "the next line", "on a new line", "our new line".
 _TALKED_ABOUT = frozenset(
-    "a an the this that these those each every another one any some no our my your his her its their"
-    " of on in at to into onto with for by from per what which whose".split()
+    [
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "each",
+        "every",
+        "another",
+        "one",
+        "any",
+        "some",
+        "no",
+        "our",
+        "my",
+        "your",
+        "his",
+        "her",
+        "its",
+        "their",
+        "of",
+        "on",
+        "in",
+        "at",
+        "to",
+        "into",
+        "onto",
+        "with",
+        "for",
+        "by",
+        "from",
+        "per",
+        "what",
+        "which",
+        "whose",
+    ]
 )
 # Before "open quote" or "end quote", only these do: "the end quote".
 _NAMED = frozenset(
-    "a an the this that these those each every another any some no our my your his her its their".split()
+    [
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "each",
+        "every",
+        "another",
+        "any",
+        "some",
+        "no",
+        "our",
+        "my",
+        "your",
+        "his",
+        "her",
+        "its",
+        "their",
+    ]
 )
 _PREVIOUS_WORD = re.compile(r"([\w'\u2019]+)\W*$")
 # A spoken mark: "open quote", "end quote", "unquote", "open paren", "close
@@ -73,7 +130,7 @@ _MARK_COMMAND = re.compile(
 )
 _PAIRS = {"quote": '""', "paren": "()", "curly": "{}", "angle": "<>", "square": "[]"}
 # After a bare symbol, these make it a verb: "slash the budget", "pipe it".
-_OBJECTS = _TALKED_ABOUT | frozenset("it them me us him her you".split())
+_OBJECTS = _TALKED_ABOUT | frozenset(["it", "them", "me", "us", "him", "her", "you"])
 _NEXT_WORD = re.compile(r"\W*([\w'\u2019]+)")
 
 

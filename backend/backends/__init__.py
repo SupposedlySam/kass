@@ -10,14 +10,15 @@ and a model config registry that eliminates per-engine dispatch maps.
 # import time, which wraps transformers' tokenizer load against the
 # unconditional HuggingFace metadata call that otherwise raises on
 # HF_HUB_OFFLINE=1 and on network failures.
-from ..utils import hf_offline_patch  # noqa: F401
-
 import threading
-from dataclasses import dataclass, field
 from collections.abc import Sequence
-from typing import Protocol, Optional
-from typing_extensions import runtime_checkable
+from dataclasses import dataclass, field
+from typing import Optional, Protocol
+
 import numpy as np
+from typing_extensions import runtime_checkable
+
+from ..utils import hf_offline_patch
 
 DEFAULT_LLM_MAX_TOKENS = 512
 DEFAULT_LLM_TEMPERATURE = 0.7
@@ -56,9 +57,9 @@ class STTBackend(Protocol):
     async def transcribe(
         self,
         audio_path: str,
-        language: Optional[str] = None,
-        model_size: Optional[str] = None,
-        previous_text: Optional[str] = None,
+        language: str | None = None,
+        model_size: str | None = None,
+        previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
     ) -> str:
@@ -85,9 +86,9 @@ class STTBackend(Protocol):
         self,
         samples: np.ndarray,
         sample_rate: int,
-        language: Optional[str] = None,
-        model_size: Optional[str] = None,
-        previous_text: Optional[str] = None,
+        language: str | None = None,
+        model_size: str | None = None,
+        previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
     ) -> str:
@@ -122,11 +123,11 @@ class LLMBackend(Protocol):
     async def generate(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         max_tokens: int = DEFAULT_LLM_MAX_TOKENS,
         temperature: float = DEFAULT_LLM_TEMPERATURE,
-        model_size: Optional[str] = None,
-        examples: Optional[list[tuple[str, str]]] = None,
+        model_size: str | None = None,
+        examples: list[tuple[str, str]] | None = None,
     ) -> str:
         """Run a single-turn chat completion and return the assistant reply.
 
@@ -144,7 +145,7 @@ class LLMBackend(Protocol):
 
 
 # Global backend instances
-_stt_backend: Optional[STTBackend] = None
+_stt_backend: STTBackend | None = None
 _llm_backends: dict[str, LLMBackend] = {}
 _llm_backends_lock = threading.Lock()
 
@@ -267,7 +268,7 @@ def get_stt_model_configs() -> list[ModelConfig]:
 # Lookup helpers — these replace the if/elif chains in main.py
 
 
-def get_model_config(model_name: str) -> Optional[ModelConfig]:
+def get_model_config(model_name: str) -> ModelConfig | None:
     """Look up a model config by model_name."""
     for cfg in get_all_model_configs():
         if cfg.model_name == model_name:
@@ -289,13 +290,13 @@ async def unload_backend(backend) -> None:
         backend.unload_model()
 
 
-def _loaded_size(backend) -> Optional[str]:
+def _loaded_size(backend) -> str | None:
     return getattr(backend, "_current_model_size", None) or getattr(backend, "model_size", None)
 
 
 def _backend_for_config(config: ModelConfig):
     """Return the live backend instance that serves ``config``'s engine."""
-    from ..services import transcribe, llm as llm_service
+    from ..services import llm as llm_service, transcribe
 
     if config.engine == "whisper":
         return transcribe.get_whisper_model()

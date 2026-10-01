@@ -5,19 +5,19 @@ from fastapi import FastAPI
 
 def register_routers(app: FastAPI) -> None:
     """Include all domain routers on the application."""
-    from .health import router as health_router
-    from .transcription import router as transcription_router
-    from .llm import router as llm_router
+    from .capture_stream import router as capture_stream_router
     from .captures import router as captures_router
     from .commands import router as commands_router
-    from .capture_stream import router as capture_stream_router
+    from .dictionary import router as dictionary_router
+    from .health import router as health_router
+    from .links import router as links_router
+    from .llm import router as llm_router
     from .models import router as models_router
     from .settings import router as settings_router
     from .styles import router as styles_router
     from .tasks import router as tasks_router
+    from .transcription import router as transcription_router
     from .writing_style import router as writing_style_router
-    from .dictionary import router as dictionary_router
-    from .links import router as links_router
 
     app.include_router(health_router)
     app.include_router(transcription_router)
