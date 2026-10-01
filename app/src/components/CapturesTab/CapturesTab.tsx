@@ -57,17 +57,42 @@ export function CapturesTab() {
     [captures, search],
   );
 
-  // Keep a selection. If the current selection disappears (e.g. deletion),
-  // fall through to the first capture, then to null.
+  // The list the selection was last seen in, for the app it was loaded for.
+  // Not while another app's list is still loading in its place.
+  const lastSeen = useRef<{ visible: CaptureResponse[]; appFilter: typeof appFilter } | null>(null);
+
+  // Keep a selection. If the current selection disappears from the same
+  // list (a deletion), the capture that took its place is selected, or the
+  // one above it at the end; otherwise the first capture, then null.
   useEffect(() => {
     if (!captures.length) {
       if (selectedId !== null) setSelectedId(null);
       return;
     }
-    if (!selectedId || !captures.find((c) => c.id === selectedId)) {
-      setSelectedId(captures[0].id);
+    if (selectedId && captures.find((c) => c.id === selectedId)) {
+      if (!capturesPlaceholder) lastSeen.current = { visible, appFilter };
+      return;
     }
-  }, [captures, selectedId]);
+    const before = lastSeen.current;
+    const index =
+      before && before.appFilter === appFilter
+        ? before.visible.findIndex((c) => c.id === selectedId)
+        : -1;
+    if (index !== -1 && visible.length) {
+      const remaining = new Set(visible.map((c) => c.id));
+      const next =
+        before?.visible.slice(index + 1).find((c) => remaining.has(c.id)) ??
+        before?.visible
+          .slice(0, index)
+          .reverse()
+          .find((c) => remaining.has(c.id));
+      if (next) {
+        setSelectedId(next.id);
+        return;
+      }
+    }
+    setSelectedId(captures[0].id);
+  }, [captures, visible, selectedId, appFilter, capturesPlaceholder]);
 
   // `?capture=<id>` (from the command palette or a kass:// link) selects
   // that capture once it is in the list, clears whatever would hide it, then
