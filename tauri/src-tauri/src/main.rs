@@ -34,7 +34,6 @@ use tauri::{
     WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_shell::ShellExt;
-use tokio::sync::mpsc;
 
 pub const DICTATE_WINDOW_LABEL: &str = "dictate";
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -1591,66 +1590,27 @@ pub fn run() {
             updater::set_update_channel,
             updater::restart_to_update
         ])
-        .on_window_event({
-            let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-            move |window, event| {
-                if window.label() == ONBOARDING_WINDOW_LABEL {
-                    match event {
-                        // Its close button: the same as finish_onboarding(None).
-                        WindowEvent::CloseRequested { .. } => {
-                            release_onboarding(window.app_handle());
-                            show_main_after_onboarding(window.app_handle(), None);
-                        }
-                        WindowEvent::Destroyed => release_onboarding(window.app_handle()),
-                        _ => {}
+        .on_window_event(|window, event| {
+            if window.label() == ONBOARDING_WINDOW_LABEL {
+                match event {
+                    // Its close button: the same as finish_onboarding(None).
+                    WindowEvent::CloseRequested { .. } => {
+                        release_onboarding(window.app_handle());
+                        show_main_after_onboarding(window.app_handle(), None);
                     }
-                    return;
+                    WindowEvent::Destroyed => release_onboarding(window.app_handle()),
+                    _ => {}
                 }
-                // Only the main window may stop the server on close.
-                if window.label() != MAIN_WINDOW_LABEL {
-                    return;
-                }
+                return;
+            }
+            // Closing the main window hides it: Kass keeps running for
+            // dictation, and the Dock icon brings it back through
+            // `RunEvent::Reopen`, which can only show a window that still
+            // exists. The server stops when Kass quits (`RunEvent::Exit`).
+            if window.label() == MAIN_WINDOW_LABEL {
                 if let WindowEvent::CloseRequested { api, .. } = event {
-                    // If we're already in the close flow, let it proceed
-                    if closing.load(std::sync::atomic::Ordering::SeqCst) {
-                        return;
-                    }
-                    closing.store(true, std::sync::atomic::Ordering::SeqCst);
-
-                    // Prevent automatic close so frontend can clean up
                     api.prevent_close();
-
-                    // Emit event to frontend to check setting and stop server if needed
-                    let app_handle = window.app_handle();
-
-                    if let Err(e) = app_handle.emit("window-close-requested", ()) {
-                        eprintln!("Failed to emit window-close-requested event: {}", e);
-                        window.close().ok();
-                        return;
-                    }
-
-                    // Set up listener for frontend response
-                    let window_for_close = window.clone();
-                    let closing_for_timeout = closing.clone();
-                    let (tx, mut rx) = mpsc::unbounded_channel::<()>();
-
-                    let listener_id = window.listen("window-close-allowed", move |_| {
-                        let _ = tx.send(());
-                    });
-
-                    tauri::async_runtime::spawn(async move {
-                        tokio::select! {
-                            _ = rx.recv() => {
-                                window_for_close.close().ok();
-                            }
-                            _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
-                                eprintln!("Window close timeout, closing anyway");
-                                window_for_close.close().ok();
-                            }
-                        }
-                        window_for_close.unlisten(listener_id);
-                        closing_for_timeout.store(false, std::sync::atomic::Ordering::SeqCst);
-                    });
+                    let _ = window.hide();
                 }
             }
         })

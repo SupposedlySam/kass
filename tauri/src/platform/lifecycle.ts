@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import type { PlatformLifecycle, ServerLogEntry } from '@/platform/types';
 
 class TauriLifecycle implements PlatformLifecycle {
@@ -44,36 +44,6 @@ class TauriLifecycle implements PlatformLifecycle {
     } catch (error) {
       console.error('Failed to restart server:', error);
       throw error;
-    }
-  }
-
-  async setupWindowCloseHandler(): Promise<void> {
-    try {
-      // Listen for window close request from Rust
-      await listen<null>('window-close-requested', async () => {
-        // Only stop the server if this app instance started it; a server
-        // started by hand for development keeps running.
-        const serverStartedByApp = window.__kassServerStartedByApp ?? false;
-
-        console.log(
-          '[lifecycle] window-close-requested: serverStartedByApp=%s',
-          serverStartedByApp,
-        );
-
-        if (serverStartedByApp) {
-          // Stop server before closing (only if we started it)
-          try {
-            await this.stopServer();
-          } catch (error) {
-            console.error('Failed to stop server on close:', error);
-          }
-        }
-
-        // Emit event back to Rust to allow close
-        await emit('window-close-allowed');
-      });
-    } catch (error) {
-      console.error('Failed to setup window close handler:', error);
     }
   }
 

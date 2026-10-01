@@ -127,17 +127,12 @@ function MainApp() {
     return unsubscribe;
   }, [platform.lifecycle]);
 
-  // Setup window close handler and auto-start server when running in Tauri (production only)
+  // Auto-start server when running in Tauri (production only)
   useEffect(() => {
     if (!platform.metadata.isTauri) {
       setServerReady(true); // Web assumes server is running
       return;
     }
-
-    // Setup window close handler to stop the server if this app started it
-    platform.lifecycle.setupWindowCloseHandler().catch((error) => {
-      console.error('Failed to setup window close handler:', error);
-    });
 
     // Only auto-start server in production mode
     // In dev mode, user runs server separately
