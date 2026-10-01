@@ -14,13 +14,18 @@ python := venv_bin / "python"
 # ─── Setup ────────────────────────────────────────────────────────────
 
 # Full project setup (python venv + JS deps + dev sidecar)
-setup: setup-python setup-js
+setup: setup-python setup-js setup-hooks
     @echo ""
     @echo "Setup complete! Run: just dev"
 
 # Create venv (Python 3.12) and install Python dependencies
 setup-python:
     ./scripts/setup-python.sh
+
+# Install the pre-push hook that lints and formats pushed files (needs Dart)
+setup-hooks:
+    dart pub get
+    dart run hooksman register
 
 # Install JavaScript dependencies
 setup-js:
