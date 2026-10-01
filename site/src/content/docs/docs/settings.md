@@ -12,6 +12,7 @@ Open Settings from the sidebar, or search for any setting from the command palet
 - **Theme**
 - **Launch at login.** Kass starts hidden in the background. This only works for the copy in Applications.
 - **Keep history**: how long [captures](/docs/captures/#keep-history) are kept
+- **Delete voice recordings**: keep each capture's text but [not its audio](/docs/captures/#delete-voice-recordings)
 - **Captures folder**: opens the folder where your data lives
 
 ## Dictation

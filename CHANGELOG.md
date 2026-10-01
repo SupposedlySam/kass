@@ -2,6 +2,12 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### New
+
+- **Keep the text, not the recording.** Turn on **Delete voice recordings** in Settings › General to delete each recording as soon as its text is saved. Captures keep their text and say **Voice recording deleted automatically** where the player was. It applies to dictations from then on; earlier ones keep their audio until **Keep history** removes them. Corrections without a recording still teach your dictionary and rules, but no longer count toward model updates.
+
 ## 0.7.1 — September 30, 2026
 
 ### New

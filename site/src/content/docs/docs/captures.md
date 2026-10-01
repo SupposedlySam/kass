@@ -7,7 +7,7 @@ description: Review past dictations, fix mistakes so Kass learns, see your stats
 
 Every dictation is saved in the **Captures** tab, grouped by the app you dictated into and searchable. Each one has:
 
-- the **audio**, so you can play it back
+- the **audio**, so you can play it back, unless you [delete recordings](#delete-voice-recordings)
 - **Heard**: what Whisper transcribed
 - **Raw** and **Refined**: before and after cleanup
 
@@ -45,3 +45,11 @@ The **Insights** tab shows how much you dictate: words, your speaking pace, time
 Choose how long captures are kept in **Settings › General › Keep history**: 7 days, 30 days (the default), 90 days, 1 year or Forever.
 
 Nothing is deleted until you confirm. The first time history would delete old captures, Kass asks you first. Your corrections, dictionary, learned names and stats are kept even after the captures they came from are deleted.
+
+## Delete voice recordings
+
+Turn on **Settings › General › Delete voice recordings** to keep only the text. Each recording is deleted as soon as its text is saved, and the capture says **Voice recording deleted automatically** where the player was.
+
+It applies to dictations from then on. Earlier captures keep their audio until **Keep history** deletes them.
+
+Corrections still teach your dictionary and rules without a recording, but model updates are tested on corrected recordings, so corrections made without one don't count toward them.

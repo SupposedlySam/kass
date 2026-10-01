@@ -28,6 +28,7 @@ That's it. There's no account, no analytics, no telemetry and no crash reporting
 
 - Delete individual captures from the **Captures** tab.
 - Set **Keep history** to delete old captures automatically. See [Captures](/docs/captures/#keep-history).
+- Turn on **Delete voice recordings** to keep only the text of each capture. See [Captures](/docs/captures/#delete-voice-recordings).
 - To remove everything, quit Kass and delete its data folder, then delete your models from the Models tab or from the Hugging Face cache.
 
 ## Check for yourself
