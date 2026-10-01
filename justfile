@@ -22,10 +22,9 @@ setup: setup-python setup-js setup-hooks
 setup-python:
     ./scripts/setup-python.sh
 
-# Install the pre-push hook that lints and formats pushed files (needs Dart)
+# Install the pre-push hook (scripts/hooks/pre-push) that lints and formats pushed files
 setup-hooks:
-    dart pub get
-    dart run hooksman register
+    git config core.hooksPath scripts/hooks
 
 # Install JavaScript dependencies
 setup-js:

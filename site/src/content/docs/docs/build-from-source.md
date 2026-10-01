@@ -32,7 +32,7 @@ just setup   # Python environment, dependencies and the pre-push hook
 just dev     # runs the backend and the desktop app
 ```
 
-`git push` lints and formats the files it pushes, and only those. If it fixes anything, it stops the push and lists the files: commit them and push again. The hook needs the [Dart SDK](https://dart.dev/get-dart); `SKIP=1 git push` skips it once.
+`git push` lints and formats the files it pushes, and only those. If it fixes anything, it stops the push and lists the files: commit them and push again. `SKIP=1 git push` skips it once.
 
 Run `just --list` to see every command.
 

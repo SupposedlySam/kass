@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""Lint and format the files a push changes, and nothing else.
+
+Installed by `just setup-hooks`, which points git's core.hooksPath at
+scripts/hooks. Skip once with `SKIP=1 git push`.
+
+Git writes one line per pushed ref on stdin:
+`<local ref> <local sha> <remote ref> <remote sha>`. The files checked are
+the ones those commits add or change: from the remote's commit, or, for a
+branch the remote doesn't have yet, from where it left origin's default
+branch.
+
+Fixers run first: ruff (--fix, format) on backend Python, Biome (--write) on
+TS/JS/JSON/CSS/HTML. A hook can't change commits already made, so if a
+fixer changed anything the push stops with the files to commit. Then what no
+tool fixes, and tsc for app/ and tauri/ when their code is pushed, fails the
+push with the tools' output.
+
+The tools read the working tree, so an uncommitted edit to a pushed file is
+checked as it is on disk.
+"""
+
+# Git GUIs may run this with macOS's Python 3.9; keep annotations unevaluated.
+from __future__ import annotations
+
+import hashlib
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+NO_COMMIT = "0" * 40
+WEB_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc", ".css", ".html"}
+RUFF = "backend/venv/bin/ruff"
+BIOME = "node_modules/.bin/biome"
+TSC = "node_modules/.bin/tsc"
+BIOME_FLAGS = ["--files-ignore-unknown=true", "--no-errors-on-unmatched"]
+
+
+def git(*args: str) -> str | None:
+    """stdout of `git args`, or None when it fails."""
+    result = subprocess.run(["git", *args], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
+def fork_point(sha: str) -> str | None:
+    """Where ``sha`` left the remote's default branch, or None without a remote."""
+    for branch in ("refs/remotes/origin/HEAD", "refs/remotes/origin/main"):
+        base = git("merge-base", sha, branch)
+        if base:
+            return base.strip()
+    return None
+
+
+def pushed_files(lines: list[str]) -> list[str]:
+    """The files the pushed refs add or change that still exist, sorted."""
+    files: set[str] = set()
+    for line in lines:
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        _, local_sha, _, remote_sha = parts
+        # Deleting a remote branch pushes no files.
+        if local_sha == NO_COMMIT:
+            continue
+        known = remote_sha != NO_COMMIT and git("cat-file", "-e", f"{remote_sha}^{{commit}}") is not None
+        base = remote_sha if known else fork_point(local_sha)
+        if base is None:
+            changed = git("show", "--pretty=format:", "--name-only", "--diff-filter=ACMR", local_sha)
+        else:
+            changed = git("diff", "--name-only", "--diff-filter=ACMR", base, local_sha)
+        files.update(path for path in (changed or "").splitlines() if path)
+    return sorted(path for path in files if Path(path).is_file())
+
+
+def digest(path: str) -> str | None:
+    file = Path(path)
+    return hashlib.sha256(file.read_bytes()).hexdigest() if file.is_file() else None
+
+
+def say(message: str = "") -> None:
+    print(message, file=sys.stderr)
+
+
+def main() -> int:
+    if os.environ.get("SKIP") in ("1", "true"):
+        return 0
+    root = git("rev-parse", "--show-toplevel")
+    if root is None:
+        return 0
+    os.chdir(root.strip())
+
+    files = pushed_files(sys.stdin.read().splitlines())
+    python = [path for path in files if path.startswith("backend/") and path.endswith(".py")]
+    web = [path for path in files if Path(path).suffix in WEB_SUFFIXES]
+    if not python and not web:
+        return 0
+
+    missing = [tool for tool, needed in ((RUFF, python), (BIOME, web)) if needed and not Path(tool).exists()]
+    if missing:
+        say(f"pre-push: {', '.join(missing)} not found. Run `just setup`, or push with SKIP=1.")
+        return 1
+
+    failures: list[str] = []
+
+    def step(label: str, command: list[str]) -> None:
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            failures.append(f"{label} failed:\n{(result.stdout + result.stderr).strip()}")
+
+    checked = python + web
+    before = {path: digest(path) for path in checked}
+
+    # Fix first, so a push only fails on what no tool fixes.
+    if python:
+        step("ruff check --fix", [RUFF, "check", "--fix", "--quiet", *python])
+        step("ruff format", [RUFF, "format", "--quiet", *python])
+    if web:
+        step("biome check --write", [BIOME, "check", "--write", *BIOME_FLAGS, *web])
+
+    fixed = [path for path in checked if digest(path) != before[path]]
+    if fixed:
+        say("pre-push: fixed lint and formatting in files this push changes:")
+        for path in fixed:
+            say(f"  {path}")
+        say("Commit them and push again.")
+        return 1
+
+    failures.clear()
+    if python:
+        step("ruff check", [RUFF, "check", *python])
+        step("ruff format --check", [RUFF, "format", "--check", *python])
+    if web:
+        step("biome check", [BIOME, "check", *BIOME_FLAGS, *web])
+    # tauri compiles app/src too, so app code is type-checked in both.
+    for package in ("app", "tauri"):
+        if any(path.startswith((f"{package}/", "app/src/")) for path in web):
+            step(f"tsc ({package})", [TSC, "-p", f"{package}/tsconfig.json", "--noEmit"])
+    if not failures:
+        return 0
+    say("pre-push: this push has problems no tool fixes:")
+    for failure in failures:
+        say(failure)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

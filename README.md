@@ -59,9 +59,9 @@ just test      # backend tests
 just install   # build and install to /Applications
 ```
 
-You'll need [Bun](https://bun.sh), [Rust](https://rustup.rs), [Python 3.12](https://python.org), [Dart](https://dart.dev/get-dart), Xcode and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). See [Build from source](https://kass.mrgnhnt.com/docs/build-from-source/) for signing and details.
+You'll need [Bun](https://bun.sh), [Rust](https://rustup.rs), [Python 3.12](https://python.org), Xcode and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). See [Build from source](https://kass.mrgnhnt.com/docs/build-from-source/) for signing and details.
 
-`git push` runs a [hooksman](https://pub.dev/packages/hooksman) pre-push hook (`hooks/pre_push.dart`) that lints and formats only the files the push changes. If it fixes anything, it stops the push and lists the files: commit them and push again. `SKIP=1 git push` skips it once.
+`git push` runs a pre-push hook (`scripts/hooks/pre-push`) that lints and formats only the files the push changes. If it fixes anything, it stops the push and lists the files: commit them and push again. `SKIP=1 git push` skips it once.
 
 To release, move the Unreleased notes in [CHANGELOG.md](CHANGELOG.md) under the new version, commit, and run `./scripts/release.sh <version>` from a clean `main`.
 
