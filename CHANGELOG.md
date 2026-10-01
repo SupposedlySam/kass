@@ -2,17 +2,28 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
-## Unreleased
+## 0.8.0 — October 1, 2026
 
 ### New
 
 - **Keep the text, not the recording.** Turn on **Delete voice recordings** in Settings › General to delete each recording as soon as its text is saved. Captures keep their text and say **Voice recording deleted automatically** where the player was. It applies to dictations from then on; earlier ones keep their audio until **Keep history** removes them. Corrections without a recording still teach your dictionary and rules, but no longer count toward model updates.
+- **Say punctuation and Kass writes it.** "I'm home comma see you soon period" becomes `I'm home, see you soon.` Comma, period, full stop, question mark, exclamation point, colon and semicolon all work, and stay put through cleanup and your writing style. Talking about a mark still writes the word: "a comma", "a period of time". Corrections teach your own words for a mark, like "bang" for `!`.
+- **Say how a word is capitalized.** "I love, in all caps" writes `I LOVE`, and "all caps yelling end caps" capitalizes the words in between. "Capital C-H-E-N-E-Y" spells `Cheney`.
 
 ### Improved
 
 - **Fix any text by voice, not just Kass's (beta).** "Fix that" now works on the text before your cursor, whoever wrote it: words you typed, an older message, or a dictation Kass couldn't track. Only fixes to what Kass dictated teach it.
 - **Fix with just the right word (beta).** "Fix, it's Thursday" changes the day, "it's 3:30" the time, and "fix that, Morgan" the name that sounds like it. "Fix" alone now starts a fix too.
 - **Fix text in Messages (beta).** Where an app won't let Kass replace words directly, Kass selects them and types the fix.
+- **Laughs are written as one word.** "Ha ha ha" is now `hahaha`, spelled the way you laughed, and a long laugh is no longer cut as a repeat.
+- **Take back a voice fix (beta).** Deleting a "fix that" now undoes what it changed: its correction, what that taught, and any word it added to your dictionary (unless you've edited it since). Every correction in a capture's details now has **Remove**.
+
+### Fixed
+
+- **Every word you add to the dictionary goes into the correction.** Adding a second word from a saved correction used to only update the dictionary.
+- **Deleting a capture keeps your place.** The selection moves to the next capture instead of jumping to the top.
+- **Closing Kass's window leaves it ready.** Clicking Kass in the Dock after closing its window now brings the window back.
+- **The permission prompt isn't hidden behind System Settings.** Kass now asks macOS first and opens Settings only once it's listed there.
 
 ## 0.7.1 — September 30, 2026
 
