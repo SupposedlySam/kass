@@ -31,6 +31,7 @@ export function useChordSync({ paused = false }: { paused?: boolean } = {}) {
   const pushKeys = settings?.chord_push_to_talk_keys;
   const toggleKeys = settings?.chord_toggle_to_talk_keys;
   const commandKeys = settings?.chord_command_keys ?? [];
+  const speakKeys = settings?.chord_speak_keys ?? [];
   const modelsReady = !missing.includes('stt') && !missing.includes('llm');
   const gate = modelsReady ? null : t('dictation.stillDownloading');
 
@@ -41,7 +42,7 @@ export function useChordSync({ paused = false }: { paused?: boolean } = {}) {
     const shouldArm = enabled && inputMonitoring;
     const command = shouldArm ? 'enable_hotkey' : 'disable_hotkey';
     const args = shouldArm
-      ? { pushToTalk: pushKeys, toggleToTalk: toggleKeys, command: commandKeys }
+      ? { pushToTalk: pushKeys, toggleToTalk: toggleKeys, command: commandKeys, speak: speakKeys }
       : {};
     invoke(command, args).catch((err) => {
       console.warn(`[chord-sync] ${command} failed:`, err);
@@ -56,6 +57,7 @@ export function useChordSync({ paused = false }: { paused?: boolean } = {}) {
     pushKeys?.join(','),
     toggleKeys?.join(','),
     commandKeys.join(','),
+    speakKeys.join(','),
   ]);
 
   useEffect(() => {

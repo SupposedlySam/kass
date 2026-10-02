@@ -12,7 +12,10 @@ import { SERVER_URL } from '@/stores/serverStore';
  * overwrite the pill of a newer one.
  */
 export type NativeDictationEvent =
-  | { take: number; state: 'preparing' | 'recording' | 'refining' | 'done' | 'cancelled' }
+  | {
+      take: number;
+      state: 'preparing' | 'recording' | 'refining' | 'speaking' | 'done' | 'cancelled';
+    }
   | { take: number; state: 'transcribing'; elapsed_ms: number }
   | { take: number; state: 'error'; message: string; visible_ms: number };
 
@@ -33,6 +36,9 @@ export interface NativeDictationSession {
   finishStyleChange?: () => void;
   isRecording: boolean;
   stopRecording: () => void;
+  /** Read Aloud is speaking (docs/plans/READ_ALOUD.md). Desktop only. */
+  isSpeaking?: boolean;
+  stopSpeaking?: () => void;
   dismissError: () => void;
 }
 
@@ -95,7 +101,8 @@ export function useNativeDictationSession(): NativeDictationSession {
 
   useEffect(() => {
     const apply = (event: NativeDictationEvent) => {
-      if (event.state === 'preparing') {
+      // A take, or a Read Aloud reading, starts with its first state.
+      if (event.state === 'preparing' || event.state === 'speaking') {
         if (event.take < currentTakeRef.current) return;
         currentTakeRef.current = event.take;
       } else if (event.take !== currentTakeRef.current) {
@@ -129,6 +136,11 @@ export function useNativeDictationSession(): NativeDictationSession {
           break;
         case 'refining':
           setPillState('refining');
+          break;
+        case 'speaking':
+          startedAtRef.current = null;
+          setErrorMessage(null);
+          setPillState('speaking');
           break;
         case 'done':
           startedAtRef.current = null;
@@ -202,6 +214,12 @@ export function useNativeDictationSession(): NativeDictationSession {
     invoke('dictation_stop').catch((err) => console.warn('[dictate] dictation_stop failed:', err));
   }, []);
 
+  const stopSpeaking = useCallback(() => {
+    invoke('read_aloud_stop').catch((err) =>
+      console.warn('[dictate] read_aloud_stop failed:', err),
+    );
+  }, []);
+
   const finishStyleChange = useCallback(() => {
     setStyleChange(null);
     // The room above the pill would otherwise take clicks meant for what's under it.
@@ -225,6 +243,8 @@ export function useNativeDictationSession(): NativeDictationSession {
     inputDb: isRecording ? inputDb : null,
     isRecording,
     stopRecording,
+    isSpeaking: pillState === 'speaking',
+    stopSpeaking,
     dismissError,
   };
 }

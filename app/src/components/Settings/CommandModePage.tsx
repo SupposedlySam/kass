@@ -16,13 +16,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import type { Transform } from '@/lib/api/types';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
-import { sortChordKeys } from '@/lib/utils/keyCodes';
+import { chordTakenBy } from '@/lib/utils/chordConflicts';
 import { ChordKeys } from './ChordKeys';
 
 const P = 'settings.commandMode';
-
-const sameChord = (a: string[], b: string[]) =>
-  sortChordKeys(a).join('+') === sortChordKeys(b).join('+');
 
 /**
  * Command Mode (docs/plans/COMMAND_MODE.md): the chord that rewrites the
@@ -38,12 +35,12 @@ export function CommandModePage() {
   const [editingChord, setEditingChord] = useState(false);
 
   const saveChord = (keys: string[]) => {
-    // The same keys as a dictation chord would start both takes at once.
-    const taken = [settings?.chord_push_to_talk_keys, settings?.chord_toggle_to_talk_keys].some(
-      (other) => other && sameChord(other, keys),
-    );
+    const taken = chordTakenBy(keys, 'command', settings);
     if (taken) {
-      toast({ title: t(`${P}.chord.taken`), variant: 'destructive' });
+      toast({
+        title: t('settings.chordTaken', { name: t(`settings.chordNames.${taken}`) }),
+        variant: 'destructive',
+      });
       return;
     }
     update({ chord_command_keys: keys });

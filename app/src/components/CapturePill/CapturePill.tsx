@@ -8,13 +8,21 @@ import { barHeights, isClipping, LEVEL_STEP_MS, levelFromDb, pushLevel, silentWa
  * Pill state machine shared between the settings preview and the live
  * recording pill in the Captures tab.
  */
-export type PillState = 'preparing' | 'recording' | 'transcribing' | 'refining' | 'rest' | 'error';
+export type PillState =
+  | 'preparing'
+  | 'recording'
+  | 'transcribing'
+  | 'refining'
+  | 'speaking'
+  | 'rest'
+  | 'error';
 
 const PILL_LABEL_KEYS: Record<Exclude<PillState, 'error'>, string> = {
   preparing: 'captures.pill.preparing',
   recording: 'captures.pill.recording',
   transcribing: 'captures.pill.transcribing',
   refining: 'captures.pill.refining',
+  speaking: 'captures.pill.speaking',
   rest: 'captures.pill.completed',
 };
 
@@ -62,12 +70,14 @@ export function CapturePill({
   const label = t(PILL_LABEL_KEYS[state]);
   const marks = <PillMarks state={state} inputDb={inputDb ?? null} />;
 
-  if (state === 'recording' && onStop) {
+  if ((state === 'recording' || state === 'speaking') && onStop) {
     return (
       <button
         type="button"
         onClick={onStop}
-        aria-label={t('captures.pill.stopAria')}
+        aria-label={t(
+          state === 'speaking' ? 'captures.pill.stopSpeakingAria' : 'captures.pill.stopAria',
+        )}
         className={cn(
           CAPSULE,
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
@@ -113,6 +123,9 @@ function PillMarks({ state, inputDb }: { state: PillState; inputDb: number | nul
       return <PulsingDots className="bg-white/70" />;
     case 'refining':
       return <PulsingDots className="bg-accent" />;
+    case 'speaking':
+      // Read Aloud: Kass's voice, not the microphone.
+      return <PulsingDots className="bg-sky-400" />;
     default:
       return <span className="h-1 w-1 rounded-full bg-emerald-400" />;
   }

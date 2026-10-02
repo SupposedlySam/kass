@@ -14,6 +14,7 @@ const FEATURES = [
   { key: 'formatting', to: '/settings/transcription' },
   { key: 'handsFree', to: '/settings/dictation' },
   { key: 'commandMode', to: '/settings/command-mode' },
+  { key: 'readAloud', to: '/settings/read-aloud' },
   { key: 'palette', to: null },
   { key: 'insights', to: '/insights' },
 ] as const;

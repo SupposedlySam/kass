@@ -7,6 +7,7 @@ type SettingsPath =
   | '/settings'
   | '/settings/dictation'
   | '/settings/command-mode'
+  | '/settings/read-aloud'
   | '/settings/transcription'
   | '/settings/writing-style'
   | '/settings/dictionary'
@@ -17,6 +18,7 @@ const tabs: Array<{ labelKey: string; path: SettingsPath; tauriOnly?: boolean }>
   { labelKey: 'settings.tabs.general', path: '/settings' },
   { labelKey: 'settings.tabs.dictation', path: '/settings/dictation' },
   { labelKey: 'settings.tabs.commandMode', path: '/settings/command-mode' },
+  { labelKey: 'settings.tabs.readAloud', path: '/settings/read-aloud' },
   { labelKey: 'settings.tabs.transcription', path: '/settings/transcription' },
   { labelKey: 'settings.tabs.writingStyle', path: '/settings/writing-style' },
   { labelKey: 'settings.tabs.dictionary', path: '/settings/dictionary' },

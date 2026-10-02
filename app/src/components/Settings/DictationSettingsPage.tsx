@@ -21,6 +21,7 @@ import { useAudioInputDevices } from '@/lib/hooks/useAudioInputDevices';
 import { useDictationReadiness } from '@/lib/hooks/useDictationReadiness';
 import { inputDevicePickerValue, useNativeInputDevices } from '@/lib/hooks/useNativeInputDevices';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
+import { type ChordSlot, chordTakenBy } from '@/lib/utils/chordConflicts';
 import { defaultChordKeys } from '@/lib/utils/keyCodes';
 import { usePlatform } from '@/platform/PlatformContext';
 import { ChordKeys } from './ChordKeys';
@@ -40,6 +41,23 @@ export function DictationSettingsPage() {
   const pushToTalkKeys = settings?.chord_push_to_talk_keys ?? defaultChordKeys('push');
   const toggleToTalkKeys = settings?.chord_toggle_to_talk_keys ?? defaultChordKeys('toggle');
   const [chordEditor, setChordEditor] = useState<ChordMode | null>(null);
+  const { toast } = useToast();
+
+  /** Save `keys` for `slot` unless another shortcut already uses them. */
+  const saveChord = (slot: ChordSlot, keys: string[]) => {
+    const taken = chordTakenBy(keys, slot, settings);
+    if (taken) {
+      toast({
+        title: t('settings.chordTaken', { name: t(`settings.chordNames.${taken}`) }),
+        variant: 'destructive',
+      });
+      return;
+    }
+    update(
+      slot === 'push' ? { chord_push_to_talk_keys: keys } : { chord_toggle_to_talk_keys: keys },
+    );
+    setChordEditor(null);
+  };
 
   return (
     <>
@@ -91,10 +109,7 @@ export function DictationSettingsPage() {
         description={t('settings.captures.dictation.chordPicker.pttDescription')}
         initialKeys={pushToTalkKeys}
         onCancel={() => setChordEditor(null)}
-        onSave={(keys) => {
-          update({ chord_push_to_talk_keys: keys });
-          setChordEditor(null);
-        }}
+        onSave={(keys) => saveChord('push', keys)}
       />
 
       <ChordPicker
@@ -103,10 +118,7 @@ export function DictationSettingsPage() {
         description={t('settings.captures.dictation.chordPicker.toggleDescription')}
         initialKeys={toggleToTalkKeys}
         onCancel={() => setChordEditor(null)}
-        onSave={(keys) => {
-          update({ chord_toggle_to_talk_keys: keys });
-          setChordEditor(null);
-        }}
+        onSave={(keys) => saveChord('toggle', keys)}
       />
 
       <SettingSection title={t('settings.captures.dictation.sectionInput')}>

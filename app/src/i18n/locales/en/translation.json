@@ -305,8 +305,10 @@
       "recording": "Recording",
       "transcribing": "Transcribing",
       "refining": "Refining",
+      "speaking": "Speaking",
       "completed": "Done",
       "stopAria": "Stop recording",
+      "stopSpeakingAria": "Stop reading aloud",
       "errorFallback": "Something went wrong",
       "errorCopyTooltip": "Click to copy error"
     },
@@ -569,6 +571,7 @@
       "general": "General",
       "dictation": "Dictation",
       "commandMode": "Command Mode",
+      "readAloud": "Read Aloud",
       "transcription": "Transcription & refinement",
       "writingStyle": "Writing style",
       "dictionary": "Dictionary",
@@ -869,8 +872,7 @@
         "change": "Change",
         "changeLabel": "Change the Command Mode shortcut",
         "pickerTitle": "Set the Command Mode shortcut",
-        "pickerDescription": "Hold the keys you want to use, then release and click Save. Pick something distinct from your dictation shortcuts.",
-        "taken": "That shortcut already starts dictation. Pick different keys."
+        "pickerDescription": "Hold the keys you want to use, then release and click Save. Pick something distinct from your dictation shortcuts."
       },
       "transforms": {
         "title": "Transforms",
@@ -925,6 +927,10 @@
           "title": "Command Mode and transforms",
           "description": "Select text in any app, hold the command keys and say what to do with it."
         },
+        "readAloud": {
+          "title": "Read Aloud",
+          "description": "Select text in any app and press the Read Aloud keys to hear it."
+        },
         "palette": {
           "title": "Command palette",
           "description": "Press ⌘K in Kass to search everything you’ve said or run a command."
@@ -940,6 +946,58 @@
         "description": "Permissions, your microphone, your keys and a short practice run.",
         "action": "Open onboarding"
       }
+    },
+    "chordTaken": "{{name}} already uses those keys. Pick different keys.",
+    "chordNames": {
+      "push": "Dictation",
+      "toggle": "Hands-free dictation",
+      "command": "Command Mode",
+      "speak": "Read Aloud"
+    },
+    "readAloud": {
+      "sectionShortcut": "Read Aloud",
+      "description": "Select text in any app and press the Read Aloud shortcut to hear it in a natural voice. Press it again, or Escape, to stop. It runs on your Mac with Kokoro.",
+      "chord": {
+        "title": "Read Aloud shortcut",
+        "description": "Press to read the selected text aloud, press again to stop.",
+        "needsShortcut": "Turn on the global shortcut in Dictation settings first.",
+        "off": "Off",
+        "turnOff": "Turn off",
+        "set": "Set",
+        "change": "Change",
+        "changeLabel": "Change the Read Aloud shortcut",
+        "pickerTitle": "Set the Read Aloud shortcut",
+        "pickerDescription": "Hold the keys you want to use, then release and click Save. Pick something distinct from your dictation and Command Mode shortcuts."
+      },
+      "model": {
+        "title": "Voice model",
+        "description": "Kokoro, about 345 MB. It stays on your Mac.",
+        "ready": "Downloaded",
+        "download": "Download",
+        "downloading": "Downloading…"
+      },
+      "sectionVoice": "Voice",
+      "voice": {
+        "title": "Voice",
+        "description": "Who reads to you.",
+        "option": "{{name}} ({{gender}})",
+        "accents": {
+          "american": "American English",
+          "british": "British English"
+        },
+        "genders": {
+          "female": "female",
+          "male": "male"
+        },
+        "preview": "Preview",
+        "previewing": "Speaking…",
+        "previewText": "This is how Kass will read your selection aloud.",
+        "previewFailed": "Couldn’t play the preview"
+      },
+      "speed": {
+        "title": "Speed",
+        "value": "{{speed}}× normal speed"
+      }
     }
   },
   "models": {
@@ -947,15 +1005,18 @@
     "empty": "No models available.",
     "groups": {
       "whisper": "Transcription · Whisper",
-      "qwen3": "Refinement · Qwen3"
+      "qwen3": "Refinement · Qwen3",
+      "kokoro": "Read Aloud · Kokoro"
     },
     "purpose": {
       "whisper": "Turns your speech into a raw transcript.",
-      "qwen3": "Cleans up your raw transcript: fillers, punctuation, self-corrections, and your writing style."
+      "qwen3": "Cleans up your raw transcript: fillers, punctuation, self-corrections, and your writing style.",
+      "kokoro": "Speaks the text you select when you press the Read Aloud shortcut."
     },
     "roles": {
       "transcription": "Transcription",
-      "refinement": "Refinement"
+      "refinement": "Refinement",
+      "speech": "Read Aloud"
     },
     "tags": {
       "inUse": "In use · {{role}}"

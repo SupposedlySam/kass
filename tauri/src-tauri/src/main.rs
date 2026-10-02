@@ -21,6 +21,7 @@ mod keyboard_layout;
 mod keystroke_insert;
 mod login_item;
 mod overlap;
+mod read_aloud;
 mod server_process;
 mod server_version;
 mod sound_cues;
@@ -993,6 +994,7 @@ fn build_chord_bindings(
     push_to_talk: &[String],
     toggle_to_talk: &[String],
     command: &[String],
+    speak: &[String],
 ) -> Result<hotkey_monitor::Bindings, String> {
     use hotkey_monitor::{Bindings, ChordAction};
     use keytap::Key;
@@ -1021,6 +1023,10 @@ fn build_chord_bindings(
     if !command.is_empty() {
         bindings.insert(ChordAction::Command, build_chord("command", command)?);
     }
+    // So is Read Aloud's.
+    if !speak.is_empty() {
+        bindings.insert(ChordAction::Speak, build_chord("read aloud", speak)?);
+    }
     Ok(bindings)
 }
 
@@ -1040,9 +1046,14 @@ fn enable_hotkey(
     push_to_talk: Vec<String>,
     toggle_to_talk: Vec<String>,
     command: Option<Vec<String>>,
+    speak: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let bindings =
-        build_chord_bindings(&push_to_talk, &toggle_to_talk, &command.unwrap_or_default())?;
+    let bindings = build_chord_bindings(
+        &push_to_talk,
+        &toggle_to_talk,
+        &command.unwrap_or_default(),
+        &speak.unwrap_or_default(),
+    )?;
 
     // Fire the Input Monitoring TCC prompt explicitly from the user's
     // toggle click, before keytap's Tap would do it implicitly via
@@ -1105,9 +1116,14 @@ fn update_chord_bindings(
     push_to_talk: Vec<String>,
     toggle_to_talk: Vec<String>,
     command: Option<Vec<String>>,
+    speak: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let bindings =
-        build_chord_bindings(&push_to_talk, &toggle_to_talk, &command.unwrap_or_default())?;
+    let bindings = build_chord_bindings(
+        &push_to_talk,
+        &toggle_to_talk,
+        &command.unwrap_or_default(),
+        &speak.unwrap_or_default(),
+    )?;
     let mut slot = state.monitor.lock().map_err(|e| e.to_string())?;
     if let Some(monitor) = slot.as_mut() {
         monitor.update_bindings(bindings);
@@ -1621,6 +1637,7 @@ pub fn run() {
             dictation::dictation_configure,
             dictation::dictation_start,
             dictation::dictation_stop,
+            read_aloud::read_aloud_stop,
             dictation::command_run,
             dictation::list_input_devices,
             sound_cues::configure_sound_cues,
@@ -1706,6 +1723,29 @@ pub fn run() {
 
 fn main() {
     run();
+}
+
+#[cfg(all(test, desktop))]
+mod chord_binding_tests {
+    use super::build_chord_bindings;
+    use crate::hotkey_monitor::ChordAction;
+
+    fn keys(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn read_aloud_has_a_chord_only_when_one_is_set() {
+        let push = keys(&["MetaRight", "AltGr"]);
+        let toggle = keys(&["MetaRight", "AltGr", "Space"]);
+        let command = keys(&["MetaRight", "ShiftRight"]);
+        let on = build_chord_bindings(&push, &toggle, &command, &keys(&["AltGr", "ShiftRight"])).unwrap();
+        assert_eq!(on[&ChordAction::Speak].len(), 2);
+        let off = build_chord_bindings(&push, &toggle, &command, &[]).unwrap();
+        assert!(!off.contains_key(&ChordAction::Speak));
+        let error = build_chord_bindings(&push, &toggle, &command, &keys(&["NoSuchKey"])).unwrap_err();
+        assert!(error.contains("read aloud"), "{error}");
+    }
 }
 
 #[cfg(test)]

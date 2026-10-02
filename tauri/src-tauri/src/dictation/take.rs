@@ -32,6 +32,8 @@ pub enum PillEvent {
         elapsed_ms: u64,
     },
     Refining,
+    /// Read Aloud is speaking the selection (docs/plans/READ_ALOUD.md).
+    Speaking,
     Done,
     Error {
         message: String,

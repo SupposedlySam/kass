@@ -20,6 +20,7 @@ import { CommandModePage } from '@/components/Settings/CommandModePage';
 import { DictationSettingsPage } from '@/components/Settings/DictationSettingsPage';
 import { DictionaryPage } from '@/components/Settings/DictionaryPage';
 import { FeaturesPage } from '@/components/Settings/FeaturesPage';
+import { ReadAloudPage } from '@/components/Settings/ReadAloudPage';
 import { TranscriptionSettingsPage } from '@/components/Settings/TranscriptionSettingsPage';
 import { WritingStylePage } from '@/components/Settings/WritingStylePage';
 import { useFirstRunRedirect } from '@/components/Setup/useFirstRunRedirect';
@@ -155,6 +156,12 @@ const settingsCommandModeRoute = createRoute({
   component: CommandModePage,
 });
 
+const settingsReadAloudRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: '/read-aloud',
+  component: ReadAloudPage,
+});
+
 const settingsTranscriptionRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: '/transcription',
@@ -228,6 +235,7 @@ const routeTree = rootRoute.addChildren([
     settingsGeneralRoute,
     settingsDictationRoute,
     settingsCommandModeRoute,
+    settingsReadAloudRoute,
     settingsTranscriptionRoute,
     settingsWritingStyleRoute,
     settingsDictionaryRoute,

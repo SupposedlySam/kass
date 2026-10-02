@@ -51,11 +51,14 @@ use crate::focus_capture;
 /// record, release to stop. `ToggleToTalk` = press chord to start recording,
 /// press again to stop. `Command` = hold to speak an instruction for the
 /// selected text, release to rewrite it (docs/plans/COMMAND_MODE.md).
+/// `Speak` = press to read the selected text aloud, press again to stop
+/// (docs/plans/READ_ALOUD.md); it never opens the microphone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChordAction {
     PushToTalk,
     ToggleToTalk,
     Command,
+    Speak,
 }
 
 impl ChordAction {
@@ -65,6 +68,7 @@ impl ChordAction {
             Self::PushToTalk => "push_to_talk",
             Self::ToggleToTalk => "toggle_to_talk",
             Self::Command => "command",
+            Self::Speak => "speak",
         }
     }
 
@@ -72,7 +76,8 @@ impl ChordAction {
     pub fn take_mode(self) -> dictation::TakeMode {
         match self {
             Self::Command => dictation::TakeMode::Command,
-            Self::PushToTalk | Self::ToggleToTalk => dictation::TakeMode::Dictation,
+            // Speak never starts a take; it reads aloud instead.
+            Self::PushToTalk | Self::ToggleToTalk | Self::Speak => dictation::TakeMode::Dictation,
         }
     }
 }
@@ -288,6 +293,7 @@ fn spawn_escape_watcher(
                 match tap.recv_timeout(Duration::from_millis(100)) {
                     // Ignored when no take is open: Escape is only the app's.
                     Ok(event) if is_escape_press(event.kind) => {
+                        crate::read_aloud::stop(&app);
                         if dictation::cancel(&app) {
                             cancelled.store(true, Ordering::Relaxed);
                         }
@@ -358,6 +364,11 @@ fn build_matcher(bindings: &Bindings) -> Result<ChordMatcher<ChordAction>, keyta
     if let Some(keys) = bindings.get(&ChordAction::Command) {
         if !keys.is_empty() {
             builder = builder.add(ChordAction::Command, Chord::of(keys.iter().copied()));
+        }
+    }
+    if let Some(keys) = bindings.get(&ChordAction::Speak) {
+        if !keys.is_empty() {
+            builder = builder.add(ChordAction::Speak, Chord::of(keys.iter().copied()));
         }
     }
     builder.build()
@@ -448,6 +459,7 @@ fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
     match effect {
         Effect::StartRecording(action) => {
             match app.state::<ChordMode>().on_start() {
+                OnStart::Record if action == ChordAction::Speak => crate::read_aloud::toggle(app),
                 OnStart::Record => start_take(app, action, time),
                 OnStart::Practice => {}
                 OnStart::Blocked(message) => dictation::show_notice(app, message),
@@ -455,8 +467,12 @@ fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
             emit_chord(app, "chord:down", action);
         }
         Effect::StopRecording(action) => {
-            // Stops nothing when the chord's start didn't record.
-            dictation::stop_shortcut_take(app);
+            // Releasing Read Aloud's chord leaves the reading (and any
+            // dictation) going; the next press stops it.
+            if action != ChordAction::Speak {
+                // Stops nothing when the chord's start didn't record.
+                dictation::stop_shortcut_take(app);
+            }
             emit_chord(app, "chord:up", action);
         }
         Effect::RestartRecording(action) => {
@@ -521,6 +537,27 @@ mod tests {
         assert_eq!(ChordAction::PushToTalk.name(), "push_to_talk");
         assert_eq!(ChordAction::ToggleToTalk.name(), "toggle_to_talk");
         assert_eq!(ChordAction::Command.name(), "command");
+        assert_eq!(ChordAction::Speak.name(), "speak");
+    }
+
+    #[test]
+    fn all_four_chords_build_one_matcher() {
+        // The settings' key names, as capture settings store them.
+        let chord = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| crate::key_codes::key_from_str(name).unwrap())
+                .collect::<HashSet<_>>()
+        };
+        let bindings: Bindings = [
+            (ChordAction::PushToTalk, chord(&["MetaRight", "AltGr"])),
+            (ChordAction::ToggleToTalk, chord(&["MetaRight", "AltGr", "Space"])),
+            (ChordAction::Command, chord(&["MetaRight", "ShiftRight"])),
+            (ChordAction::Speak, chord(&["AltGr", "ShiftRight"])),
+        ]
+        .into_iter()
+        .collect();
+        assert!(build_matcher(&bindings).is_ok());
     }
 
     #[test]

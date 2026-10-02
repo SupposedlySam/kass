@@ -17,10 +17,12 @@ export const MODEL_DESCRIPTIONS: Record<string, string> = {
     'Qwen3 1.7B — balanced size and quality. Handles subtle self-corrections and technical vocabulary better than the 0.6B. Runs at ~1.1 GB quantized on Apple Silicon.',
   'qwen3-4b':
     'Qwen3 4B — highest quality local refinement and longer-form reasoning. Runs at ~2.5 GB quantized on Apple Silicon.',
+  'kokoro-82m':
+    'Kokoro 82M — a small, natural-sounding text-to-speech model with 28 English voices. Read Aloud speaks with it, about 25× faster than real time on Apple Silicon.',
 };
 
-/** What a model is used for in dictation. */
-export type ModelRole = 'transcription' | 'refinement';
+/** What a model is used for. */
+export type ModelRole = 'transcription' | 'refinement' | 'speech';
 
 export interface ModelGroup {
   /** The model family, taken from the model name prefix ("whisper", "qwen3"). */
@@ -53,6 +55,7 @@ export function roleOf(modelName: string): ModelRole | undefined {
   const family = modelFamily(modelName);
   if (family === 'whisper') return 'transcription';
   if (family === 'qwen3') return 'refinement';
+  if (family === 'kokoro') return 'speech';
   return undefined;
 }
 
@@ -74,6 +77,8 @@ export function modelsInUse(settings: CaptureSettings | undefined): Map<string, 
   if (!settings) return inUse;
   inUse.set(`whisper-${settings.stt_model}`, 'transcription');
   inUse.set(`qwen3-${settings.llm_model.toLowerCase()}`, 'refinement');
+  // Read Aloud's only voice model: there's nothing to switch to.
+  inUse.set('kokoro-82m', 'speech');
   return inUse;
 }
 

@@ -343,6 +343,20 @@ class SpeechSentencesResponse(BaseModel):
     sentences: list[str]
 
 
+class SpeechVoice(BaseModel):
+    """One of Kokoro's voices: ``af_heart`` is American ("a"), female ("f"), named Heart."""
+
+    id: str
+    name: str
+    accent: str
+    gender: str
+
+
+class SpeechVoicesResponse(BaseModel):
+    voices: list[SpeechVoice]
+    default: str
+
+
 class CommandRunRequest(BaseModel):
     """``POST /commands/run``: rewrite a selection without a recording.
 

@@ -222,3 +222,39 @@ mod tests {
         assert_eq!(error_detail(status, None), "HTTP error! status: 400");
     }
 }
+
+/// `POST /speech/sentences`: the pieces Read Aloud reads `text` in.
+pub async fn speech_sentences(http: &reqwest::Client, server_url: &str, text: &str) -> Result<Vec<String>, String> {
+    let url = format!("{}/speech/sentences", base(server_url));
+    let response = http
+        .post(url)
+        .json(&serde_json::json!({ "text": text }))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let body = json_or_error(response).await?;
+    Ok(body
+        .get("sentences")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .unwrap_or_default())
+}
+
+/// `POST /speech`: one piece of a reading as WAV, in the saved voice and speed.
+pub async fn speech(http: &reqwest::Client, server_url: &str, text: &str) -> Result<Vec<u8>, String> {
+    let url = format!("{}/speech", base(server_url));
+    let response = http
+        .post(url)
+        .json(&serde_json::json!({ "text": text }))
+        // The first piece after a launch waits for Kokoro to load.
+        .timeout(Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(error_detail(status, response.json::<Value>().await.ok()));
+    }
+    response.bytes().await.map(|bytes| bytes.to_vec()).map_err(|e| e.to_string())
+}
