@@ -52,9 +52,10 @@ echo "Installing Python dependencies..."
 "${pip[@]}" install --upgrade pip -q
 "${pip[@]}" install -r backend/requirements.txt
 # mlx-lm and mlx-audio declare transformers>=5.x, which conflicts with our
-# transformers<=4.57.x cap, so install them --no-deps (their runtime deps
-# are covered by requirements.txt — see the note there)
-"${pip[@]}" install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1
+# transformers<=4.57.x cap, and misaki's [en] extra pulls torch, so install
+# them --no-deps (their runtime deps are covered by requirements.txt — see the
+# note there)
+"${pip[@]}" install --no-deps mlx-lm==0.31.1 mlx-audio==0.4.1 misaki==0.9.4
 # ruff is pinned: another version formats and lints differently, so just check
 # would pass on one Mac and fail on the next.
 "${pip[@]}" install pyinstaller ruff==0.16.9 pytest pytest-asyncio -q

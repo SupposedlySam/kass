@@ -30,6 +30,7 @@ from ..services.commands import default_transforms
 from ..utils.capture_chords import (
     default_command_chord,
     default_push_to_talk_chord,
+    default_speak_chord,
     default_toggle_to_talk_chord,
 )
 
@@ -289,3 +290,14 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "discard_audio BOOLEAN NOT NULL DEFAULT 0",
             "discard_audio",
         )
+    if "chord_speak_keys" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            f"chord_speak_keys TEXT NOT NULL DEFAULT {_sql_literal(json.dumps(default_speak_chord()))}",
+            "chord_speak_keys",
+        )
+    if "speak_voice" not in columns:
+        _add_column(engine, "capture_settings", "speak_voice VARCHAR NOT NULL DEFAULT 'af_heart'", "speak_voice")
+    if "speak_speed" not in columns:
+        _add_column(engine, "capture_settings", "speak_speed FLOAT NOT NULL DEFAULT 1.0", "speak_speed")

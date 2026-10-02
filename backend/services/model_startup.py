@@ -14,6 +14,8 @@ from .mlx_thread import keep_weights_resident, run_on_mlx_thread
 logger = logging.getLogger(__name__)
 # The other styles' prompts, cached after startup (docs/plans/PER_APP_STYLE.md).
 _style_warmup: asyncio.Task | None = None
+# Read Aloud's voice, warmed after dictation's models (docs/plans/READ_ALOUD.md).
+_speech_warmup: asyncio.Task | None = None
 WARM_RATE = 48000
 # Enough real speech to run Whisper's full decode, short enough to keep
 # startup quick.
@@ -28,6 +30,7 @@ async def load_startup_models() -> None:
         llm_size = saved.llm_model
         auto_refine = saved.auto_refine
         language = None if saved.language in (None, "auto") else saved.language
+        speak_voice = saved.speak_voice if saved.chord_speak_keys else None
         snapshot = styles.snapshot()
         flags = styles.flags_for(snapshot.default, saved)
         # Styles with apps in them, most likely to be dictated in next.
@@ -67,6 +70,28 @@ async def load_startup_models() -> None:
         await warm_refinement(flags, llm_size)
         global _style_warmup
         _style_warmup = asyncio.create_task(warm_styles(others, llm_size))
+    if speak_voice:
+        global _speech_warmup
+        _speech_warmup = asyncio.create_task(warm_speech(speak_voice))
+
+
+async def warm_speech(voice: str) -> None:
+    """Speak once in the background, so the first Read Aloud doesn't wait for Kokoro's setup.
+
+    Only with Read Aloud on and Kokoro downloaded; dictation's models warm first.
+    """
+    from ..backends import get_speech_backend
+
+    try:
+        backend = get_speech_backend()
+        if not backend.is_cached():
+            logger.info("Skipping Read Aloud warm-up: Kokoro not downloaded")
+            return
+        started = time.monotonic()
+        await backend.synthesize("Ready.", voice, 1.0)
+        logger.info("Read Aloud warmed in %.3fs", time.monotonic() - started)
+    except Exception:
+        logger.exception("Could not warm Read Aloud")
 
 
 async def warm_whisper(stt_size: str, language: str | None) -> None:

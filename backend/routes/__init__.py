@@ -14,6 +14,7 @@ def register_routers(app: FastAPI) -> None:
     from .llm import router as llm_router
     from .models import router as models_router
     from .settings import router as settings_router
+    from .speech import router as speech_router
     from .styles import router as styles_router
     from .tasks import router as tasks_router
     from .transcription import router as transcription_router
@@ -27,6 +28,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(commands_router)
     app.include_router(models_router)
     app.include_router(settings_router)
+    app.include_router(speech_router)
     app.include_router(styles_router)
     app.include_router(tasks_router)
     app.include_router(writing_style_router)

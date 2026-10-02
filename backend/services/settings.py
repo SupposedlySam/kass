@@ -63,6 +63,10 @@ def update_capture_settings(db: Session, patch: dict[str, Any]) -> DBCaptureSett
         from .commands import normalize_transforms
 
         patch = {**patch, "command_transforms": normalize_transforms(patch["command_transforms"])}
+    if patch.get("speak_voice") is not None:
+        from .speech import validate_voice
+
+        validate_voice(patch["speak_voice"])
     if patch.get("history_retention_days") is not None:
         # Choosing a window, in Settings or when asked, lets the sweep delete.
         patch = {**patch, "history_retention_confirmed": True}

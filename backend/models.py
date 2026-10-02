@@ -11,6 +11,7 @@ from .services.commands import default_transforms
 from .utils.capture_chords import (
     default_command_chord,
     default_push_to_talk_chord,
+    default_speak_chord,
     default_toggle_to_talk_chord,
 )
 
@@ -287,6 +288,10 @@ class CaptureSettingsResponse(BaseModel):
     onboarding_completed: bool = False
     # Delete each recording once its transcript is saved.
     discard_audio: bool = False
+    # Read Aloud: its chord (empty = off), Kokoro voice and speed.
+    chord_speak_keys: list[str] = Field(default_factory=default_speak_chord)
+    speak_voice: str = "af_heart"
+    speak_speed: float = Field(default=1.0, ge=0.5, le=2.0)
 
     class Config:
         from_attributes = True
@@ -320,6 +325,22 @@ class CaptureSettingsUpdate(BaseModel):
     history_retention_days: HistoryRetentionDays | None = None
     onboarding_completed: bool | None = None
     discard_audio: bool | None = None
+    # Empty turns Read Aloud's chord off.
+    chord_speak_keys: list[str] | None = Field(default=None, max_length=6)
+    speak_voice: str | None = None
+    speak_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+
+class SpeechRequest(BaseModel):
+    """``POST /speech`` and ``/speech/sentences``: Read Aloud's text, and for ``/speech`` its voice."""
+
+    text: str
+    voice: str | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+
+class SpeechSentencesResponse(BaseModel):
+    sentences: list[str]
 
 
 class CommandRunRequest(BaseModel):

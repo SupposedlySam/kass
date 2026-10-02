@@ -1,0 +1,44 @@
+"""Read Aloud endpoints (docs/plans/READ_ALOUD.md)."""
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from sqlalchemy.orm import Session
+
+from .. import models
+from ..database import get_db
+from ..services import settings as settings_service, speech
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+@router.post("/speech/sentences", response_model=models.SpeechSentencesResponse)
+async def speech_sentences_endpoint(request: models.SpeechRequest):
+    """The pieces a selection is read in, so the app can fetch the next while one plays."""
+    try:
+        text = speech.validate_text(request.text)
+        speech.ensure_model_ready()
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return models.SpeechSentencesResponse(sentences=speech.split_sentences(text))
+
+
+@router.post("/speech", response_class=Response)
+async def speech_endpoint(request: models.SpeechRequest, db: Session = Depends(get_db)):
+    """One piece of a reading, as WAV, in the saved voice and speed unless the request names them."""
+    saved = settings_service.get_capture_settings(db)
+    try:
+        audio = await speech.speak(
+            request.text,
+            voice=request.voice or saved.speak_voice,
+            speed=request.speed or saved.speak_speed,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Read Aloud failed")
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    return Response(content=audio, media_type="audio/wav")

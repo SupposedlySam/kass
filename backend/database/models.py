@@ -10,6 +10,7 @@ from ..services.commands import default_transforms
 from ..utils.capture_chords import (
     default_command_chord,
     default_push_to_talk_chord,
+    default_speak_chord,
     default_toggle_to_talk_chord,
 )
 
@@ -70,6 +71,10 @@ class CaptureSettings(Base):
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     # Delete each recording once its transcript is saved (services/audio_retention.py).
     discard_audio = Column(Boolean, nullable=False, default=False)
+    # Read Aloud (docs/plans/READ_ALOUD.md): its chord (empty = off), Kokoro voice and speed.
+    chord_speak_keys = Column(JSON, nullable=False, default=default_speak_chord)
+    speak_voice = Column(String, nullable=False, default="af_heart")
+    speak_speed = Column(Float, nullable=False, default=1.0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
