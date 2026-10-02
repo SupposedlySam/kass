@@ -613,7 +613,6 @@ export interface VoiceErrors {
 }
 
 export interface VoiceTrainingStatus {
-  enabled: boolean;
   active: string | null;
   active_since: string | null;
   can_undo: boolean;
@@ -625,12 +624,12 @@ export interface VoiceTrainingStatus {
     test: number;
     minutes: number;
     room_minutes: number;
-  } | null;
+  };
   sounds: {
     state: 'missing' | 'downloading' | 'ready' | 'failed';
     fraction: number;
     error: string | null;
-  } | null;
+  };
   metrics: {
     passed: boolean;
     reasons: string[];

@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend import config, internal
+from backend import config
 from backend.database.models import Base, Capture, CaptureFeedback
 from backend.services.model_improvement import manager
 from backend.services.voice_training import bank, gate, lora, mixing
@@ -281,7 +281,6 @@ def learning(data_dir, monkeypatch):
         monkeypatch.setattr(manager, name, value)
     monkeypatch.setattr(manager.correction_learning, "_state", {"rules": []})
     monkeypatch.setattr(manager, "_reload_speech", lambda: None)
-    (data_dir / internal.MARKER_FILE).touch()
     manager.initialize()
     return data_dir
 
@@ -314,10 +313,6 @@ def test_passing_voice_adapter_is_used_for_turbo_and_can_be_undone(learning):
     status = manager.status()["voice"]
     assert status["active"] == "first"
     assert status["can_undo"]
-
-    (learning / internal.MARKER_FILE).unlink()  # off without the internal file
-    assert manager.voice_adapter("turbo") is None
-    (learning / internal.MARKER_FILE).touch()
 
     manager.rollback()
     assert manager.voice_adapter("turbo") is None

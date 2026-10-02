@@ -1,6 +1,6 @@
 """Voice training: teach Whisper turbo to follow the user's voice in noise.
 
-Internal (``voice_training``, backend/internal.py). Kass keeps a bank of the user's clean takes
+Kass keeps a bank of the user's clean takes
 (bank.py) and a one-time download of other people talking and room noise
 (sounds.py). While the Mac is idle, the model-improvement worker mixes the two
 (mixing.py) and trains a small LoRA adapter on turbo (lora.py, train.py). The

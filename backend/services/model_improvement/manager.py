@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from ... import beta, config, internal
+from ... import beta, config
 from ...database import session as database_session
 from .. import correction_learning
 from .data import collect, digest, readiness
@@ -201,14 +201,12 @@ def active_adapter(model_size, flags):
 def _voice_status():
     from ..voice_training import bank, sounds
 
-    enabled = internal.enabled("voice_training")
     item = _active.get("voice")
     return {
-        "enabled": enabled,
         "active": item["id"] if item else None,
         "active_since": item.get("activated") if item else None,
-        "bank": bank.summary() if enabled else None,
-        "sounds": sounds.status() if enabled else None,
+        "bank": bank.summary(),
+        "sounds": sounds.status(),
         "metrics": (_state.get("metrics") or {}).get("voice"),
         "training": (_state.get("metrics") or {}).get("voice_training"),
         "min_train": VOICE_MIN_TRAIN,
@@ -222,7 +220,7 @@ def _voice_status():
 def voice_adapter(model_size):
     """The voice adapter to merge into ``model_size``, or None for plain weights."""
     item = _active.get("voice")
-    if not item or item["model_size"] != model_size or not internal.enabled("voice_training"):
+    if not item or item["model_size"] != model_size:
         return None
     return item["path"]
 
@@ -368,8 +366,7 @@ def _prepare():
         # Every writing style's flags are evaluated, so an accepted adapter
         # covers each style (docs/plans/PER_APP_STYLE.md).
         style_flags = [flags_for(style, settings).to_dict() for style in load_styles(db).styles]
-        voice_on = internal.enabled("voice_training")
-        voice_bank = _scan_bank(db, settings) if voice_on else None
+        voice_bank = _scan_bank(db, settings)
         language = None if (settings.language or "auto") == "auto" else settings.language
     counts, train_ready = readiness(samples)
     current_stt = speech_model(configured_stt)
@@ -377,7 +374,7 @@ def _prepare():
     speech_candidates = (
         [size for size in WHISPER_HF_REPOS if size != current_stt and _cached(WHISPER_HF_REPOS[size])]
         # Voice training specializes turbo; don't switch away from it meanwhile.
-        if len(raw_tests) >= 5 and not (voice_on and current_stt == "turbo")
+        if len(raw_tests) >= 5 and current_stt != "turbo"
         else []
     )
     rules = deepcopy(correction_learning._state["rules"])

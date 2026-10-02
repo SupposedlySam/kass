@@ -12,7 +12,6 @@ import {
 import { Toggle } from '@/components/ui/toggle';
 import type { Qwen3ModelSize, WhisperModelSize } from '@/lib/api/types';
 import { useCaptureSettings } from '@/lib/hooks/useSettings';
-import { useInternalFeature } from '@/lib/internalFeatures';
 import { VoiceTrainingSection } from './VoiceTrainingSection';
 
 const P = 'settings.captures.transcription';
@@ -64,7 +63,6 @@ export function TranscriptionSettingsPage() {
   const llmModel = settings?.llm_model ?? '0.6B';
   const qwen = QWEN_MODELS.find((m) => m.value === llmModel) ?? QWEN_MODELS[0];
   const selfCorrection = settings?.self_correction ?? true;
-  const voiceTraining = useInternalFeature('voice_training');
 
   return (
     <>
@@ -104,7 +102,7 @@ export function TranscriptionSettingsPage() {
         />
       </SettingSection>
 
-      {voiceTraining && <VoiceTrainingSection sttModel={sttModel} />}
+      <VoiceTrainingSection sttModel={sttModel} />
 
       <SettingSection title={t(`${R}.title`)}>
         <SettingRow

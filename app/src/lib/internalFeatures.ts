@@ -10,11 +10,7 @@ import { apiClient } from '@/lib/api/client';
  *
  * The server keeps its own list in backend/internal.py.
  */
-export const INTERNAL_FEATURES = [
-  // Training the speech model on the user's own takes so it follows their
-  // voice through background talk and noise.
-  'voice_training',
-] as const;
+export const INTERNAL_FEATURES = [] as const;
 
 export type InternalFeature = (typeof INTERNAL_FEATURES)[number];
 

@@ -15,14 +15,7 @@ app/src/lib/internalFeatures.ts.
 
 from . import config
 
-INTERNAL_FEATURES: frozenset[str] = frozenset(
-    {
-        # Training the speech model on the user's own takes so it follows
-        # their voice through background talk and noise
-        # (docs/plans/VOICE_TRAINING.md).
-        "voice_training",
-    }
-)
+INTERNAL_FEATURES: frozenset[str] = frozenset()
 
 MARKER_FILE = "internal"
 

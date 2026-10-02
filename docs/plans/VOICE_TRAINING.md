@@ -1,6 +1,6 @@
 # Voice training
 
-Internal (`voice_training`, backend/internal.py). Kass trains Whisper turbo
+Part of every release. Kass trains Whisper turbo
 on the user's own takes, with other people talking and busy rooms mixed in,
 so it keeps following the user's voice when it isn't quiet. Code: `backend/services/voice_training/`.
 
@@ -62,7 +62,6 @@ Background jobs never download anything.
 
 A run needs:
 
-- an internal build (`internal` file in the data folder);
 - Turbo as the transcription model, already downloaded;
 - the background sounds;
 - at least 100 training takes and 12 test takes.
@@ -152,8 +151,6 @@ turbo is in memory when that happens, it reloads right away.
 **Failures:** if the adapter fails to load, Kass uses plain turbo and turns
 the voice model off (`quarantine_voice`).
 
-**Without the internal file:** plain turbo is used again.
-
 **Undo:** Settings › Transcription › Voice model › Undo restores the previous
 model version, the same history the cleanup adapter uses. The next run then
 continues from the restored model.
@@ -165,9 +162,8 @@ Start here when picking this work back up.
 **Where it stands:**
 
 - **Shipped:** on `main` and pushed, in 24d4d8f6 (voice training) and
-  e133d6c7 (the internal flag).
-- **Internal builds:** `scripts/install.sh` writes the `internal` file, so
-  every local install is an internal build. `GET /internal` reports it.
+  e133d6c7 (the internal flag, since removed: voice training is now part of
+  every release).
 - **Active model:** round 5 (run `9600e296d0154c1b9fcc6c911fb82584`). It
   came from the test rounds and was activated in the real data through
   `manager._promote`. Undo goes back to plain turbo.

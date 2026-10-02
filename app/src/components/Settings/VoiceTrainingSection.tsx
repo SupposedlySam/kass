@@ -9,7 +9,7 @@ const V = 'settings.captures.voiceTraining';
 const queryKey = ['correction-learning'];
 
 /**
- * Voice training (internal): the background sounds download, the takes Kass keeps
+ * Voice training: the background sounds download, the takes Kass keeps
  * to train on, and the trained voice model with Train now and Undo.
  */
 export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {
@@ -40,11 +40,11 @@ export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {
 
   const model = status.data?.model;
   const voice = model?.voice;
-  if (!voice?.enabled) return null;
+  if (!voice) return null;
   const sounds = voice.sounds;
   const bank = voice.bank;
   const metrics = voice.metrics;
-  const collecting = !bank || bank.train < voice.min_train || bank.test < voice.min_test;
+  const collecting = bank.train < voice.min_train || bank.test < voice.min_test;
   // Takes are split 85/15 into training and test takes, by id.
   const needed = Math.ceil(Math.max(voice.min_train / 0.85, voice.min_test / 0.15));
 
@@ -56,11 +56,11 @@ export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {
 
       <SettingRow
         title={t(`${V}.sounds.title`)}
-        description={sounds?.error ?? t(`${V}.sounds.description`)}
+        description={sounds.error ?? t(`${V}.sounds.description`)}
         action={
-          sounds?.state === 'ready' ? (
+          sounds.state === 'ready' ? (
             <span className="text-[13px] text-muted-foreground">{t(`${V}.sounds.ready`)}</span>
-          ) : sounds?.state === 'downloading' ? (
+          ) : sounds.state === 'downloading' ? (
             <span className="text-[13px] tabular-nums text-muted-foreground">
               {t(`${V}.sounds.downloading`, { percent: Math.round(sounds.fraction * 100) })}
             </span>
@@ -71,7 +71,7 @@ export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {
               disabled={download.isPending}
               onClick={() => download.mutate()}
             >
-              {t(sounds?.state === 'failed' ? `${V}.sounds.retry` : `${V}.sounds.download`)}
+              {t(sounds.state === 'failed' ? `${V}.sounds.retry` : `${V}.sounds.download`)}
             </Button>
           )
         }
@@ -84,10 +84,10 @@ export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {
           <span className="text-[13px] tabular-nums text-muted-foreground">
             {collecting
               ? t(`${V}.takes.collecting`, {
-                  count: bank?.takes ?? 0,
-                  needed: Math.max(needed, (bank?.takes ?? 0) + 1),
+                  count: bank.takes,
+                  needed: Math.max(needed, bank.takes + 1),
                 })
-              : t(`${V}.takes.kept`, { count: bank?.takes ?? 0, minutes: bank?.minutes ?? 0 })}
+              : t(`${V}.takes.kept`, { count: bank.takes, minutes: bank.minutes })}
           </span>
         }
       />
