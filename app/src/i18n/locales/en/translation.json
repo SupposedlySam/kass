@@ -722,7 +722,7 @@
         }
       },
       "voiceTraining": {
-        "title": "Voice training · Beta",
+        "title": "Voice training · Internal",
         "description": "Kass trains its speech model on your own takes, with other people talking and busy rooms mixed in, so it follows your voice when it isn't quiet. Training runs while your Mac is idle, and a new version is used only when it makes fewer mistakes.",
         "needsTurbo": "Voice training works with the Turbo transcription model. Choose Turbo in the Models tab to use it.",
         "sounds": {

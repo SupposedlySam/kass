@@ -20,10 +20,6 @@ BETA_FEATURES: frozenset[str] = frozenset(
         # fixes file: report sources, withdrawal, and learning from new
         # reports at once (docs/plans/CORRECTION_LEARNING.md).
         "voice_edits",
-        # Training the speech model on the user's own takes so it follows
-        # their voice through background talk and noise
-        # (docs/plans/VOICE_TRAINING.md).
-        "voice_training",
     }
 )
 

@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from ... import beta, config
+from ... import beta, config, internal
 from ...database import session as database_session
 from .. import correction_learning
 from .data import collect, digest, readiness
@@ -201,7 +201,7 @@ def active_adapter(model_size, flags):
 def _voice_status():
     from ..voice_training import bank, sounds
 
-    enabled = beta.enabled("voice_training")
+    enabled = internal.enabled("voice_training")
     item = _active.get("voice")
     return {
         "enabled": enabled,
@@ -222,7 +222,7 @@ def _voice_status():
 def voice_adapter(model_size):
     """The voice adapter to merge into ``model_size``, or None for plain weights."""
     item = _active.get("voice")
-    if not item or item["model_size"] != model_size or not beta.enabled("voice_training"):
+    if not item or item["model_size"] != model_size or not internal.enabled("voice_training"):
         return None
     return item["path"]
 
@@ -368,8 +368,8 @@ def _prepare():
         # Every writing style's flags are evaluated, so an accepted adapter
         # covers each style (docs/plans/PER_APP_STYLE.md).
         style_flags = [flags_for(style, settings).to_dict() for style in load_styles(db).styles]
-        voice_beta = beta.enabled("voice_training")
-        voice_bank = _scan_bank(db, settings) if voice_beta else None
+        voice_on = internal.enabled("voice_training")
+        voice_bank = _scan_bank(db, settings) if voice_on else None
         language = None if (settings.language or "auto") == "auto" else settings.language
     counts, train_ready = readiness(samples)
     current_stt = speech_model(configured_stt)
@@ -377,7 +377,7 @@ def _prepare():
     speech_candidates = (
         [size for size in WHISPER_HF_REPOS if size != current_stt and _cached(WHISPER_HF_REPOS[size])]
         # Voice training specializes turbo; don't switch away from it meanwhile.
-        if len(raw_tests) >= 5 and not (voice_beta and current_stt == "turbo")
+        if len(raw_tests) >= 5 and not (voice_on and current_stt == "turbo")
         else []
     )
     rules = deepcopy(correction_learning._state["rules"])

@@ -107,6 +107,10 @@ class ApiClient {
     return this.request<HealthResponse>('/health');
   }
 
+  async getInternal(): Promise<{ internal: boolean }> {
+    return this.request('/internal');
+  }
+
   async reportCaptureOutput(
     captureId: string,
     body: CaptureFeedbackCreate,

@@ -10,7 +10,7 @@ import time
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from .. import config, models
+from .. import config, internal, models
 from ..database import get_db
 from ..services import transcribe
 from ..services.task_queue import create_background_task
@@ -157,3 +157,9 @@ async def filesystem_health():
         disk_total_mb=disk_total_mb,
         directories=checks,
     )
+
+
+@router.get("/internal")
+async def internal_build():
+    """Whether this is an internal build, so internal features show (backend/internal.py)."""
+    return {"internal": internal.is_internal()}

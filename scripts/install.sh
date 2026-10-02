@@ -210,6 +210,13 @@ ditto "$built" "$app"
 codesign --verify --deep --strict "$app"
 ok "Installed"
 
+# Builds from a checkout are internal builds: internal features run
+# (backend/internal.py). The release DMG never writes this file.
+data_dir="$HOME/Library/Application Support/$bundle_id"
+mkdir -p "$data_dir"
+touch "$data_dir/internal"
+ok "Internal features on (delete $data_dir/internal to turn them off)"
+
 # TODO(2026-10-13): remove the Voicebox-era cleanup below (the ~/Applications
 # copy, Voicebox.app and the Voicebox Input input method). By then anyone
 # building from source has run this at least once since the rename to Herga.

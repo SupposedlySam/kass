@@ -56,11 +56,11 @@ def cancel_model_learning():
 @router.post("/capture/learning/voice/sounds")
 def download_voice_sounds():
     """Start the one-time download of background sounds for voice training."""
-    from .. import beta
+    from .. import internal
     from ..services.voice_training import sounds
 
-    if not beta.enabled("voice_training"):
-        raise HTTPException(status_code=404, detail="Voice training is a beta feature")
+    if not internal.enabled("voice_training"):
+        raise HTTPException(status_code=404, detail="Voice training is an internal feature")
     return sounds.start()
 
 

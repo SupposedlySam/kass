@@ -9,7 +9,7 @@ const V = 'settings.captures.voiceTraining';
 const queryKey = ['correction-learning'];
 
 /**
- * Voice training (beta): the background sounds download, the takes Kass keeps
+ * Voice training (internal): the background sounds download, the takes Kass keeps
  * to train on, and the trained voice model with Train now and Undo.
  */
 export function VoiceTrainingSection({ sttModel }: { sttModel: string }) {

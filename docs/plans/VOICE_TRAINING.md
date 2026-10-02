@@ -1,8 +1,8 @@
 # Voice training
 
-Beta (`voice_training`). Kass trains Whisper turbo on the user's own takes,
-with other people talking and busy rooms mixed in, so it keeps following the
-user's voice when it isn't quiet. Code: `backend/services/voice_training/`.
+Internal (`voice_training`, backend/internal.py). Kass trains Whisper turbo
+on the user's own takes, with other people talking and busy rooms mixed in,
+so it keeps following the user's voice when it isn't quiet. Code: `backend/services/voice_training/`.
 
 ## Why
 
@@ -62,7 +62,7 @@ Background jobs never download anything.
 
 A run needs:
 
-- the beta turned on;
+- an internal build (`internal` file in the data folder);
 - Turbo as the transcription model, already downloaded;
 - the background sounds;
 - at least 100 training takes and 12 test takes.
@@ -152,7 +152,7 @@ turbo is in memory when that happens, it reloads right away.
 **Failures:** if the adapter fails to load, Kass uses plain turbo and turns
 the voice model off (`quarantine_voice`).
 
-**Leaving the beta:** plain turbo is used again.
+**Without the internal file:** plain turbo is used again.
 
 **Undo:** Settings › Transcription › Voice model › Undo restores the previous
 model version, the same history the cleanup adapter uses. The next run then
