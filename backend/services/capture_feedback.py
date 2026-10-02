@@ -11,6 +11,7 @@ from ..models import CaptureFeedbackCreate, CaptureFeedbackResponse
 from . import correction_learning, known_names, personal_examples, writing_style
 from .captures import get_capture
 from .spelling import join_spelling
+from .text_merge import take_back
 
 logger = logging.getLogger(__name__)
 
@@ -72,23 +73,54 @@ def save_feedback(capture_id: str, request: CaptureFeedbackCreate, db: Session, 
     return to_response(row)
 
 
+def latest_feedback(db: Session, capture_id: str, target: str) -> CaptureFeedback | None:
+    """The capture's newest report of ``target``: its text as corrected so far."""
+    return (
+        db.query(CaptureFeedback)
+        .filter(CaptureFeedback.capture_id == capture_id, CaptureFeedback.target == target)
+        .order_by(CaptureFeedback.created_at.desc(), CaptureFeedback.id.desc())
+        .first()
+    )
+
+
 def withdraw_feedback(capture_id: str, report_id: str, db: Session) -> bool:
     """Delete one report and everything it taught.
 
-    Examples, habits and names are read from the reports, so they drop it at
-    once. Rules and the cleanup adapter are relearned without it at the next
-    idle moment (correction_learning.request_run). Part of the voice_edits beta:
-    without it, returns False as if there were no such report.
+    A capture's reports stack, each made from the one before, so the newer
+    ones lose this one's changes and keep their own (text_merge); one left
+    changing nothing goes too. Examples, habits and names are read from the
+    reports, so they drop it at once. Rules and the cleanup adapter are
+    relearned without it at the next idle moment
+    (correction_learning.request_run). Part of the voice_edits beta: without
+    it, returns False as if there were no such report.
     """
     if not beta.enabled("voice_edits"):
         return False
     row = db.get(CaptureFeedback, report_id)
     if row is None or row.capture_id != capture_id:
         return False
-    target, source = row.target, row.source
+    stack = (
+        db.query(CaptureFeedback)
+        .filter(CaptureFeedback.capture_id == capture_id, CaptureFeedback.target == row.target)
+        .order_by(CaptureFeedback.created_at, CaptureFeedback.id)
+        .all()
+    )
+    at = stack.index(row)
+    snapshot = json.loads(row.snapshot)
+    original = snapshot.get("transcript_raw" if row.target == "raw" else "transcript_refined") or ""
+    before = stack[at - 1].expected_text if at else original
+    changed = {(row.target, row.source)}
+    for newer in stack[at + 1 :]:
+        changed.add((newer.target, newer.source))
+        text = take_back(before, row.expected_text, newer.expected_text)
+        if text == original:
+            db.delete(newer)
+        else:
+            newer.expected_text = text
     db.delete(row)
     db.commit()
-    _reports_changed(target, source, db, withdrawn=True)
+    for target, source in changed:
+        _reports_changed(target, source, db, withdrawn=True)
     return True
 
 

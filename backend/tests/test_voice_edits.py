@@ -532,6 +532,32 @@ def test_a_fix_files_a_voice_fix_report_on_the_take_it_fixed(learning_db):
         assert report.expected_text == "Thanks Morgan for the notes."
 
 
+def test_fixes_one_after_another_stack_on_the_take(learning_db):
+    from backend.database.models import CaptureFeedback
+    from backend.services.voice_edits import learn_from
+
+    learn_from(
+        Planned(
+            before="Thanks Megan for the notes", after="Thanks Morgan for the notes", instruction="", replaced="Megan"
+        ),
+        "take",
+        "com.apple.TextEdit",
+    )
+    learn_from(
+        Planned(
+            before="Thanks Morgan for the notes", after="Thanks Morgan for the slides", instruction="", replaced="notes"
+        ),
+        "take",
+        "com.apple.TextEdit",
+    )
+    with Session(learning_db) as db:
+        reports = db.query(CaptureFeedback).order_by(CaptureFeedback.created_at).all()
+        assert [r.expected_text for r in reports] == [
+            "Thanks Morgan for the notes.",
+            "Thanks Morgan for the slides.",
+        ]
+
+
 def test_a_spelled_fix_also_adds_the_word_spelling_only(learning_db):
     from backend.database.models import CaptureFeedback
     from backend.services import dictionary

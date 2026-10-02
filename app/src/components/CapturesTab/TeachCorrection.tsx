@@ -24,11 +24,17 @@ const MAX_HUNKS_SHOWN = 3;
  * State for teaching one transcript of a capture: the draft of what the user
  * meant, the optional note, saving it as a correction, and undoing it or
  * removing any of the capture's corrections.
+ *
+ * Corrections stack: each round of edits is saved as its own correction,
+ * made from the newest one before it and holding the whole text, so the
+ * newest is the text as corrected so far (what learning uses). `reports`
+ * is the capture's corrections, newest first.
  */
 export function useTeachCorrection(
   capture: CaptureResponse,
   target: TeachTarget,
   original: string,
+  reports: CaptureFeedbackResponse[] | undefined,
 ) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -48,7 +54,12 @@ export function useTeachCorrection(
   const save = useMutation({
     mutationFn: (body: { expected_text: string; notes: string; replaces?: string }) =>
       apiClient.reportCaptureOutput(capture.id, { snapshot: capture, target, ...body }),
-    onSuccess: (report) => {
+    onSuccess: (report, body) => {
+      // Shown at once, before the list is fetched again.
+      queryClient.setQueryData<CaptureFeedbackResponse[]>(
+        ['capture-feedback', capture.id],
+        (old) => old && [report, ...old.filter((r) => r.id !== body.replaces)],
+      );
       setLearned(report);
       setDraft(null);
       setNotes('');
@@ -84,21 +95,24 @@ export function useTeachCorrection(
       }),
   });
 
-  /** The text an edit starts from: the saved correction, else Kass's. */
-  const base = learned?.expected_text ?? original;
+  /** This transcript's corrections, newest first. */
+  const rounds = useMemo(
+    () => (reports ?? []).filter((report) => report.target === target),
+    [reports, target],
+  );
+  /** The newest correction: the text as corrected so far. */
+  const saved = rounds[0] ?? null;
+  /** The text an edit starts from: the newest correction, else Kass's. */
+  const base = saved?.expected_text ?? original;
   // Exact, so adding or removing a line break at either end counts as a fix.
-  // Back to Kass's own text isn't a fix; Undo takes a correction back.
+  // Back to Kass's own text isn't a fix; Undo takes corrections back.
   const changed = draft !== null && draft !== base && draft !== original;
-  /**
-   * Saves `text` as the fix. With a correction already saved, it amends
-   * that one instead of adding another, so fixes made one after another
-   * add up to one correction.
-   */
-  const submit = (text: string, note = notes) => {
-    if (text === original || text === learned?.expected_text || save.isPending) return;
+  /** Saves `text` as a new round, or amends the round `replaces` names. */
+  const submit = (text: string, note: string, replaces?: string) => {
+    if (text === original || text === base || save.isPending) return;
     save.mutate(
-      learned
-        ? { expected_text: text, notes: note, replaces: learned.id }
+      replaces
+        ? { expected_text: text, notes: note, replaces }
         : { expected_text: text, notes: note },
     );
   };
@@ -112,6 +126,13 @@ export function useTeachCorrection(
     notes,
     changed,
     learned,
+    saved,
+    base,
+    /** The text before `report`'s round: the round under it, else Kass's. */
+    before: (report: CaptureFeedbackResponse) => {
+      const at = rounds.findIndex((r) => r.id === report.id);
+      return (at >= 0 ? rounds[at + 1]?.expected_text : undefined) ?? original;
+    },
     saving: save.isPending,
     undoing: undo.isPending,
     /** The report being undone or removed, while it is. */
@@ -119,15 +140,8 @@ export function useTeachCorrection(
     canUndo: withdraws || target === 'refined',
     /** Whether any report, not only the one just saved, can be withdrawn. */
     canRemove: withdraws,
-    /**
-     * Starts editing from the current text, so the user fixes it in place,
-     * the saved correction and its note included.
-     */
-    begin: () => {
-      if (draft !== null) return;
-      setDraft(base);
-      if (learned) setNotes(learned.notes);
-    },
+    /** Starts editing from the current text, so the user fixes it in place. */
+    begin: () => setDraft((d) => d ?? base),
     setDraft,
     setNotes,
     cancel: () => {
@@ -136,22 +150,25 @@ export function useTeachCorrection(
     },
     /** Drops an untouched draft when focus leaves, back to the plain text. */
     settle: () => {
-      if (!changed && notes === (learned?.notes ?? '')) {
-        setDraft(null);
-        setNotes('');
-      }
+      if (!changed && !notes) setDraft(null);
     },
     save: () => {
-      if (draft !== null) submit(draft);
+      if (draft !== null) submit(draft, notes);
     },
     current,
-    /** Saves `text` as the fix, showing it in the edit box while it saves. */
+    /**
+     * Saves `text` as the fix, showing it in the edit box while it saves.
+     * While editing, it saves that round; otherwise, with a correction
+     * already saved, it amends the newest one, keeping its note.
+     */
     saveText: (text: string) => {
-      if (text === original || text === learned?.expected_text || save.isPending) return;
+      if (text === original || text === base || save.isPending) return;
       setDraft(text);
-      submit(text, draft === null && learned ? learned.notes : notes);
+      if (draft === null && saved) submit(text, saved.notes, saved.id);
+      else submit(text, notes);
     },
-    undo: () => learned && undo.mutate(learned),
+    /** Takes back the newest round, the one the card shows. */
+    undo: () => saved && undo.mutate(saved),
     /** Withdraws one of the capture's reports and everything it taught. */
     remove: (report: CaptureFeedbackResponse) => undo.mutate(report),
   };
@@ -313,8 +330,8 @@ export function EditableTranscript({
 }
 
 /**
- * Under an edited transcript: what changed, an optional note and Save. Shown
- * only once the text differs from what Kass wrote. A changed word can go
+ * Under an edited transcript: what this round changed, an optional note and
+ * Save. Shown only once the text differs from where the round started. A changed word can go
  * straight into the dictionary, which saves the correction too, with the
  * word spelled the way it was added.
  */
@@ -323,9 +340,8 @@ export function TeachActions({ teach }: { teach: TeachState }) {
   const notesId = useId();
   const [word, setWord] = useState<DictionaryWord | null>(null);
   const hunks = useMemo(
-    () =>
-      teach.changed && teach.draft !== null ? diffWords(teach.original, teach.draft).hunks : [],
-    [teach.changed, teach.draft, teach.original],
+    () => (teach.changed && teach.draft !== null ? diffWords(teach.base, teach.draft).hunks : []),
+    [teach.changed, teach.draft, teach.base],
   );
 
   if (teach.draft === '') {
@@ -339,7 +355,7 @@ export function TeachActions({ teach }: { teach: TeachState }) {
         word={word}
         onAdded={(written) => {
           if (!word || teach.draft === null) return;
-          teach.saveText(respellChange(teach.original, teach.draft, word.written, written));
+          teach.saveText(respellChange(teach.base, teach.draft, word.written, written));
         }}
         onClose={() => setWord(null)}
       />
@@ -386,8 +402,9 @@ export function TeachActions({ teach }: { teach: TeachState }) {
 }
 
 /**
- * The confirmation after a correction is saved, with the learning status.
- * Its Undo is on the correction in the inspector.
+ * The confirmation after a round of corrections is saved, with what it
+ * changed and the learning status. Its Undo is on the correction in the
+ * inspector.
  */
 export function LearnedNotice({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
@@ -397,10 +414,12 @@ export function LearnedNotice({ teach }: { teach: TeachState }) {
     queryFn: () => apiClient.correctionLearningStatus(),
     refetchInterval: (query) => (query.state.data?.model?.running ? 2000 : 60_000),
   });
-  const report = teach.learned;
+  // Only while it is still the newest round.
+  const report = teach.learned?.id === teach.saved?.id ? teach.learned : null;
+  const before = report ? teach.before(report) : '';
   const hunks = useMemo(
-    () => (report ? diffWords(teach.original, report.expected_text).hunks : []),
-    [report, teach.original],
+    () => (report ? diffWords(before, report.expected_text).hunks : []),
+    [report, before],
   );
   if (!report) return null;
   const model = learning.data?.model;
@@ -415,7 +434,7 @@ export function LearnedNotice({ teach }: { teach: TeachState }) {
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <Check className="h-3.5 w-3.5 text-success" strokeWidth={3} />
           {t('captures.teach.learned')}
-          {hunks[0] && <HunkList hunks={hunks.slice(0, 1)} className="text-muted-foreground" />}
+          {hunks.length > 0 && <HunkList hunks={hunks} className="text-muted-foreground" />}
         </div>
         <p className="text-xs leading-normal text-muted-foreground">
           {t('captures.feedback.saved')}

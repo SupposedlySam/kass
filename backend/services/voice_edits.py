@@ -653,7 +653,15 @@ def report_fix(planned: Planned, capture_id: str, db, filed_by: str | None = Non
     if capture is None:
         return
     target = "refined" if capture.transcript_refined is not None else "raw"
-    output = capture.transcript_refined if target == "refined" else capture.transcript_raw
+    # Corrections stack: a fix builds on the capture's newest one.
+    latest = capture_feedback.latest_feedback(db, capture_id, target)
+    output = (
+        latest.expected_text
+        if latest
+        else capture.transcript_refined
+        if target == "refined"
+        else capture.transcript_raw
+    )
     expected = corrected(output or "", planned.before, planned.after)
     if expected is None or expected == output:
         logger.info("Voice fix not found in capture %s; no correction filed", capture_id)

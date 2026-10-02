@@ -28,11 +28,16 @@ export function CaptureDetail({ capture }: { capture: CaptureResponse }) {
 function DictationDetail({ capture }: { capture: CaptureResponse }) {
   const raw = capture.transcript_raw || '';
   const refined = capture.transcript_refined || null;
-  const teach = useTeachCorrection(capture, refined ? 'refined' : 'raw', refined ?? raw);
   const reports = useQuery({
     queryKey: ['capture-feedback', capture.id],
     queryFn: () => apiClient.listCaptureFeedback(capture.id),
   });
+  const teach = useTeachCorrection(
+    capture,
+    refined ? 'refined' : 'raw',
+    refined ?? raw,
+    reports.data,
+  );
   const detailsOpen = useUIStore((s) => s.capturesDetailsOpen);
 
   return (

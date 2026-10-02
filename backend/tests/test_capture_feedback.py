@@ -109,6 +109,38 @@ def test_amended_report_replaces_the_one_it_amends(db):
     assert [report.id for report in list_feedback(db, "take")] == [second.id]
 
 
+def _round(db, text):
+    report = request(db)
+    report.expected_text = text
+    return save_feedback("take", report, db)
+
+
+def test_corrections_stack_and_removing_one_takes_back_only_its_changes(db, beta_on):
+    first = _round(db, "right words")
+    second = _round(db, "right words, Postgres")
+    assert [r.id for r in list_feedback(db, "take")] == [second.id, first.id]
+    assert withdraw_feedback("take", first.id, db)
+    (kept,) = list_feedback(db, "take")
+    assert (kept.id, kept.expected_text) == (second.id, "wrong words, Postgres")
+
+
+def test_a_newer_round_left_changing_nothing_goes_too(db, beta_on):
+    first = _round(db, "right words")
+    second = _round(db, "right words.")
+    _round(db, "right words")
+    assert withdraw_feedback("take", first.id, db)
+    # The third round only took back the second's period: without the
+    # first, it reads as Kass wrote it.
+    assert [(r.id, r.expected_text) for r in list_feedback(db, "take")] == [(second.id, "wrong words.")]
+
+
+def test_a_newer_round_wins_where_it_changed_the_same_words(db, beta_on):
+    first = _round(db, "right words")
+    _round(db, "bright words")
+    assert withdraw_feedback("take", first.id, db)
+    assert [r.expected_text for r in list_feedback(db, "take")] == ["bright words"]
+
+
 def test_capture_deletion_removes_reports(db, monkeypatch):
     from backend import config
 

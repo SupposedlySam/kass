@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
 import { CorrectionLearning } from './CorrectionLearning';
 import { formatDuration, formatTime, languageName, wordsPerMinute } from './captureFormat';
-import type { TeachState } from './TeachCorrection';
-import { countWords } from './wordDiff';
+import { HunkList, type TeachState } from './TeachCorrection';
+import { countWords, diffWords } from './wordDiff';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -29,9 +29,11 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 }
 
 /**
- * This capture's corrections, newest first. The one the card is showing is
- * tagged, with Undo when it can be taken back; in the voice_edits beta every
- * other one, a voice edit's too, has Remove.
+ * This capture's corrections, newest first, each a round of edits made from
+ * the one before it, shown by what it changed. The newest, which the card
+ * shows, is tagged, with Undo when it can be taken back; in the voice_edits
+ * beta every other one, a voice edit's too, has Remove, which takes back
+ * only that round's changes.
  */
 function Corrections({
   reports,
@@ -64,7 +66,12 @@ function Corrections({
       {items.length > 0 && (
         <ul className="m-0 flex list-none flex-col p-0">
           {items.map((report) => {
-            const showing = teach.learned?.id === report.id;
+            const showing = teach.saved?.id === report.id;
+            // A round of the card's text, by what it changed.
+            const hunks =
+              report.target === teach.target
+                ? diffWords(teach.before(report), report.expected_text).hunks
+                : [];
             const removable = showing ? teach.canUndo : teach.canRemove;
             return (
               <li
@@ -94,9 +101,13 @@ function Corrections({
                     </Button>
                   )}
                 </div>
-                <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-normal">
-                  {report.expected_text || '∅'}
-                </p>
+                {hunks.length > 0 ? (
+                  <HunkList hunks={hunks} className="m-0 list-none space-y-0.5 p-0" />
+                ) : (
+                  <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-normal">
+                    {report.expected_text || '∅'}
+                  </p>
+                )}
                 {report.source === 'voice_fix' && (
                   <p className="m-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {t('captures.inspector.byVoiceEdit')}

@@ -89,8 +89,8 @@ export function CopyButton({
 /**
  * The text the capture delivered: the refined transcript, or the raw one
  * when there's no refinement. Clicking it (or Alter) edits it in place to
- * teach Kass; after saving, it shows the correction with its changes, and
- * editing again fixes more of it.
+ * teach Kass; after saving, it shows the corrected text with every change
+ * marked, and editing again saves another round of corrections.
  */
 export function TranscriptCard({ refined, teach }: { refined: boolean; teach: TeachState }) {
   const { t } = useTranslation();
@@ -101,11 +101,11 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
   useEffect(() => {
     if (editing) setExplained(false);
   }, [editing]);
-  const { learned, original } = teach;
-  const shown = learned?.expected_text ?? original;
+  const { learned, saved, original } = teach;
+  const shown = saved?.expected_text ?? original;
   const corrected = useMemo(
-    () => (learned ? diffWords(original, learned.expected_text).after : null),
-    [learned, original],
+    () => (saved ? diffWords(original, saved.expected_text).after : null),
+    [saved, original],
   );
   const textClass = cn(textSize(countWords(shown)), 'font-medium text-foreground');
   const label = t(refined ? 'captures.transcript.refined' : 'captures.transcript.raw');
@@ -117,7 +117,7 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
     >
       <div className="flex items-center gap-2">
         <span className="font-mono text-[11px] uppercase tracking-wider text-accent">{label}</span>
-        {learned && (
+        {saved && (
           <span className="inline-flex h-[18px] items-center rounded-full bg-success/15 px-1.5 font-mono text-[10px] text-success">
             {t('captures.teach.correctedByYou')}
           </span>
@@ -125,7 +125,7 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
         <span className="flex-1" />
         {!editing && (
           <>
-            {!learned && (
+            {!saved && (
               <Button
                 variant="ghost"
                 size="icon"
