@@ -89,7 +89,8 @@ export function CopyButton({
 /**
  * The text the capture delivered: the refined transcript, or the raw one
  * when there's no refinement. Clicking it (or Alter) edits it in place to
- * teach Kass; after saving, it shows the correction with its changes.
+ * teach Kass; after saving, it shows the correction with its changes, and
+ * editing again fixes more of it.
  */
 export function TranscriptCard({ refined, teach }: { refined: boolean; teach: TeachState }) {
   const { t } = useTranslation();
@@ -122,20 +123,22 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
           </span>
         )}
         <span className="flex-1" />
-        {!learned && !editing && (
+        {!editing && (
           <>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn('h-7 w-7 text-muted-foreground', explained && 'text-foreground')}
-              aria-label={t('captures.feedback.about')}
-              title={t('captures.feedback.about')}
-              aria-expanded={explained}
-              aria-controls={aboutId}
-              onClick={() => setExplained((open) => !open)}
-            >
-              <CircleHelp className="size-3.5!" />
-            </Button>
+            {!learned && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn('h-7 w-7 text-muted-foreground', explained && 'text-foreground')}
+                aria-label={t('captures.feedback.about')}
+                title={t('captures.feedback.about')}
+                aria-expanded={explained}
+                aria-controls={aboutId}
+                onClick={() => setExplained((open) => !open)}
+              >
+                <CircleHelp className="size-3.5!" />
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -154,18 +157,16 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
           {t('captures.feedback.description')}
         </p>
       )}
-      {learned ? (
-        <p data-transcript className={cn('m-0 whitespace-pre-wrap break-words', textClass)}>
-          {corrected ? <Marked segments={corrected} mark="corrected" /> : shown}
-        </p>
-      ) : (
-        <EditableTranscript teach={teach} className={textClass}>
-          {shown || (
+      <EditableTranscript teach={teach} className={textClass}>
+        {corrected ? (
+          <Marked segments={corrected} mark="corrected" />
+        ) : (
+          shown || (
             <span className="text-base text-muted-foreground">{t('captures.snippetEmpty')}</span>
-          )}
-        </EditableTranscript>
-      )}
-      {learned ? <LearnedNotice teach={teach} /> : editing && <TeachActions teach={teach} />}
+          )
+        )}
+      </EditableTranscript>
+      {editing ? <TeachActions teach={teach} /> : learned && <LearnedNotice teach={teach} />}
     </section>
   );
 }

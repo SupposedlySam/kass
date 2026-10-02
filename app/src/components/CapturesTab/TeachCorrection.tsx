@@ -84,13 +84,26 @@ export function useTeachCorrection(
       }),
   });
 
+  /** The text an edit starts from: the saved correction, else Kass's. */
+  const base = learned?.expected_text ?? original;
   // Exact, so adding or removing a line break at either end counts as a fix.
-  const changed = draft !== null && draft !== original;
-  const submit = (text: string) => {
-    if (text !== original && !save.isPending) save.mutate({ expected_text: text, notes });
+  // Back to Kass's own text isn't a fix; Undo takes a correction back.
+  const changed = draft !== null && draft !== base && draft !== original;
+  /**
+   * Saves `text` as the fix. With a correction already saved, it amends
+   * that one instead of adding another, so fixes made one after another
+   * add up to one correction.
+   */
+  const submit = (text: string, note = notes) => {
+    if (text === original || text === learned?.expected_text || save.isPending) return;
+    save.mutate(
+      learned
+        ? { expected_text: text, notes: note, replaces: learned.id }
+        : { expected_text: text, notes: note },
+    );
   };
   /** The text as it reads now: the edit, else the saved correction, else Kass's. */
-  const current = draft ?? learned?.expected_text ?? original;
+  const current = draft ?? base;
 
   return {
     target,
@@ -106,8 +119,15 @@ export function useTeachCorrection(
     canUndo: withdraws || target === 'refined',
     /** Whether any report, not only the one just saved, can be withdrawn. */
     canRemove: withdraws,
-    /** Starts editing from the current text, so the user fixes it in place. */
-    begin: () => setDraft((d) => d ?? original),
+    /**
+     * Starts editing from the current text, so the user fixes it in place,
+     * the saved correction and its note included.
+     */
+    begin: () => {
+      if (draft !== null) return;
+      setDraft(base);
+      if (learned) setNotes(learned.notes);
+    },
     setDraft,
     setNotes,
     cancel: () => {
@@ -116,26 +136,20 @@ export function useTeachCorrection(
     },
     /** Drops an untouched draft when focus leaves, back to the plain text. */
     settle: () => {
-      if (!changed && !notes) setDraft(null);
+      if (!changed && notes === (learned?.notes ?? '')) {
+        setDraft(null);
+        setNotes('');
+      }
     },
     save: () => {
       if (draft !== null) submit(draft);
     },
     current,
-    /**
-     * Saves `text` as the fix, showing it in the edit box while it saves.
-     * With a correction already saved, it amends that one instead of adding
-     * another, keeping its note.
-     */
+    /** Saves `text` as the fix, showing it in the edit box while it saves. */
     saveText: (text: string) => {
-      if (text === original || save.isPending) return;
-      if (learned) {
-        if (text === learned.expected_text) return;
-        save.mutate({ expected_text: text, notes: learned.notes, replaces: learned.id });
-        return;
-      }
+      if (text === original || text === learned?.expected_text || save.isPending) return;
       setDraft(text);
-      submit(text);
+      submit(text, draft === null && learned ? learned.notes : notes);
     },
     undo: () => learned && undo.mutate(learned),
     /** Withdraws one of the capture's reports and everything it taught. */
