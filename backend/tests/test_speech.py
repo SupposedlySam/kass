@@ -228,3 +228,33 @@ def test_kokoro_is_a_model_the_models_tab_lists():
     assert (config.engine, config.hf_repo_id) == ("kokoro", "mlx-community/Kokoro-82M-bf16")
     assert config in get_all_model_configs()
     assert backends._backend_for_config(config) is backends.get_speech_backend()
+
+
+# -- pronunciation -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("written", "marked"),
+    [
+        # misaki says a sentence-starting "A" as "uh"; these can only be the letter.
+        ("A or B?", "[A](/ˈA/) or B?"),
+        ("A, B, or C.", "[A](/ˈA/), B, or C."),
+        ("A and B both work.", "[A](/ˈA/) and B both work."),
+        ("I recommend A.", "I recommend [A](/ˈA/)."),
+        ("Option A: cut them.", "Option [A](/ˈA/): cut them."),
+        ("“A” or “B”?", "“[A](/ˈA/)” or “B”?"),
+        # The article, and words with an A in them, are left alone.
+        ("A host must pass it.", "A host must pass it."),
+        ("A lot or a little?", "A lot or a little?"),
+        ("AI or ML?", "AI or ML?"),
+    ],
+)
+def test_a_lone_letter_a_is_said_ay_not_uh(written, marked):
+    assert speech.pronounce_letters(written) == marked
+
+
+def test_the_letter_is_marked_whether_or_not_read_naturally_is_on(client, kokoro, storage):
+    with storage() as db:
+        update_capture_settings(db, {"speak_naturally": False})
+    assert client.post("/speech", json={"text": "A or B?"}).status_code == 200
+    assert kokoro.calls[-1][0] == "[A](/ˈA/) or B?"

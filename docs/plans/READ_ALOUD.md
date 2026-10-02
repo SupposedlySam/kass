@@ -61,7 +61,7 @@ Dates and paths (`10/2`, `/usr/bin`) are left alone. Off, the text is read exact
 
 - **App size.** spaCy, its English model, eSpeak NG and misaki add about 95 MB to the bundle.
 - **Long text.** 16,000 characters is several minutes of speech; it plays sentence by sentence, so memory stays flat.
-- **Pronunciation.** Kokoro reads code literally. Read naturally covers lists, brackets, common symbols, abbreviations, Markdown and URLs.
+- **Pronunciation.** Kokoro reads code literally. Read naturally covers lists, brackets, common symbols, abbreviations, Markdown and URLs. misaki reads a sentence-starting "A" as the article ("uh or B?"), so `speech.pronounce_letters` marks a lone "A" before punctuation, the end, or "or"/"and" as the letter, with misaki's `[A](/ˈA/)` override, whether or not Read naturally is on.
 - **Languages.** English voices only in the first version; other text is read with English pronunciation.
 
 ## Not now
