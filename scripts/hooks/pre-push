@@ -34,6 +34,8 @@ from pathlib import Path
 NO_COMMIT = "0" * 40
 WEB_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc", ".css", ".html"}
 RUFF = "backend/venv/bin/ruff"
+# Ruff skips the files pyproject.toml excludes only when told to, if they are named.
+RUFF_FLAGS = ["--force-exclude"]
 BIOME = "node_modules/.bin/biome"
 TSC = "node_modules/.bin/tsc"
 CARGO_MANIFEST = "tauri/src-tauri/Cargo.toml"
@@ -119,8 +121,8 @@ def main() -> int:
 
     # Fix first, so a push only fails on what no tool fixes.
     if python:
-        step("ruff check --fix", [RUFF, "check", "--fix", "--quiet", *python])
-        step("ruff format", [RUFF, "format", "--quiet", *python])
+        step("ruff check --fix", [RUFF, "check", "--fix", "--quiet", *RUFF_FLAGS, *python])
+        step("ruff format", [RUFF, "format", "--quiet", *RUFF_FLAGS, *python])
     if web:
         step("biome check --write", [BIOME, "check", "--write", *BIOME_FLAGS, *web])
     if rust:
@@ -136,8 +138,8 @@ def main() -> int:
 
     failures.clear()
     if python:
-        step("ruff check", [RUFF, "check", *python])
-        step("ruff format --check", [RUFF, "format", "--check", *python])
+        step("ruff check", [RUFF, "check", *RUFF_FLAGS, *python])
+        step("ruff format --check", [RUFF, "format", "--check", *RUFF_FLAGS, *python])
     if web:
         step("biome check", [BIOME, "check", *BIOME_FLAGS, *web])
     if rust:
