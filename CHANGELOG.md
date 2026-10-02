@@ -7,6 +7,7 @@ Notable changes to Kass for users. Each release gets a section here, newest firs
 ### New
 
 - **Hear what you select.** Select text in any app and press <kbd>right ⌥</kbd> + <kbd>right ⇧</kbd>: Kass reads it to you in a natural voice, on your Mac. Press the keys again, press Escape, or click the pill to stop. Pick from 28 English voices and a speed in **Settings › Read Aloud**, which also downloads the voice model (Kokoro, about 345 MB) the first time. New setups offer it too, as an optional step you can skip.
+- **Anonymous usage stats.** Once a day, Kass sends counts like how many words you dictated, time saved and how fast text appears, so we can see where it's slow. Never your words, audio or apps. It's on by default; turn it off at the end of setup or in **Settings › General**. See [Privacy](https://kass.mrgnhnt.com/docs/privacy/#usage-stats) for the full list.
 
 ## 0.7.2 — October 1, 2026
 
