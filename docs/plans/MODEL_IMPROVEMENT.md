@@ -2,8 +2,9 @@
 
 This extends the vocabulary rule job with real MLX LoRA gradient training of the
 Qwen3 refinement model and recorded-audio comparison of installed Whisper models.
-Speech recognition weights are not fine-tuned: recognition reports evaluate model
-selection. Refinement weights are trained as small adapters over the selected
+Recognition reports evaluate speech model selection; with the `voice_training`
+beta, turbo is also fine-tuned on the user's own takes (VOICE_TRAINING.md).
+Refinement weights are trained as small adapters over the selected
 cached Qwen model. No reports, audio, adapters or metrics are uploaded.
 
 ## Scheduling and foreground priority

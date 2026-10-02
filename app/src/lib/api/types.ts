@@ -599,6 +599,43 @@ export interface CaptureFeedbackResponse extends CaptureFeedbackCreate {
   created_at: string;
 }
 
+/** Mistakes per group of test recordings (voice_training/gate.py). */
+export interface VoiceErrors {
+  clean: number;
+  noisy: number;
+  correction: number;
+}
+
+export interface VoiceTrainingStatus {
+  enabled: boolean;
+  active: string | null;
+  active_since: string | null;
+  can_undo: boolean;
+  min_train: number;
+  min_test: number;
+  bank: {
+    takes: number;
+    train: number;
+    test: number;
+    minutes: number;
+    room_minutes: number;
+  } | null;
+  sounds: {
+    state: 'missing' | 'downloading' | 'ready' | 'failed';
+    fraction: number;
+    error: string | null;
+  } | null;
+  metrics: {
+    passed: boolean;
+    reasons: string[];
+    takes: number;
+    base?: VoiceErrors;
+    production?: VoiceErrors;
+    candidate?: VoiceErrors;
+  } | null;
+  training: { updates: number; seconds: number; train_takes: number } | null;
+}
+
 export interface CorrectionLearningStatus {
   model?: {
     phase: string;
@@ -624,6 +661,7 @@ export interface CorrectionLearningStatus {
         candidate_errors: number;
       };
     } | null;
+    voice?: VoiceTrainingStatus;
   };
   evaluated_report_ids: string[];
   revision: number;

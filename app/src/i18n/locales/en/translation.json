@@ -721,6 +721,35 @@
           "description": "Keep the original recording alongside every transcript."
         }
       },
+      "voiceTraining": {
+        "title": "Voice training · Beta",
+        "description": "Kass trains its speech model on your own takes, with other people talking and busy rooms mixed in, so it follows your voice when it isn't quiet. Training runs while your Mac is idle, and a new version is used only when it makes fewer mistakes.",
+        "needsTurbo": "Voice training works with the Turbo transcription model. Choose Turbo in the Models tab to use it.",
+        "sounds": {
+          "title": "Background sounds",
+          "description": "Recordings of people talking and of restaurants, offices and living rooms, mixed under your takes while Kass trains. A one-time download of about 0.6 GB. Nothing is uploaded.",
+          "download": "Download",
+          "retry": "Try again",
+          "downloading": "Downloading… {{percent}}%",
+          "ready": "Downloaded"
+        },
+        "takes": {
+          "title": "Your takes",
+          "description": "Clean takes Kass keeps to train on, up to 2 hours. Deleting a capture removes its take, and turning on Discard audio removes them all.",
+          "collecting": "{{count}} of {{needed}} takes",
+          "kept": "{{count}} takes · {{minutes}} min"
+        },
+        "model": {
+          "title": "Voice model",
+          "plain": "Using plain Turbo.",
+          "active": "Using your trained voice model since {{date}}.",
+          "lastPassed": "Last training: mistakes with background talk and noise went from {{before}} to {{after}}.",
+          "lastKept": "Last training: {{before}} → {{after}} mistakes with background talk and noise, so the current model was kept.",
+          "train": "Train now",
+          "training": "Training…",
+          "undo": "Undo"
+        }
+      },
       "refinement": {
         "title": "Refinement · Qwen3",
         "description": "Optionally run a local LLM over transcripts to clean filler words, punctuation, and self-corrections.",

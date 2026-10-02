@@ -340,8 +340,10 @@ def delete_capture(capture_id: str, db: Session) -> bool:
             logger.exception("Failed to remove capture audio %s", resolved)
 
     from .capture_feedback import forget_capture
+    from .voice_training import bank
 
     forget_capture(capture_id, db)
+    bank.forget(capture_id)
     db.delete(row)
     db.commit()
     return True

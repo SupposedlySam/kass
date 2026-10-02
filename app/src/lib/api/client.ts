@@ -156,6 +156,10 @@ class ApiClient {
     return this.request('/capture/learning/rollback', { method: 'POST' });
   }
 
+  async downloadVoiceSounds(): Promise<void> {
+    await this.request('/capture/learning/voice/sounds', { method: 'POST' });
+  }
+
   // Captures
   async listCaptures(
     limit = 50,

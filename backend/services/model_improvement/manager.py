@@ -88,6 +88,9 @@ def _empty():
         "metrics": None,
         "error": None,
         "evaluated_report_ids": [],
+        # The last trained voice adapter, promoted or not, that the next run
+        # continues from (docs/plans/VOICE_TRAINING.md).
+        "voice_resume": None,
     }
 
 
@@ -102,6 +105,21 @@ def _valid_adapter(item):
             and hashlib.sha256((path / "adapter_config.json").read_bytes()).hexdigest() == item["config_sha256"]
             and hashlib.sha256((path / "adapters.safetensors").read_bytes()).hexdigest() == item["sha256"]
         )
+    except (OSError, KeyError, ValueError, TypeError):
+        return False
+
+
+def _inside_root(path):
+    Path(path).resolve().relative_to(_root.resolve())
+    return Path(path)
+
+
+def _valid_voice(item):
+    from ..voice_training import lora
+
+    try:
+        path = _inside_root(item["path"])
+        return lora.digests(path) == (item["sha256"], item["config_sha256"])
     except (OSError, KeyError, ValueError, TypeError):
         return False
 
@@ -129,6 +147,10 @@ def initialize():
             _active.pop("llm")
             state["active"] = deepcopy(_active)
             state["error"] = "The saved adapter failed integrity or pipeline checks; using the base model."
+        if "voice" in _active and not _valid_voice(_active["voice"]):
+            _active.pop("voice")
+            state["active"] = deepcopy(_active)
+            state["error"] = "The saved voice model failed its integrity check; using plain turbo."
         if state["phase"] in ("preparing", "training", "evaluating", "queued"):
             state["phase"] = "interrupted"
 
@@ -150,6 +172,7 @@ def status():
         result["active_adapter"] = _active.get("llm", {}).get("id")
         result["speech_model"] = _active.get("speech", {}).get("model")
         result["can_rollback"] = bool(_state["history"])
+        result["voice"] = _voice_status()
         result["running"] = bool(_thread and _thread.is_alive())
         if result["running"] and _run_directory and result["phase"] in ("training", "evaluating"):
             try:
@@ -173,6 +196,51 @@ def active_adapter(model_size, flags):
     if normalized not in item["tested_flags"]:
         return None
     return item["path"]
+
+
+def _voice_status():
+    from ..voice_training import bank, sounds
+
+    enabled = beta.enabled("voice_training")
+    item = _active.get("voice")
+    return {
+        "enabled": enabled,
+        "active": item["id"] if item else None,
+        "active_since": item.get("activated") if item else None,
+        "bank": bank.summary() if enabled else None,
+        "sounds": sounds.status() if enabled else None,
+        "metrics": (_state.get("metrics") or {}).get("voice"),
+        "training": (_state.get("metrics") or {}).get("voice_training"),
+        "min_train": VOICE_MIN_TRAIN,
+        "min_test": VOICE_MIN_TEST,
+        # Undo restores the previous model version; offer it here only when
+        # that would undo a voice model change.
+        "can_undo": bool(_state["history"]) and _state["history"][-1]["active"].get("voice") != item,
+    }
+
+
+def voice_adapter(model_size):
+    """The voice adapter to merge into ``model_size``, or None for plain weights."""
+    item = _active.get("voice")
+    if not item or item["model_size"] != model_size or not beta.enabled("voice_training"):
+        return None
+    return item["path"]
+
+
+def quarantine_voice(message):
+    """Stop using a voice adapter that failed to load; plain turbo takes over."""
+    global _active
+    initialize()
+    with _lock:
+        if "voice" not in _active:
+            return
+        _state["blocked"].append(_active["voice"]["id"])
+        _active = {key: value for key, value in _active.items() if key != "voice"}
+        _state["active"] = deepcopy(_active)
+        _state["voice_resume"] = None
+        _state["error"] = message
+        _state["phase"] = "reverted"
+        _save()
 
 
 def speech_model(configured):
@@ -300,12 +368,16 @@ def _prepare():
         # Every writing style's flags are evaluated, so an accepted adapter
         # covers each style (docs/plans/PER_APP_STYLE.md).
         style_flags = [flags_for(style, settings).to_dict() for style in load_styles(db).styles]
+        voice_beta = beta.enabled("voice_training")
+        voice_bank = _scan_bank(db, settings) if voice_beta else None
+        language = None if (settings.language or "auto") == "auto" else settings.language
     counts, train_ready = readiness(samples)
     current_stt = speech_model(configured_stt)
     raw_tests = [s for s in samples if s["target"] == "raw" and s["split"] == "test" and s.get("audio")]
     speech_candidates = (
         [size for size in WHISPER_HF_REPOS if size != current_stt and _cached(WHISPER_HF_REPOS[size])]
-        if len(raw_tests) >= 5
+        # Voice training specializes turbo; don't switch away from it meanwhile.
+        if len(raw_tests) >= 5 and not (voice_beta and current_stt == "turbo")
         else []
     )
     rules = deepcopy(correction_learning._state["rules"])
@@ -326,6 +398,7 @@ def _prepare():
         "train_ready": train_ready and bool(path),
         "has_training_data": train_ready,
         "baseline_revision": _state["revision"],
+        "voice": None,
         "style_flags": style_flags,
         # Prompts for learned punctuation read each style's habits from here.
         "data_dir": str(config.get_data_dir()),
@@ -339,12 +412,75 @@ def _prepare():
             "pipeline": pipeline_id(),
         }
     )
+    # The refinement model trains first when it has new data; otherwise the
+    # run trains the voice adapter. One at a time fits the worker's 30 minutes.
+    with _lock:
+        refinement_due = plan["train_ready"] and fingerprint not in _state["attempted"] + _state["blocked"]
+    if voice_bank and current_stt == "turbo" and not refinement_due:
+        plan["voice"] = _voice_plan(voice_bank, active, raw_tests, language)
+        if plan["voice"]:
+            plan["train_ready"] = False
+            fingerprint = digest([fingerprint, plan["voice"]["bank_digest"], plan["voice"]["resume"]])
     with _lock:
         _state["groups"] = groups
         _state["counts"] = counts | {"speech_test": len(raw_tests)}
         _state["evaluated_report_ids"] = [s["id"] for s in samples]
         _save()
-    return plan, fingerprint, plan["train_ready"] or (len(raw_tests) >= 5 and bool(speech_candidates))
+    ready = plan["train_ready"] or (len(raw_tests) >= 5 and bool(speech_candidates)) or bool(plan["voice"])
+    return plan, fingerprint, ready
+
+
+VOICE_MIN_TRAIN = 100
+VOICE_MIN_TEST = 12
+
+
+def _scan_bank(db, settings):
+    from ..voice_training import bank
+
+    try:
+        return bank.scan(db, settings)
+    except Exception:
+        logger.exception("Voice bank scan failed; voice training waits")
+        return None
+
+
+def _voice_plan(summary, active, raw_tests, language):
+    """The voice-training part of a run, or None until there's enough to train on."""
+    from ...backends import WHISPER_HF_REPOS
+    from ..voice_training import bank, sounds
+
+    if summary["train"] < VOICE_MIN_TRAIN or summary["test"] < VOICE_MIN_TEST:
+        return None
+    if not sounds.ready() or not _cached(WHISPER_HF_REPOS["turbo"]):
+        return None
+    takes = []
+    for take in bank.takes():
+        try:
+            take["hash"] = hashlib.sha256(Path(take["audio"]).read_bytes()).hexdigest()
+        except OSError:
+            continue
+        takes.append(take)
+    resume = _state.get("voice_resume")
+    try:
+        resume = str(_inside_root(resume)) if resume and (Path(resume) / "adapter.safetensors").is_file() else None
+    except ValueError:
+        resume = None
+    production = active.get("voice", {}).get("path")
+    return {
+        "repo": WHISPER_HF_REPOS["turbo"],
+        "takes": takes,
+        "room": bank.room_paths(),
+        "language": language,
+        "resume": resume or production,
+        "production": production,
+        "bank_digest": bank.digest(),
+        "corrections": [
+            {"id": s["id"], "audio": s["audio"], "audio_hash": s["audio_hash"], "expected": s["expected"]}
+            for s in raw_tests
+        ],
+        "train_seconds": 900,
+        "max_updates": 250,
+    }
 
 
 def _command(plan):
@@ -399,16 +535,51 @@ def _promote(plan, directory, result, fingerprint):
         if pipeline:
             metrics["speech_pipeline"] = score_rows(pipeline["rows"])
         # Promote one independently evaluated component per revision.
-        if passing and pipeline_passed and not metrics.get("adapter", {}).get("passed"):
+        if (
+            passing
+            and pipeline_passed
+            and not metrics.get("adapter", {}).get("passed")
+            and not metrics.get("voice", {}).get("passed")
+        ):
             winner = min(passing, key=lambda e: score_speech(e["rows"])["candidate_errors"])
             active["speech"] = {"model": winner["model"], "configured": plan["configured_stt"]}
+    voice_resume = _state.get("voice_resume")
+    if result.get("voice"):
+        from ..voice_training import lora
+        from ..voice_training.gate import score_voice, worth_continuing
+
+        metrics["voice"] = score_voice(result["voice"]["rows"])
+        metrics["voice_training"] = result["voice"].get("training")
+        path = directory / "voice"
+        # The next run continues from a candidate that is on its way, even if
+        # it isn't good enough to use yet (gate.worth_continuing).
+        if worth_continuing(metrics["voice"]):
+            voice_resume = str(path)
+        if metrics["voice"]["passed"] and not metrics.get("adapter", {}).get("passed"):
+            sha, config_sha = lora.digests(path)
+            active["voice"] = {
+                "id": directory.name,
+                "path": str(path),
+                "model_size": "turbo",
+                "sha256": sha,
+                "config_sha256": config_sha,
+                "activated": datetime.now(UTC).isoformat(),
+            }
+            if not _valid_voice(active["voice"]):
+                raise ValueError("Candidate voice adapter integrity check failed")
+            active.pop("speech", None)
     previous = deepcopy(_state)
     changed = active != _active
     if changed:
         _state["history"] = (_state["history"] + [{"active": deepcopy(_active), "fingerprint": fingerprint}])[-10:]
         _state["revision"] += 1
         _state["active"] = active
-    _state.update(phase="activated" if changed else "rejected", metrics=metrics, last_run=datetime.now(UTC).isoformat())
+    _state.update(
+        phase="activated" if changed else "rejected",
+        metrics=metrics,
+        last_run=datetime.now(UTC).isoformat(),
+        voice_resume=voice_resume,
+    )
     _state["attempted"].append(fingerprint)
     try:
         _save()
@@ -416,7 +587,23 @@ def _promote(plan, directory, result, fingerprint):
         _state.clear()
         _state.update(previous)
         raise
+    voice_changed = active.get("voice") != _active.get("voice")
     _active = active
+    if voice_changed:
+        _reload_speech()
+
+
+def _reload_speech():
+    """Load the new voice model now if turbo is in memory, so the next dictation doesn't wait."""
+    try:
+        from ..mlx_thread import _mlx_executor
+        from ..transcribe import get_whisper_model
+
+        whisper = get_whisper_model()
+        if getattr(whisper, "model", None) is not None and getattr(whisper, "model_size", None) == "turbo":
+            _mlx_executor.submit(whisper._ensure_loaded_sync, "turbo")
+    except Exception:
+        logger.exception("Couldn't reload the speech model; it reloads on next use")
 
 
 def _run(token):
@@ -463,7 +650,7 @@ def _run(token):
                     start_new_session=True,
                     cwd=str(Path(__file__).resolve().parents[3]),
                 )
-            _state["phase"] = "training" if plan["train_ready"] else "evaluating"
+            _state["phase"] = "training" if plan["train_ready"] or plan["voice"] else "evaluating"
             process = _process
         try:
             exit_code = process.wait(timeout=1800)
@@ -521,7 +708,11 @@ def rollback():
         active = entry["active"]
         if "llm" in active and not _valid_adapter(active["llm"]):
             active.pop("llm")
+        if "voice" in active and not _valid_voice(active["voice"]):
+            active.pop("voice")
         _state["blocked"].append(entry["fingerprint"])
+        # Training continues from the restored voice model, not the undone one.
+        _state["voice_resume"] = active.get("voice", {}).get("path")
         _state["active"] = active
         _state["revision"] += 1
         _state["phase"] = "rolled_back"
@@ -531,7 +722,10 @@ def rollback():
             _state.clear()
             _state.update(previous)
             raise
+        voice_changed = active.get("voice") != _active.get("voice")
         _active = deepcopy(active)
+        if voice_changed:
+            _reload_speech()
         return status()
 
 

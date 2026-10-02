@@ -314,7 +314,14 @@ def run(plan_path):
         from ... import config
 
         config.set_data_dir(plan["data_dir"])
-    result = {"adapter": None, "speech": None}
+    result = {"adapter": None, "speech": None, "voice": None}
+    if plan.get("voice"):
+        from ..voice_training import train as voice_training
+
+        phase(directory, "training")
+        training = voice_training.train(plan, directory)
+        phase(directory, "evaluating_voice")
+        result["voice"] = voice_training.evaluate(plan, directory) | {"training": training}
     if plan["train_ready"]:
         phase(directory, "training")
         train_adapter(plan, directory)

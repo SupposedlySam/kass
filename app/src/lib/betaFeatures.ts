@@ -15,6 +15,9 @@ export const BETA_FEATURES = [
   // Fixing Kass's own text by voice, and the correction reports those fixes
   // file; Undo withdraws a report and everything it taught.
   'voice_edits',
+  // Training the speech model on the user's own takes so it follows their
+  // voice through background talk and noise.
+  'voice_training',
 ] as const;
 
 export type BetaFeature = (typeof BETA_FEATURES)[number];

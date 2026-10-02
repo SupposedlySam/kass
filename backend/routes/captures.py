@@ -53,6 +53,17 @@ def cancel_model_learning():
     return cancel()
 
 
+@router.post("/capture/learning/voice/sounds")
+def download_voice_sounds():
+    """Start the one-time download of background sounds for voice training."""
+    from .. import beta
+    from ..services.voice_training import sounds
+
+    if not beta.enabled("voice_training"):
+        raise HTTPException(status_code=404, detail="Voice training is a beta feature")
+    return sounds.start()
+
+
 @router.post("/capture/learning/rollback")
 def rollback_correction_learning():
     from ..services.correction_learning import rollback

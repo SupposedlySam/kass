@@ -62,12 +62,25 @@ def vocabulary_decoder(tokenizer):
     return lambda sequences: backend.decode_batch(sequences, skip_special_tokens=False)
 
 
+def _voice_adapter(model_size: str) -> str | None:
+    """The trained voice adapter for ``model_size``, if voice training activated one."""
+    try:
+        from ..services.model_improvement.manager import voice_adapter
+
+        return voice_adapter(model_size)
+    except Exception:
+        logger.exception("Couldn't read the voice model; using plain weights")
+        return None
+
+
 class MLXSTTBackend:
     """MLX-based STT backend using mlx-audio Whisper."""
 
     def __init__(self, model_size: str = "base"):
         self.model = None
         self.model_size = model_size
+        # The voice adapter merged into the loaded weights (voice_training/).
+        self.adapter = None
         # The prompt each dictionary's terms fit into, for the loaded model.
         self._term_prompts: dict[tuple[str, ...], str] = {}
 
@@ -86,11 +99,12 @@ class MLXSTTBackend:
         """
         if model_size is None:
             model_size = self.model_size
+        adapter = _voice_adapter(model_size)
 
-        if self.model is not None and self.model_size == model_size:
+        if self.model is not None and self.model_size == model_size and self.adapter == adapter:
             return
 
-        self._load_model_sync(model_size)
+        self._load_model_sync(model_size, adapter)
 
     async def load_model_async(self, model_size: str | None = None):
         """
@@ -108,8 +122,8 @@ class MLXSTTBackend:
         """Free the model, serialized onto the MLX worker thread."""
         await run_on_mlx_thread(self.unload_model)
 
-    def _load_model_sync(self, model_size: str):
-        """Synchronous model loading."""
+    def _load_model_sync(self, model_size: str, adapter: str | None = None):
+        """Synchronous model loading, with the voice adapter merged in when there is one."""
         progress_model_name = f"whisper-{model_size}"
         is_cached = self._is_model_cached(model_size)
 
@@ -120,8 +134,21 @@ class MLXSTTBackend:
             # mlx_audio.stt.load, minus imports Whisper never uses; they were
             # most of the packaged server's startup load time.
             self.model = mlx_whisper_loader.load_whisper(model_name)
+            if adapter:
+                try:
+                    from ..services.voice_training import lora
+
+                    lora.apply(self.model, adapter)
+                except Exception:
+                    logger.exception("The voice model failed to load; using plain %s", model_size)
+                    from ..services.model_improvement.manager import quarantine_voice
+
+                    quarantine_voice("The trained voice model failed to load and was turned off.")
+                    self.model = mlx_whisper_loader.load_whisper(model_name)
+                    adapter = None
 
         self.model_size = model_size
+        self.adapter = adapter
         self._term_prompts = {}
         logger.info("MLX Whisper model %s loaded successfully", model_size)
 

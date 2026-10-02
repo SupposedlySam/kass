@@ -154,6 +154,27 @@ class SpeechDetector:
         return out
 
 
+def window_probabilities(samples: np.ndarray) -> np.ndarray | None:
+    """Silero's voice probability for each 32 ms window of 16 kHz float audio.
+
+    None when the model can't be loaded.
+    """
+    session = load()
+    if session is None:
+        return None
+    audio = np.asarray(samples, dtype=np.float32)
+    state = np.zeros((2, 1, 128), dtype=np.float32)
+    context = np.zeros(CONTEXT, dtype=np.float32)
+    out = []
+    for start in range(0, len(audio) - WINDOW + 1, WINDOW):
+        window = audio[start : start + WINDOW]
+        frame = np.concatenate([context, window])[np.newaxis]
+        probability, state = session.run(None, {"input": frame, "state": state, "sr": np.array(RATE, dtype=np.int64)})
+        context = window[-CONTEXT:]
+        out.append(float(probability[0][0]))
+    return np.array(out, dtype=np.float32)
+
+
 def has_speech(samples: np.ndarray, rate: int) -> bool:
     """Whether a whole recording, int16 or float in [-1, 1], contains a voice."""
     samples = np.asarray(samples)
