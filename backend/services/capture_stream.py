@@ -55,9 +55,9 @@ import wave
 import numpy as np
 
 from .. import beta, config, models
-from ..utils import memory
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
+from ..utils import memory
 from . import dictionary as dictionaries, voice_edits
 from .captures import _to_response
 from .commands import (
