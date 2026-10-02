@@ -14,7 +14,12 @@ from backend.services.capture_feedback import save_feedback
 from backend.services.captures import get_capture
 from backend.services.correction_rules import Example
 from backend.services.refinement import RefinementFlags, prepare_refinement, refine_transcript
-from backend.services.spoken_punctuation import apply_spoken_punctuation, keep_spoken_punctuation, learn
+from backend.services.spoken_punctuation import (
+    apply_spoken_punctuation,
+    keep_spoken_punctuation,
+    learn,
+    period_after_closers,
+)
 from backend.services.writing_style import apply_style
 
 
@@ -200,3 +205,30 @@ def test_learned_marks_persist_and_apply_to_the_next_dictation(storage, monkeypa
     monkeypatch.setattr(learning, "_punctuation", ({}, frozenset()))
     learning.initialize()
     assert prepare_refinement("Nice work bang", RefinementFlags())[0] == "Nice work!"
+
+
+@pytest.mark.parametrize(
+    ("written", "placed"),
+    [
+        ('He said "stop." Then he left.', 'He said "stop". Then he left.'),
+        ("It's fine (I checked.)", "It's fine (I checked)."),
+        ("Call it \u201cdone.\u201d", "Call it \u201cdone\u201d."),
+        ('She wrote ("see above.")', 'She wrote ("see above").'),
+        ('He said "stop.".', 'He said "stop".'),
+        ("It's 'final.'\nNext line", "It's 'final'.\nNext line"),
+        # Only a period moves; the rest stay inside.
+        ('He asked "why?"', 'He asked "why?"'),
+        ('She yelled "go!"', 'She yelled "go!"'),
+        ('He said "wait..."', 'He said "wait..."'),
+        ('Already "right".', 'Already "right".'),
+        ("A plain sentence.", "A plain sentence."),
+        # An abbreviation keeps its own period, and the sentence still gets one.
+        ("Bring snacks (chips, soda, etc.)", "Bring snacks (chips, soda, etc.)."),
+        ('He said "made in the U.S."', 'He said "made in the U.S.".'),
+        ("We start at (9 a.m.)", "We start at (9 a.m.)."),
+        ("Bring snacks (chips, etc.).", "Bring snacks (chips, etc.)."),
+        ('Go to "example.com."', 'Go to "example.com".'),
+    ],
+)
+def test_a_period_goes_after_closing_quotes_and_parentheses(written, placed):
+    assert period_after_closers(written) == placed

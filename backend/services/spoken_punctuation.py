@@ -222,6 +222,30 @@ def keep_spoken_punctuation(said: str, text: str, learned: tuple[dict, frozenset
     return text
 
 
+# A period that ends a quote or parenthesis goes after it: "it's done". and
+# (see above). An ellipsis, "?" and "!" stay inside. An abbreviation keeps its
+# own period too: (and so on, etc.).
+_PERIOD_IN_CLOSERS = re.compile(rf"(\w+(?:\.\w+)*)\.([{re.escape(_CLOSERS)}]+)\.?(?=\s|$)")
+# "U.S", "e.g", "a.m": single letters joined by periods.
+_INITIALS = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]")
+
+
+def _is_abbreviation(word: str) -> bool:
+    from .writing_style import _ABBREVIATIONS
+
+    return word.casefold() in _ABBREVIATIONS or bool(_INITIALS.fullmatch(word))
+
+
+def period_after_closers(text: str) -> str:
+    """``text`` with each period written inside closing quotes or parentheses moved after them."""
+
+    def place(match: re.Match) -> str:
+        word, closers = match.groups()
+        return f"{word}{'.' if _is_abbreviation(word) else ''}{closers}."
+
+    return _PERIOD_IN_CLOSERS.sub(place, text)
+
+
 # --- Learning from corrections ---------------------------------------------
 
 _TOKEN = re.compile(r"[\w'\u2019]+|[^\w\s]")

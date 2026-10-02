@@ -90,6 +90,7 @@ from .refinement import (
 )
 from .sentence_tail import MAX_OPEN_WORDS, settle
 from .speech_detect import SpeechDetector
+from .spoken_punctuation import period_after_closers
 from .styles import flags_for, snapshot as styles_snapshot, spoken_style
 from .transcribe import get_whisper_model
 from .voice_commands import mark_commands
@@ -666,7 +667,9 @@ class StreamingCapture:
         if self.flags.punctuation_style == "learned":
             closed = (learned or self.learned)(closed)
         # Punctuation the speaker said wins over the style and the closing.
-        return keep_said_punctuation(self.raw, closed) if self.flags.smart_cleanup else closed
+        if self.flags.smart_cleanup:
+            closed = keep_said_punctuation(self.raw, closed)
+        return period_after_closers(closed)
 
     def join(self, previous, phrase, raw_phrase, learned=None):
         if self.overlap:

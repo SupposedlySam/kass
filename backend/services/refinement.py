@@ -18,7 +18,7 @@ from .spelling import join_spelling
 from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
-from .spoken_punctuation import apply_spoken_punctuation, keep_spoken_punctuation
+from .spoken_punctuation import apply_spoken_punctuation, keep_spoken_punctuation, period_after_closers
 from .voice_commands import commands_alone
 
 # A run that repeats this many times gets collapsed before the LLM sees
@@ -577,7 +577,7 @@ async def refine_transcript(
     if flags.smart_cleanup:
         text = keep_said_punctuation(transcript, text)
     # The model may write a laugh back the way Whisper heard it.
-    return join_laughter(text), resolved_size
+    return period_after_closers(join_laughter(text)), resolved_size
 
 
 async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:

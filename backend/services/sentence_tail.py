@@ -20,8 +20,9 @@ from difflib import SequenceMatcher
 # 99% of the user's cleaned sentences are shorter (p50 7, p95 21, p99 32).
 MAX_OPEN_WORDS = 30
 
-# A sentence ends after a word, not a number or list marker ("1.", "$5.").
-_ENDING = re.compile(r"[^\W\d_][.?!][\"')\]\u201d\u2019]*$")
+# A sentence ends after a word, not a number or list marker ("1.", "$5."),
+# with its mark inside or after a closing quote ("done." and "done".).
+_ENDING = re.compile(r"[^\W\d_][\"')\]\u201d\u2019]*[.?!][\"')\]\u201d\u2019]*$")
 
 
 @dataclass
