@@ -22,6 +22,35 @@ export default defineConfig({
           content:
             "window.amplitude.init('15288b16e4a64d54978fa9d86adddad1', { serverZone: 'US', autocapture: true });",
         },
+        // Docs search-term tracking. Pagefind creates its search input lazily when the
+        // search modal opens, so we delegate from the document and match the Pagefind
+        // UI input (class `pagefind-ui__search-input`). Each settled query (debounced
+        // ~800ms, >= 2 chars, deduped against the last-sent term) emits one
+        // `docs_search` Amplitude event so we can chart top search terms later.
+        {
+          tag: 'script',
+          content: [
+            '(function () {',
+            "  var SELECTOR = '.pagefind-ui__search-input';",
+            '  var DEBOUNCE_MS = 800;',
+            '  var lastSent = null;',
+            '  var timer = null;',
+            "  document.addEventListener('input', function (event) {",
+            '    var target = event.target;',
+            '    if (!target || typeof target.matches !== "function" || !target.matches(SELECTOR)) return;',
+            "    var query = (target.value || '').trim();",
+            '    if (timer) clearTimeout(timer);',
+            '    timer = setTimeout(function () {',
+            '      if (query.length < 2) return;',
+            '      if (query === lastSent) return;',
+            "      if (!window.amplitude || typeof window.amplitude.track !== 'function') return;",
+            '      lastSent = query;',
+            "      window.amplitude.track('docs_search', { search_term: query });",
+            '    }, DEBOUNCE_MS);',
+            '  }, true);',
+            '})();',
+          ].join('\n'),
+        },
       ],
       customCss: ['./src/styles/docs.css'],
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mrgnhnt96/kass' }],
