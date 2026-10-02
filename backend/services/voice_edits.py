@@ -32,9 +32,7 @@ import re
 from dataclasses import dataclass
 
 from . import dictionary
-
-# How letters sound, as the dictionary hears near misses ("Kris", "Chris").
-from .dictionary import _sound
+from .spelling import distance, is_spelled, shaped, sounds_like
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +100,7 @@ _LEAD_INS = (
     ("that", "should", "be"),
     ("should", "be"),
     ("i", "meant"),
+    ("i", "mean"),
     ("i", "said"),
     ("make", "it"),
     ("the", "word"),
@@ -229,7 +228,19 @@ def _strip_lead_ins(found: list[Word]) -> list[Word]:
 
 
 def _is_spelled(found: tuple[Word, ...]) -> bool:
-    return len(found) == 1 and len(found[0].text) >= 3 and found[0].text.isalpha() and found[0].text.isupper()
+    return len(found) == 1 and is_spelled(found[0].text)
+
+
+def _respelled(side: list[Word]) -> list[Word]:
+    """``side`` with a word said and then spelled ("Megan, MEGHAN") as the
+    spelled word alone."""
+    kept: list[Word] = []
+    for word in side:
+        if kept and _is_spelled((word,)) and sounds_like(word.key, kept[-1].key) is not None:
+            kept[-1] = word
+        else:
+            kept.append(word)
+    return kept
 
 
 def _index(found: list[Word], keys: set[str], last: bool = False) -> int | None:
@@ -244,7 +255,7 @@ def _instruction(found: list[Word], said: str, alone: bool = True) -> Instructio
         return None
     head = found[0].key
     if head in _CHANGE and (at := _index(found, _CHANGE_TO)) is not None:
-        find, write = found[1:at], found[at + 1 :]
+        find, write = _respelled(found[1:at]), _respelled(found[at + 1 :])
         if len(find) <= _MAX_FIND and len(write) <= _MAX_FIND:
             return Instruction(tuple(_strip_lead_ins(find)), tuple(write), _is_spelled(tuple(write)), said=said)
         return None
@@ -282,7 +293,7 @@ def _instruction(found: list[Word], said: str, alone: bool = True) -> Instructio
 
 
 def _either_side(right: list[Word], wrong: list[Word], said: str, either: bool = False) -> Instruction | None:
-    right = _strip_lead_ins(right)
+    right, wrong = _respelled(_strip_lead_ins(right)), _respelled(wrong)
     if not right or not wrong or len(right) > _MAX_SIDE or len(wrong) > _MAX_SIDE:
         return None
     return Instruction(tuple(wrong), tuple(right), _is_spelled(tuple(right)), either=either, said=said)
@@ -321,26 +332,6 @@ def _joined(found: tuple[Word, ...], said: str) -> str:
 # -- matching in the text ------------------------------------------------------
 
 
-def _distance(a: str, b: str, limit: int) -> int:
-    """Edit distance with swapped neighbours as one edit, or ``limit + 1`` past it."""
-    if abs(len(a) - len(b)) > limit:
-        return limit + 1
-    previous, current = None, list(range(len(b) + 1))
-    for i in range(1, len(a) + 1):
-        before, previous, current = previous, current, [i] + [0] * len(b)
-        for j in range(1, len(b) + 1):
-            current[j] = min(
-                previous[j] + 1,
-                current[j - 1] + 1,
-                previous[j - 1] + (a[i - 1] != b[j - 1]),
-            )
-            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
-                current[j] = min(current[j], before[j - 2] + 1)
-        if min(current) > limit:
-            return limit + 1
-    return current[-1]
-
-
 def _level(said: Word, heard: Word) -> int | None:
     """How ``heard`` in the take matches ``said``: exactly (0), but for case
     (1), or spelled a letter off (2, words of five letters or more)."""
@@ -349,24 +340,20 @@ def _level(said: Word, heard: Word) -> int | None:
     if said.key == heard.key:
         return 1
     a, b = said.key, heard.key
-    if len(a) >= 5 and len(b) >= 5 and a[0] == b[0] and _distance(a, b, 1) <= 1:
+    if len(a) >= 5 and len(b) >= 5 and a[0] == b[0] and distance(a, b, 1) <= 1:
         return 2
     return None
 
 
 def _spelled_level(letters: str, heard: Word) -> tuple[int, int] | None:
     """How close a spelled word is to ``heard``: the same sounds (0) or a
-    letter or two off (1, by the distance); None for the word it already is."""
+    few off (1, by how many; see ``sounds_like``); None for the word it already is."""
     if heard.key == letters:
         return None
-    a, b = _sound(letters), _sound(heard.key)
-    if not a or not b or a[0] != b[0]:
+    off = sounds_like(letters, heard.key)
+    if off is None:
         return None
-    if a == b:
-        return 0, 0
-    limit = 2 if len(a) >= 5 else 1
-    distance = _distance(a, b, limit)
-    return (1, distance) if distance <= limit else None
+    return (0, 0) if off == 0 else (1, off)
 
 
 def _best(candidates: list[tuple[tuple, int, int]]) -> tuple[int, int] | Declined | None:
@@ -404,20 +391,11 @@ def _find_spelled(letters: str, take: str, found: list[Word]) -> tuple[int, int]
     return _best(candidates)
 
 
-def _shaped(letters: str, like: str) -> str:
-    """Spelled letters in the case of the word they replace: they carry none."""
-    if like.isupper() and len(like) > 1:
-        return letters.upper()
-    if like[:1].isupper():
-        return letters[:1].upper() + letters[1:].lower()
-    return letters.lower()
-
-
 def _written(instruction: Instruction, take: str, start: int, end: int) -> str:
     """What replaces ``take[start:end]``, cased for where it goes."""
     target = take[start:end]
     if instruction.spelled:
-        return _shaped(instruction.write[0].text, target)
+        return shaped(instruction.write[0].text.replace("-", ""), target)
     text = _joined(instruction.write, instruction.said)
     first = instruction.write[0]
     # Whisper's capital says nothing where a sentence began, or where it
@@ -533,7 +511,7 @@ def _target(instruction: Instruction, take: str, found: list[Word]) -> tuple[int
             span = None
         span = span or _find_spelled(letters, take, found)
         if span is None:
-            return Declined(f"Nothing close to “{_shaped(letters, 'Aa')}” in the text before the cursor")
+            return Declined(f"Nothing close to “{shaped(letters, 'Aa')}” in the text before the cursor")
     else:
         span = _find(instruction.find, take, found) or missing
     return span if isinstance(span, Declined) else (*span, False)
@@ -564,7 +542,7 @@ def plan(said: str, take: str | None) -> Planned | Declined | None:
         described = f"Delete “{replaced}”"
     else:
         described = f"“{replaced}” → “{written}”"
-    spelled = instruction.write[0].text if instruction.spelled else None
+    spelled = instruction.write[0].text.replace("-", "") if instruction.spelled else None
     return Planned(take, after, described, replaced, spelled)
 
 

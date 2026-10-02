@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
 from .laughter import is_laughter, join_laughter
-from .spelling import join_spelling
+from .spelling import join_spelling, respell
 from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
 from .spoken_corrections import apply_spoken_corrections
@@ -684,8 +684,9 @@ def prepare_refinement(transcript: str, flags: RefinementFlags) -> tuple[str, st
 
     # Pre-process before the LLM sees the text — the model shouldn't have
     # to reason about obvious STT garbage (see ``collapse_repetitive_artifacts``).
-    # A laugh is joined first, so a long one isn't taken for a loop.
-    cleaned_input = collapse_repetitive_artifacts(join_laughter(transcript))
+    # A laugh is joined first, so a long one isn't taken for a loop. A word
+    # said and then spelled is written once, as spelled.
+    cleaned_input = respell(collapse_repetitive_artifacts(join_laughter(transcript)))
     if flags.self_correction:
         # Repeats, restarts and changed answers are cleaned, not resolved: the
         # model still gets the text, so this never short-circuits refinement.

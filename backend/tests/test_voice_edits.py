@@ -118,6 +118,22 @@ def test_spelled_letters_take_the_case_of_the_word_they_replace():
     assert after("Edit, change Megan to MEGHAN.") == TAKE.replace("Megan", "Meghan")
 
 
+def test_a_word_said_then_spelled_is_one_word_on_either_side_of_an_edit():
+    # "Kass, I meant Vova, V-O-V-A, not Volva, V-U-L-V-A", as Whisper heard it.
+    take = "I added vulva to the dictionary."
+    fixed = "I added vova to the dictionary."
+    assert after("Kass, I meant VOVA, VOVA, not VOLVA, VULVA.", take) == fixed
+    assert after("Edit, change Volva, VULVA to Vova, VOVA.", take) == fixed
+
+
+def test_a_short_spelled_word_reaches_a_word_two_sounds_off():
+    # Four letters spelled for five heard: off by two in five.
+    planned = plan("Kass, V-O-V-A.".replace("V-O-V-A", "VOVA"), "I added vulva to the dictionary.")
+    assert (planned.after, planned.spelled) == ("I added vova to the dictionary.", "VOVA")
+    # Two letters Whisper left dashed are spelled too.
+    assert after("Fix that, B-O.", "Tell Boe hi.") == "Tell Bo hi."
+
+
 def test_names_that_sound_alike_are_declined_rather_than_changed_to_themselves():
     # "replace Megan with Meghan", as Whisper hears it.
     declined = plan("Fix that, replace Megan with Megan.", TAKE)
@@ -184,6 +200,12 @@ def test_a_negated_verb_is_a_sentence_not_a_correction():
 )
 def test_a_word_said_alone_replaces_the_word_of_its_kind(said):
     assert after(said) == TAKE.replace("Tuesday", "Thursday")
+
+
+@pytest.mark.parametrize("said", ["Kass, I mean Vova, not Volva.", "Cas, I meant Vova, not vulva."])
+def test_i_mean_before_the_right_word_is_not_written(said):
+    take = "Met with vulva about goals."
+    assert after(said, take) == "Met with Vova about goals."
 
 
 def test_kinds_of_word_are_days_months_and_numbers():
