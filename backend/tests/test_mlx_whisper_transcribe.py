@@ -147,6 +147,8 @@ def test_load_goes_through_the_lean_whisper_loader(monkeypatch):
 
     loaded = []
     monkeypatch.setattr(mlx_whisper_loader, "load_whisper", lambda repo: loaded.append(repo) or FakeWhisper())
+    # Not downloaded: the repo name, for the library to fetch.
+    monkeypatch.setattr(mlx_backend, "local_model_path", lambda repo, extensions: repo)
     backend = mlx_backend.MLXSTTBackend("base")
 
     backend._load_model_sync("turbo")
@@ -154,6 +156,18 @@ def test_load_goes_through_the_lean_whisper_loader(monkeypatch):
     assert loaded == ["openai/whisper-large-v3-turbo"]
     assert isinstance(backend.model, FakeWhisper)
     assert backend.model_size == "turbo"
+
+
+def test_a_downloaded_whisper_loads_from_its_cached_folder(monkeypatch):
+    from backend.backends import mlx_backend, mlx_whisper_loader
+
+    loaded = []
+    monkeypatch.setattr(mlx_whisper_loader, "load_whisper", lambda path: loaded.append(path) or FakeWhisper())
+    monkeypatch.setattr(mlx_backend, "local_model_path", lambda repo, extensions: f"/cache/{repo}")
+
+    mlx_backend.MLXSTTBackend("base")._load_model_sync("turbo")
+
+    assert loaded == ["/cache/openai/whisper-large-v3-turbo"]
 
 
 class WordTokenizer:

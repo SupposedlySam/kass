@@ -96,6 +96,24 @@ def ellipsis_token_ids(
     return _ELLIPSIS_TOKEN_IDS[key]
 
 
+def local_model_path(hf_repo: str, weight_extensions: tuple[str, ...] = (".safetensors", ".bin")) -> str | Path:
+    """Where to load ``hf_repo`` from: its folder in the Hugging Face cache once it's downloaded.
+
+    Given a repo name, mlx-audio and mlx-lm ask the Hub for a newer revision
+    on every load, so a downloaded model would still reach the network each
+    launch. Before the download, the repo name, so the library fetches it.
+    The folder is a Path: mlx-audio reads the model's name from a cache path's
+    parts, which a plain string loses.
+    """
+    if Path(hf_repo).exists():
+        return hf_repo
+    if not is_model_cached(hf_repo, weight_extensions=weight_extensions):
+        return hf_repo
+    from huggingface_hub import snapshot_download
+
+    return Path(snapshot_download(hf_repo, local_files_only=True))
+
+
 @contextmanager
 def model_load_progress(
     model_name: str,

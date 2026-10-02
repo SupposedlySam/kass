@@ -5,12 +5,11 @@ dictation started while Kass is reading waits at most one sentence.
 """
 
 import logging
-from pathlib import Path
 
 import numpy as np
 
 from ..services.mlx_thread import clear_mlx_cache, run_on_mlx_thread
-from .base import is_model_cached, model_load_progress
+from .base import is_model_cached, local_model_path, model_load_progress
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +33,6 @@ class KokoroBackend:
     def is_cached(self) -> bool:
         return is_model_cached(KOKORO_REPO, weight_extensions=(".safetensors",))
 
-    def _local_path(self) -> Path:
-        """Kokoro's folder in the Hugging Face cache, downloading it if it isn't there.
-
-        Once it's downloaded, nothing here touches the network: mlx-audio
-        given the repo name checks the Hub for a newer revision on every load.
-        """
-        from huggingface_hub import snapshot_download
-
-        if self.is_cached():
-            return Path(snapshot_download(KOKORO_REPO, local_files_only=True))
-        return Path(snapshot_download(KOKORO_REPO))
-
     def _ensure_loaded_sync(self, model_size: str | None = None) -> None:
         if self.model is not None:
             return
@@ -53,7 +40,8 @@ class KokoroBackend:
 
         with model_load_progress(KOKORO_MODEL_NAME, self.is_cached()):
             logger.info("Loading Kokoro via MLX...")
-            model = load_model(self._local_path())
+            # Its cached folder once downloaded, so loading never reaches the network.
+            model = load_model(local_model_path(KOKORO_REPO, (".safetensors",)))
         # Kokoro's pipeline loads each voice from its repo_id, which otherwise
         # defaults to another repo and fetches the voice over the network. Ours
         # ships all of them.

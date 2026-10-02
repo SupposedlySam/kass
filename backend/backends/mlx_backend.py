@@ -22,6 +22,7 @@ from . import WHISPER_HF_REPOS, mlx_whisper_loader, whisper_audio
 from .base import (
     ellipsis_token_ids,
     is_model_cached,
+    local_model_path,
     model_load_progress,
 )
 
@@ -133,7 +134,7 @@ class MLXSTTBackend:
 
             # mlx_audio.stt.load, minus imports Whisper never uses; they were
             # most of the packaged server's startup load time.
-            self.model = mlx_whisper_loader.load_whisper(model_name)
+            self.model = mlx_whisper_loader.load_whisper(local_model_path(model_name, (".safetensors", ".bin", ".npz")))
             if adapter:
                 try:
                     from ..services.voice_training import lora
@@ -144,7 +145,9 @@ class MLXSTTBackend:
                     from ..services.model_improvement.manager import quarantine_voice
 
                     quarantine_voice("The trained voice model failed to load and was turned off.")
-                    self.model = mlx_whisper_loader.load_whisper(model_name)
+                    self.model = mlx_whisper_loader.load_whisper(
+                        local_model_path(model_name, (".safetensors", ".bin", ".npz"))
+                    )
                     adapter = None
 
         self.model_size = model_size

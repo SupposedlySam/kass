@@ -15,6 +15,7 @@ from ..services.mlx_thread import clear_mlx_cache, run_on_mlx_thread
 from . import DEFAULT_LLM_MAX_TOKENS, DEFAULT_LLM_TEMPERATURE
 from .base import (
     is_model_cached,
+    local_model_path,
     model_load_progress,
 )
 
@@ -260,7 +261,7 @@ class MLXQwenLLMBackend:
             # Forcing offline for cached models flips process-global state
             # and silently switches every concurrent download/load on other
             # threads to offline mode (issue #841).
-            loaded = mlx_load(repo, adapter_path=self._adapter_path)
+            loaded = mlx_load(local_model_path(repo, (".safetensors", ".bin", ".npz")), adapter_path=self._adapter_path)
 
         # mlx_lm.load returns (model, tokenizer) by default and
         # (model, tokenizer, config) when return_config=True.
