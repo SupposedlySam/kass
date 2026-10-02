@@ -2,7 +2,7 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
-## Unreleased
+## 0.7.3 — October 2, 2026
 
 ### New
 
