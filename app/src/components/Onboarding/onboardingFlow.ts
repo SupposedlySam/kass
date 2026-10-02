@@ -14,6 +14,7 @@ export const STEPS = [
   'messy',
   'style',
   'rewrite',
+  'readAloud',
   'done',
 ] as const;
 
@@ -34,6 +35,7 @@ export const STEP_COLORS: Record<Step, string> = {
   messy: '#F2542D',
   style: '#4A3A33',
   rewrite: '#2742D9',
+  readAloud: '#6B3FA0',
   done: '#0F7B5A',
 };
 

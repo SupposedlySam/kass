@@ -24,6 +24,7 @@ import {
 } from './onboardingFlow';
 import { ColorWipe } from './PosterMotion';
 import './poster.css';
+import { ReadAloudStep } from './steps/ReadAloudStep';
 import {
   AccessibilityStep,
   DownloadStep,
@@ -201,6 +202,9 @@ export function OnboardingWindow() {
         break;
       case 'rewrite':
         body = <RewriteStep settings={settings} onNext={next} />;
+        break;
+      case 'readAloud':
+        body = <ReadAloudStep settings={settings} onNext={next} />;
         break;
       case 'done':
         body = <DoneStep settings={settings} onFinish={finish} />;

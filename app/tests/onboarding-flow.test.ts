@@ -16,6 +16,11 @@ describe('onboarding order', () => {
     expect(nextStep('download')).toBe('inputMonitoring');
   });
 
+  test('the optional Read Aloud step comes after the rewrite, right before the end', () => {
+    expect(nextStep('rewrite')).toBe('readAloud');
+    expect(nextStep('readAloud')).toBe('done');
+  });
+
   test('the last step stays put, and so does the first going back', () => {
     expect(nextStep('done')).toBe('done');
     expect(previousStep('welcome')).toBe('welcome');
@@ -28,7 +33,14 @@ describe('model lock', () => {
       expect(isLocked(step, false)).toBe(true);
       expect(isLocked(step, true)).toBe(false);
     }
-    for (const step of ['welcome', 'download', 'inputMonitoring', 'microphone', 'keys'] as const) {
+    for (const step of [
+      'welcome',
+      'download',
+      'inputMonitoring',
+      'microphone',
+      'keys',
+      'readAloud',
+    ] as const) {
       expect(isLocked(step, false)).toBe(false);
     }
   });
