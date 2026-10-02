@@ -2,6 +2,7 @@
 import '../styles/site.css';
 import StarButton from '../components/StarButton.astro';
 import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
+import Amplitude from '../components/Amplitude.astro';
 ---
 
 <!doctype html>
@@ -13,6 +14,7 @@ import { NEW_ISSUE, RELEASES, REPO_API } from '../site';
     <meta name="description" content="Download Kass, private dictation for Apple Silicon Macs." />
     <link rel="icon" href="/icon.png" />
     <meta name="theme-color" content="#0c0d10" />
+    <Amplitude />
   </head>
   <body>
     <main class="wrap page" data-api={REPO_API} data-releases={RELEASES}>

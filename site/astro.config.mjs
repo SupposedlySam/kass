@@ -13,7 +13,16 @@ export default defineConfig({
       description: 'Private, local dictation for Apple Silicon Macs.',
       logo: { src: './src/assets/icon.png', alt: '' },
       favicon: '/favicon.svg',
-      head: [{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } }],
+      head: [
+        { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } },
+        // Amplitude Browser SDK — Analytics autocapture. Public ingestion-scoped project API key.
+        { tag: 'script', attrs: { src: 'https://cdn.amplitude.com/script/15288b16e4a64d54978fa9d86adddad1.js' } },
+        {
+          tag: 'script',
+          content:
+            "window.amplitude.init('15288b16e4a64d54978fa9d86adddad1', { serverZone: 'US', autocapture: true });",
+        },
+      ],
       customCss: ['./src/styles/docs.css'],
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mrgnhnt96/kass' }],
       editLink: { baseUrl: 'https://github.com/mrgnhnt96/kass/edit/main/site/' },

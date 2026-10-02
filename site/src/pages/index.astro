@@ -3,6 +3,7 @@ import '../styles/site.css';
 import DictationDemo from '../components/DictationDemo.astro';
 import StarButton from '../components/StarButton.astro';
 import { DOWNLOAD, ISSUES, NEW_ISSUE, REPO } from '../site';
+import Amplitude from '../components/Amplitude.astro';
 
 const title = 'Kass — Private dictation for your Mac';
 const description =
@@ -125,6 +126,7 @@ const faqs = [
 		<meta property="og:description" content={description} />
 		<meta property="og:image" content="https://kass.mrgnhnt.com/icon.png" />
 		<meta name="theme-color" content="#0c0d10" />
+		<Amplitude />
 	</head>
 	<body>
 		<header class="nav">
@@ -373,6 +375,15 @@ const faqs = [
 				<p>Named for the bard who carries songs from place to place. MIT licensed. Based on <a href="https://github.com/jamiepine/voicebox">Voicebox</a> by Jamie Pine.</p>
 			</div>
 		</footer>
+		<script is:inline>
+			// Track the "download" event on any Download CTA click (href="/download/").
+			// Autocapture also records the click; this adds a clean, named event.
+			document.addEventListener('click', (event) => {
+				const target = event.target;
+				const link = target instanceof Element ? target.closest('a[href="/download/"]') : null;
+				if (link && window.amplitude) window.amplitude.track('download');
+			});
+		</script>
 	</body>
 </html>
 
