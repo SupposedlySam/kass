@@ -170,8 +170,6 @@ def build_server():
             "--collect-submodules",
             "mlx",
             "--collect-submodules",
-            "mlx_audio",
-            "--collect-submodules",
             "mlx_lm",
             # Use --collect-all so PyInstaller bundles both data files AND
             # native shared libraries (.dylib, .metallib) for MLX.
@@ -180,8 +178,7 @@ def build_server():
             # the Metal shader libraries were missing.
             "--collect-all",
             "mlx",
-            "--collect-all",
-            "mlx_audio",
+            # mlx_audio is collected whole by pyinstaller_hooks/hook-mlx_audio.py.
             # mlx_lm ships chat_templates/ JSON files and loads tool_parsers
             # submodules dynamically via importlib at tokenizer load time,
             # which --hidden-import alone can't resolve.
@@ -197,9 +194,11 @@ def build_server():
     # and spaCy finds its functions through entry points, so their metadata
     # ships too; without it the bundled server would try to download the model.
     args.extend(["--hidden-import", "backend.backends.kokoro_backend"])
+    # Only misaki's English modules: collecting all of it imports its other
+    # languages, whose dependencies (vietnam_number, ...) Kass doesn't install.
+    args.extend(["--collect-data", "misaki", "--hidden-import", "misaki.en", "--hidden-import", "misaki.espeak"])
+    # spaCy itself comes from pyinstaller_hooks/hook-spacy.py, without its tests.
     for package in (
-        "misaki",
-        "spacy",
         "spacy_legacy",
         "spacy_loggers",
         "en_core_web_sm",
@@ -234,6 +233,9 @@ def build_server():
         args.extend(["--collect-data", package])
     for distribution in ("csvw", "segments", "rdflib", "jsonschema", "language-tags"):
         args.extend(["--copy-metadata", distribution])
+
+    # Project hooks override pyinstaller-hooks-contrib's.
+    args.extend(["--additional-hooks-dir", str(backend_dir / "pyinstaller_hooks")])
 
     dist_dir = str(backend_dir / "dist")
     build_dir = str(backend_dir / "build")

@@ -7,7 +7,8 @@ from PyInstaller.utils.hooks import copy_metadata
 
 datas = [('assets/silero_vad.onnx', 'backend/assets')]
 binaries = []
-hiddenimports = ['backend', 'backend.main', 'backend.config', 'backend.database', 'backend.models', 'backend.services.transcribe', 'backend.utils.platform_detect', 'backend.backends', 'backend.backends.qwen_llm_backend', 'backend.utils.audio', 'backend.utils.progress', 'backend.utils.hf_progress', 'transformers', 'fastapi', 'uvicorn', 'uvicorn.protocols.websockets.auto', 'uvicorn.protocols.websockets.websockets_impl', 'sqlalchemy', 'soundfile', 'onnxruntime', 'requests', 'pkg_resources.extern', 'backend.backends.mlx_backend', 'mlx', 'mlx.core', 'mlx.nn', 'mlx_audio', 'mlx_audio.stt', 'mlx_lm', 'backend.backends.kokoro_backend']
+hiddenimports = ['backend', 'backend.main', 'backend.config', 'backend.database', 'backend.models', 'backend.services.transcribe', 'backend.utils.platform_detect', 'backend.backends', 'backend.backends.qwen_llm_backend', 'backend.utils.audio', 'backend.utils.progress', 'backend.utils.hf_progress', 'transformers', 'fastapi', 'uvicorn', 'uvicorn.protocols.websockets.auto', 'uvicorn.protocols.websockets.websockets_impl', 'sqlalchemy', 'soundfile', 'onnxruntime', 'requests', 'pkg_resources.extern', 'backend.backends.mlx_backend', 'mlx', 'mlx.core', 'mlx.nn', 'mlx_audio', 'mlx_audio.stt', 'mlx_lm', 'backend.backends.kokoro_backend', 'misaki.en', 'misaki.espeak']
+datas += collect_data_files('misaki')
 datas += collect_data_files('language_tags')
 datas += collect_data_files('babel')
 datas += collect_data_files('pytz')
@@ -39,7 +40,6 @@ hiddenimports += collect_submodules('backend.services')
 hiddenimports += collect_submodules('websockets')
 hiddenimports += collect_submodules('jaraco')
 hiddenimports += collect_submodules('mlx')
-hiddenimports += collect_submodules('mlx_audio')
 hiddenimports += collect_submodules('mlx_lm')
 tmp_ret = collect_all('lazy_loader')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -47,13 +47,7 @@ tmp_ret = collect_all('librosa')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('mlx')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('mlx_audio')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('mlx_lm')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('misaki')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('spacy')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('spacy_legacy')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -75,7 +69,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=['pyi_hooks'],
+    hookspath=['pyi_hooks', '/Users/jwalker/development/voicebox/backend/pyinstaller_hooks'],
     hooksconfig={},
     runtime_hooks=['pyi_rth_scipy_distn.py'],
     excludes=['torch', 'torchaudio', 'torchvision'],
