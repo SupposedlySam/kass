@@ -157,3 +157,62 @@ the voice model off (`quarantine_voice`).
 **Undo:** Settings › Transcription › Voice model › Undo restores the previous
 model version, the same history the cleanup adapter uses. The next run then
 continues from the restored model.
+
+## Status and next steps (2026-10-02)
+
+Start here when picking this work back up.
+
+**Where it stands:**
+
+- **Shipped:** on `main` and pushed, in 24d4d8f6 (voice training) and
+  e133d6c7 (the internal flag).
+- **Internal builds:** `scripts/install.sh` writes the `internal` file, so
+  every local install is an internal build. `GET /internal` reports it.
+- **Active model:** round 5 (run `9600e296d0154c1b9fcc6c911fb82584`). It
+  came from the test rounds and was activated in the real data through
+  `manager._promote`. Undo goes back to plain turbo.
+- **Gate fix:** clean takes are now judged against plain turbo and the model
+  in use separately, each with its own allowance. Under the old rule, rounds
+  4 and 5 would have been rejected even though they beat round 1 on both
+  counts.
+- **Voice bank:** 546 takes (52 minutes, 74 of them test takes), and it grows
+  as the user dictates. Runs happen on their own while the Mac is idle. A
+  `paused` phase only means activity interrupted a run, and it retries at
+  the next idle stretch.
+
+**Decisions:**
+
+- **Clean vs noisy:** a few extra clean mistakes are acceptable for a big
+  cut in noisy mistakes. The user's call: "the improvement is better, and we
+  can continue to train."
+- **Mixes are hard enough:** the user listened to their own takes mixed by
+  `mixing.condition_mix` and `training_mix` and judged the current mixes to
+  be harder than real rooms ("I think we're doing fine"). Leave the levels
+  as they are.
+- **No more changes for now:** let everyday takes accumulate and keep
+  training. Revisit only if background words get through in real dictation;
+  start from that take.
+
+**Ideas, not started (in this order):**
+
+1. **Train on noisy takes the user corrected.** A noisy take whose raw
+   transcript the user fixed in Captures has a label we can trust, and it
+   holds real background talk. Today the bank keeps clean takes only,
+   because a noisy take's own transcript may contain the other person's
+   words.
+2. **Voiceprint conditioning.** Feed a speaker embedding built from the
+   user's takes into Whisper, and train it to follow that voice. This is
+   research-grade: it needs a new input wired into the model, and there's
+   no guarantee it beats what the current training already does. The
+   earlier speaker-embedding *gate* failed, but it cut audio before
+   recognition; this would guide recognition instead. Try it only if idea 1
+   stalls.
+
+**Cautions:**
+
+- Never run memory or GPU stress tests on the user's Mac.
+- Don't run training while the user may be dictating, because it slows
+  dictation.
+- To listen to mixes, write `mixing.condition_mix(take_id, condition, y,
+  talk, beds)` to WAV. The inputs are a bank take (`bank.read_wav`) and
+  `sounds.load()`. Keep the files local, since they hold the user's voice.
