@@ -95,12 +95,17 @@ release version:
 # ─── Code Quality ────────────────────────────────────────────────────
 
 # Run all checks (JS + Python lint + format)
-check: check-js check-python
+check: check-js check-python check-rust
 
 # JS/TS: lint + format (Biome), then typecheck app and tauri (tsc)
 check-js:
     bun run check
     bun run typecheck
+
+# Rust: format check (rustfmt) and lint (clippy, warnings fail)
+check-rust:
+    cd {{ tauri_dir }}/src-tauri && cargo fmt --check
+    cd {{ tauri_dir }}/src-tauri && cargo clippy --all-targets --quiet -- -D warnings
 
 # Python: lint + format check (ruff)
 check-python: _ensure-venv
@@ -139,6 +144,7 @@ fix-python: _ensure-venv
 # Run Python tests
 test: _ensure-venv
     {{ venv_bin }}/python -m pytest {{ backend_dir }}/tests -v
+    cd {{ tauri_dir }}/src-tauri && cargo test --quiet
 
 # ─── Database ─────────────────────────────────────────────────────────
 
