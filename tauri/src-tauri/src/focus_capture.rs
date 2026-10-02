@@ -231,8 +231,7 @@ pub fn capture_focus() -> Result<FocusSnapshot, String> {
         if system_wide.is_null() {
             return Err("AXUIElementCreateSystemWide returned null".into());
         }
-        let _sys_guard =
-            scopeguard::guard(system_wide, |e| CFRelease(e as *const std::ffi::c_void));
+        let _sys_guard = scopeguard::guard(system_wide, |e| CFRelease(e));
 
         let focused_attr = cf_string_const("AXFocusedUIElement")
             .ok_or("Failed to build AXFocusedUIElement CFString")?;

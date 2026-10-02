@@ -11,9 +11,9 @@ mod focus_capture;
 mod hotkey_monitor;
 mod identifier_move;
 mod input_monitoring;
-mod insert_chain;
 #[cfg(test)]
 mod insert_bench;
+mod insert_chain;
 mod join;
 #[cfg(desktop)]
 mod key_codes;
@@ -34,6 +34,7 @@ use tauri::{
     command, Emitter, Listener, Manager, PhysicalPosition, RunEvent, State, WebviewUrl,
     WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::ShellExt;
 
 pub const DICTATE_WINDOW_LABEL: &str = "dictate";
@@ -299,8 +300,7 @@ fn pill_panel_class() -> &'static objc::runtime::Class {
     static INIT: std::sync::Once = std::sync::Once::new();
     INIT.call_once(|| {
         let superclass = class!(NSPanel);
-        let mut decl =
-            ClassDecl::new("KassPillPanel", superclass).expect("register KassPillPanel");
+        let mut decl = ClassDecl::new("KassPillPanel", superclass).expect("register KassPillPanel");
         unsafe {
             decl.add_method(
                 sel!(canBecomeKeyWindow),
@@ -503,7 +503,10 @@ async fn start_server(
                     } else {
                         // Process name doesn't contain "kass" — could be an external
                         // Python/uvicorn/Docker server. Verify via HTTP health check.
-                        println!("Port {} in use by '{}' (PID: {}), checking if it's a Kass server...", SERVER_PORT, command, pid_str);
+                        println!(
+                            "Port {} in use by '{}' (PID: {}), checking if it's a Kass server...",
+                            SERVER_PORT, command, pid_str
+                        );
                         if check_health(SERVER_PORT) {
                             let running = server_version::running(SERVER_PORT);
                             // A release build replaces an old server, such as
@@ -530,9 +533,7 @@ async fn start_server(
                             );
                             return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                         }
-                        println!(
-                            "Health check failed — port is occupied by a non-Kass process"
-                        );
+                        println!("Health check failed — port is occupied by a non-Kass process");
                         return Err(format!(
                             "Port {} is already in use by another application ({}). \
                              Close it or change the Kass server port.",
@@ -588,17 +589,17 @@ async fn start_server(
                     return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                 }
 
-                eprintln!("");
+                eprintln!();
                 eprintln!("=================================================================");
                 eprintln!("DEV MODE: No server found on port {}", SERVER_PORT);
-                eprintln!("");
+                eprintln!();
                 eprintln!("Start the Python server in a separate terminal:");
                 eprintln!("  bun run dev:server");
                 eprintln!("=================================================================");
-                eprintln!("");
+                eprintln!();
             }
 
-            return Err(format!("Failed to start server. In dev mode, run 'bun run dev:server' in a separate terminal."));
+            return Err("Failed to start server. In dev mode, run 'bun run dev:server' in a separate terminal.".to_string());
         }
     };
 
@@ -651,14 +652,14 @@ async fn start_server(
                     return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                 }
 
-                eprintln!("");
+                eprintln!();
                 eprintln!("=================================================================");
                 eprintln!("DEV MODE: Server binary failed to start");
-                eprintln!("");
+                eprintln!();
                 eprintln!("Start the Python server in a separate terminal:");
                 eprintln!("  bun run dev:server");
                 eprintln!("=================================================================");
-                eprintln!("");
+                eprintln!();
                 return Err("Dev mode: Start server manually with 'bun run dev:server'".to_string());
             }
 
@@ -791,14 +792,14 @@ async fn start_server(
                         return Ok(format!("http://127.0.0.1:{}", SERVER_PORT));
                     }
 
-                    eprintln!("");
+                    eprintln!();
                     eprintln!("=================================================================");
                     eprintln!("DEV MODE: No bundled server binary available");
-                    eprintln!("");
+                    eprintln!();
                     eprintln!("Start the Python server in a separate terminal:");
                     eprintln!("  bun run dev:server");
                     eprintln!("=================================================================");
-                    eprintln!("");
+                    eprintln!();
                     return Err(
                         "Dev mode: Start server manually with 'bun run dev:server'".to_string()
                     );
@@ -1147,8 +1148,8 @@ fn open_accessibility_settings(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
-    app.shell()
-        .open(url, None)
+    app.opener()
+        .open_url(url, None::<&str>)
         .map_err(|e| format!("Failed to open Accessibility settings: {e}"))?;
     Ok(())
 }
@@ -1166,8 +1167,8 @@ fn open_input_monitoring_settings(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
-    app.shell()
-        .open(url, None)
+    app.opener()
+        .open_url(url, None::<&str>)
         .map_err(|e| format!("Failed to open Input Monitoring settings: {e}"))?;
     Ok(())
 }
@@ -1229,7 +1230,14 @@ pub(crate) async fn paste_final_text_tracked(
     let bundle_id = focus.bundle_id.clone();
     let role = focus.role.clone();
     let inserted = tokio::task::spawn_blocking(move || {
-        run_insert_chain(pid, bundle_id.as_deref(), role.as_deref(), &text, prepared, track)
+        run_insert_chain(
+            pid,
+            bundle_id.as_deref(),
+            role.as_deref(),
+            &text,
+            prepared,
+            track,
+        )
     })
     .await
     .map_err(|e| {
@@ -1539,6 +1547,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::UpdaterState::default())
         .manage(ServerState {
@@ -1739,11 +1748,13 @@ mod chord_binding_tests {
         let push = keys(&["MetaRight", "AltGr"]);
         let toggle = keys(&["MetaRight", "AltGr", "Space"]);
         let command = keys(&["MetaRight", "ShiftRight"]);
-        let on = build_chord_bindings(&push, &toggle, &command, &keys(&["AltGr", "ShiftRight"])).unwrap();
+        let on = build_chord_bindings(&push, &toggle, &command, &keys(&["AltGr", "ShiftRight"]))
+            .unwrap();
         assert_eq!(on[&ChordAction::Speak].len(), 2);
         let off = build_chord_bindings(&push, &toggle, &command, &[]).unwrap();
         assert!(!off.contains_key(&ChordAction::Speak));
-        let error = build_chord_bindings(&push, &toggle, &command, &keys(&["NoSuchKey"])).unwrap_err();
+        let error =
+            build_chord_bindings(&push, &toggle, &command, &keys(&["NoSuchKey"])).unwrap_err();
         assert!(error.contains("read aloud"), "{error}");
     }
 }

@@ -66,7 +66,10 @@ fn start(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let event = read(&app, generation, focus).await;
         // Only the reading still in progress ends itself; a stopped one already hid the pill.
-        if is_current(generation) && SPEAKING.compare_exchange(take_id, 0, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+        if is_current(generation)
+            && SPEAKING
+                .compare_exchange(take_id, 0, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
         {
             emit(&app, take_id, event);
         }
@@ -99,7 +102,9 @@ async fn read(app: &AppHandle, generation: u64, focus: Option<FocusSnapshot>) ->
 
     let fetch = |sentence: String| {
         let (client, server_url) = (client.clone(), server_url.clone());
-        tauri::async_runtime::spawn(async move { http::speech(&client, &server_url, &sentence).await })
+        tauri::async_runtime::spawn(
+            async move { http::speech(&client, &server_url, &sentence).await },
+        )
     };
     let mut pieces = sentences.into_iter();
     let mut next = pieces.next().map(fetch);
@@ -241,7 +246,11 @@ mod platform {
 mod platform {
     use std::time::Duration;
 
-    pub fn play(_wav: &[u8], _keep_going: impl Fn() -> bool, _poll: Duration) -> Result<(), String> {
+    pub fn play(
+        _wav: &[u8],
+        _keep_going: impl Fn() -> bool,
+        _poll: Duration,
+    ) -> Result<(), String> {
         Err("Read Aloud plays on macOS only".into())
     }
 }
@@ -252,18 +261,28 @@ mod tests {
 
     #[test]
     fn a_selection_is_read_from_accessibility_without_copying() {
-        let read = decide(SelectionRead::Text("Hello there".into()), || panic!("must not copy"));
+        let read = decide(SelectionRead::Text("Hello there".into()), || {
+            panic!("must not copy")
+        });
         assert_eq!(read, Ok("Hello there".into()));
     }
 
     #[test]
     fn nothing_selected_says_to_select_text_first() {
-        assert_eq!(decide(SelectionRead::Empty, || panic!("must not copy")), Err(NO_SELECTION_MESSAGE));
         assert_eq!(
-            decide(SelectionRead::Text("  \n".into()), || panic!("must not copy")),
+            decide(SelectionRead::Empty, || panic!("must not copy")),
             Err(NO_SELECTION_MESSAGE)
         );
-        assert_eq!(decide(SelectionRead::Unreadable, || Ok(None)), Err(NO_SELECTION_MESSAGE));
+        assert_eq!(
+            decide(SelectionRead::Text("  \n".into()), || panic!(
+                "must not copy"
+            )),
+            Err(NO_SELECTION_MESSAGE)
+        );
+        assert_eq!(
+            decide(SelectionRead::Unreadable, || Ok(None)),
+            Err(NO_SELECTION_MESSAGE)
+        );
         assert_eq!(
             decide(SelectionRead::Unreadable, || Err("no clipboard".into())),
             Err(NO_SELECTION_MESSAGE)
@@ -273,7 +292,9 @@ mod tests {
     #[test]
     fn where_accessibility_cant_tell_the_selection_is_copied() {
         assert_eq!(
-            decide(SelectionRead::Unreadable, || Ok(Some("From the terminal".into()))),
+            decide(SelectionRead::Unreadable, || Ok(Some(
+                "From the terminal".into()
+            ))),
             Ok("From the terminal".into())
         );
     }

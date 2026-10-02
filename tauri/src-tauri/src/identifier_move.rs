@@ -15,7 +15,11 @@
 use std::path::Path;
 
 /// Earlier identifiers, newest first.
-const OLD_IDENTIFIERS: [&str; 3] = ["com.mrgnhnt.herga", "com.mrgnhnt.voicebox", "sh.voicebox.app"];
+const OLD_IDENTIFIERS: [&str; 3] = [
+    "com.mrgnhnt.herga",
+    "com.mrgnhnt.voicebox",
+    "sh.voicebox.app",
+];
 
 /// Files only this app writes to its data folder, never upstream Voicebox.
 const OWN_FILES: [&str; 4] = [
@@ -53,7 +57,8 @@ fn folder_to_move(support: &Path, new_identifier: &str) -> Option<&'static str> 
     }
     OLD_IDENTIFIERS.into_iter().find(|old| {
         let folder = support.join(old);
-        folder.is_dir() && (*old != "sh.voicebox.app" || OWN_FILES.iter().any(|f| folder.join(f).exists()))
+        folder.is_dir()
+            && (*old != "sh.voicebox.app" || OWN_FILES.iter().any(|f| folder.join(f).exists()))
     })
 }
 
@@ -69,7 +74,12 @@ fn move_folder(parent: &Path, old: &str, new: &str) -> bool {
             true
         }
         Err(e) => {
-            eprintln!("Couldn't move {} to {}: {}", old.display(), new.display(), e);
+            eprintln!(
+                "Couldn't move {} to {}: {}",
+                old.display(),
+                new.display(),
+                e
+            );
             false
         }
     }
@@ -93,7 +103,10 @@ mod tests {
         std::fs::write(parent.join("sh.voicebox.app/kass.db"), "data").unwrap();
 
         assert!(move_folder(&parent, "sh.voicebox.app", "com.example.new"));
-        assert_eq!(std::fs::read_to_string(parent.join("com.example.new/kass.db")).unwrap(), "data");
+        assert_eq!(
+            std::fs::read_to_string(parent.join("com.example.new/kass.db")).unwrap(),
+            "data"
+        );
         assert!(!parent.join("sh.voicebox.app").exists());
 
         std::fs::create_dir_all(parent.join("sh.voicebox.app")).unwrap();
@@ -110,7 +123,10 @@ mod tests {
         assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), None);
 
         std::fs::write(support.join("sh.voicebox.app/writing-style.json"), "{}").unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("sh.voicebox.app"));
+        assert_eq!(
+            folder_to_move(&support, "com.mrgnhnt.kass"),
+            Some("sh.voicebox.app")
+        );
         std::fs::remove_dir_all(&support).unwrap();
     }
 
@@ -120,10 +136,16 @@ mod tests {
         std::fs::create_dir_all(support.join("com.mrgnhnt.voicebox")).unwrap();
         std::fs::create_dir_all(support.join("sh.voicebox.app")).unwrap();
         std::fs::write(support.join("sh.voicebox.app/writing-style.json"), "{}").unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("com.mrgnhnt.voicebox"));
+        assert_eq!(
+            folder_to_move(&support, "com.mrgnhnt.kass"),
+            Some("com.mrgnhnt.voicebox")
+        );
 
         std::fs::create_dir_all(support.join("com.mrgnhnt.herga")).unwrap();
-        assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), Some("com.mrgnhnt.herga"));
+        assert_eq!(
+            folder_to_move(&support, "com.mrgnhnt.kass"),
+            Some("com.mrgnhnt.herga")
+        );
 
         std::fs::create_dir_all(support.join("com.mrgnhnt.kass")).unwrap();
         assert_eq!(folder_to_move(&support, "com.mrgnhnt.kass"), None);

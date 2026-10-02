@@ -12,7 +12,7 @@
 //!   3. Fan [`Effect`]s out into native dictation (microphone + streaming,
 //!      see `dictation/`) and dictate-window show.
 //!
-//! The [`Effect::RestartRecording`] signal is emitted when keytap fires
+//! The [`Effect::Restart`] signal is emitted when keytap fires
 //! `End(PTT)` and `Start(Toggle)` with the *same* [`Instant`] — which
 //! happens when the held set upgrades from a shorter chord to a longer
 //! superset in a single event (the classic PTT→hands-free transition).
@@ -86,12 +86,12 @@ impl ChordAction {
 /// translate these into UI / recorder calls.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Effect {
-    StartRecording(ChordAction),
-    StopRecording(ChordAction),
+    Start(ChordAction),
+    Stop(ChordAction),
     /// Emitted when a push-to-talk chord is "upgraded" into the toggle
     /// chord mid-hold — hosts may want to discard the captured audio and
     /// restart so the transition moment isn't in the recording.
-    RestartRecording(ChordAction),
+    Restart(ChordAction),
 }
 
 /// Chord key sets from capture settings. Both actions use the same
@@ -329,9 +329,9 @@ struct ToggleLatch {
 impl ToggleLatch {
     fn observe(&mut self, effect: Effect) {
         match effect {
-            Effect::StartRecording(ChordAction::ToggleToTalk)
-            | Effect::RestartRecording(ChordAction::ToggleToTalk) => self.latched = true,
-            Effect::StopRecording(ChordAction::ToggleToTalk) => self.latched = false,
+            Effect::Start(ChordAction::ToggleToTalk)
+            | Effect::Restart(ChordAction::ToggleToTalk) => self.latched = true,
+            Effect::Stop(ChordAction::ToggleToTalk) => self.latched = false,
             _ => {}
         }
     }
@@ -401,7 +401,7 @@ fn dispatcher_loop(
 
 /// Turn a single [`ChordEvent`] into zero or one [`Effect`]s, peeking at
 /// the matcher once for a same-Instant follow-up so upgrade transitions
-/// coalesce into [`Effect::RestartRecording`] instead of a Stop+Start
+/// coalesce into [`Effect::Restart`] instead of a Stop+Start
 /// pair.
 fn process_event(
     app: &AppHandle,
@@ -415,7 +415,7 @@ fn process_event(
     };
     match event {
         ChordEvent::Start { id, time } => {
-            apply_effect(Effect::StartRecording(id), time);
+            apply_effect(Effect::Start(id), time);
         }
         ChordEvent::End {
             id: end_id,
@@ -433,10 +433,10 @@ fn process_event(
                     time: start_time,
                 }) if start_time == end_time => {
                     emit_chord(app, "chord:up", end_id);
-                    apply_effect(Effect::RestartRecording(start_id), start_time);
+                    apply_effect(Effect::Restart(start_id), start_time);
                 }
                 Ok(other) => {
-                    apply_effect(Effect::StopRecording(end_id), end_time);
+                    apply_effect(Effect::Stop(end_id), end_time);
                     // The peeked event wasn't a transition partner;
                     // process it in its own right. Recursion depth is
                     // bounded by the number of back-to-back chord
@@ -444,7 +444,7 @@ fn process_event(
                     process_event(app, matcher, latch, other);
                 }
                 Err(_) => {
-                    apply_effect(Effect::StopRecording(end_id), end_time);
+                    apply_effect(Effect::Stop(end_id), end_time);
                 }
             }
         }
@@ -457,7 +457,7 @@ fn process_event(
 
 fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
     match effect {
-        Effect::StartRecording(action) => {
+        Effect::Start(action) => {
             match app.state::<ChordMode>().on_start() {
                 OnStart::Record if action == ChordAction::Speak => crate::read_aloud::toggle(app),
                 OnStart::Record => start_take(app, action, time),
@@ -466,7 +466,7 @@ fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
             }
             emit_chord(app, "chord:down", action);
         }
-        Effect::StopRecording(action) => {
+        Effect::Stop(action) => {
             // Releasing Read Aloud's chord leaves the reading (and any
             // dictation) going; the next press stops it.
             if action != ChordAction::Speak {
@@ -475,7 +475,7 @@ fn apply_effect(app: &AppHandle, effect: Effect, time: Instant) {
             }
             emit_chord(app, "chord:up", action);
         }
-        Effect::RestartRecording(action) => {
+        Effect::Restart(action) => {
             // PTT upgraded to hands-free mid-hold: keep the same take
             // recording (it was never interrupted) until the toggle ends it.
             emit_chord(app, "chord:down", action);
@@ -551,7 +551,10 @@ mod tests {
         };
         let bindings: Bindings = [
             (ChordAction::PushToTalk, chord(&["MetaRight", "AltGr"])),
-            (ChordAction::ToggleToTalk, chord(&["MetaRight", "AltGr", "Space"])),
+            (
+                ChordAction::ToggleToTalk,
+                chord(&["MetaRight", "AltGr", "Space"]),
+            ),
             (ChordAction::Command, chord(&["MetaRight", "ShiftRight"])),
             (ChordAction::Speak, chord(&["AltGr", "ShiftRight"])),
         ]
@@ -572,14 +575,14 @@ mod tests {
     fn a_push_to_talk_cancel_keeps_the_matcher() {
         // Releasing the held chord later stops nothing: the take is gone.
         let mut latch = ToggleLatch::default();
-        latch.observe(Effect::StartRecording(ChordAction::PushToTalk));
+        latch.observe(Effect::Start(ChordAction::PushToTalk));
         assert!(!latch.needs_fresh_matcher());
     }
 
     #[test]
     fn a_latched_toggle_cancel_gets_a_fresh_matcher() {
         let mut latch = ToggleLatch::default();
-        latch.observe(Effect::StartRecording(ChordAction::ToggleToTalk));
+        latch.observe(Effect::Start(ChordAction::ToggleToTalk));
         assert!(latch.needs_fresh_matcher());
         // The fresh matcher starts unlatched.
         assert!(!latch.needs_fresh_matcher());
@@ -588,8 +591,8 @@ mod tests {
     #[test]
     fn a_push_to_talk_upgraded_to_hands_free_is_latched() {
         let mut latch = ToggleLatch::default();
-        latch.observe(Effect::StartRecording(ChordAction::PushToTalk));
-        latch.observe(Effect::RestartRecording(ChordAction::ToggleToTalk));
+        latch.observe(Effect::Start(ChordAction::PushToTalk));
+        latch.observe(Effect::Restart(ChordAction::ToggleToTalk));
         assert!(latch.needs_fresh_matcher());
     }
 
@@ -597,8 +600,8 @@ mod tests {
     fn a_toggle_already_pressed_off_needs_no_reset() {
         // Escape while its take is still being transcribed.
         let mut latch = ToggleLatch::default();
-        latch.observe(Effect::StartRecording(ChordAction::ToggleToTalk));
-        latch.observe(Effect::StopRecording(ChordAction::ToggleToTalk));
+        latch.observe(Effect::Start(ChordAction::ToggleToTalk));
+        latch.observe(Effect::Stop(ChordAction::ToggleToTalk));
         assert!(!latch.needs_fresh_matcher());
     }
 }

@@ -60,10 +60,16 @@ mod tests {
             route("kass://captures?capture=abc").as_deref(),
             Some("/captures?capture=abc")
         );
-        assert_eq!(route("kass:///settings/dictation").as_deref(), Some("/settings/dictation"));
+        assert_eq!(
+            route("kass:///settings/dictation").as_deref(),
+            Some("/settings/dictation")
+        );
         assert_eq!(route("kass://").as_deref(), Some("/"));
         assert_eq!(route("https://example.com"), None);
         assert_eq!(route("kassx://captures"), None);
-        assert_eq!(route("herga://captures?capture=abc").as_deref(), Some("/captures?capture=abc"));
+        assert_eq!(
+            route("herga://captures?capture=abc").as_deref(),
+            Some("/captures?capture=abc")
+        );
     }
 }

@@ -29,7 +29,8 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATUS_EVENT: &str = "update:status";
 /// Tells every window the channel changed, which turns beta features on or off.
 const CHANNEL_EVENT: &str = "update:channel";
-const BETA_ENDPOINT: &str = "https://github.com/mrgnhnt96/kass/releases/download/channels/beta.json";
+const BETA_ENDPOINT: &str =
+    "https://github.com/mrgnhnt96/kass/releases/download/channels/beta.json";
 /// Present (containing `beta`) while this copy is on the beta channel. It
 /// sits in the app data dir, where the server reads it too (backend/beta.py).
 const CHANNEL_FILE: &str = "update-channel";
@@ -50,9 +51,13 @@ pub enum Channel {
 pub enum UpdateStatus {
     /// This is the latest version, or nothing has been found yet.
     Current,
-    Downloading { version: String },
+    Downloading {
+        version: String,
+    },
     /// Downloaded and verified; installs on restart or quit.
-    Ready { version: String },
+    Ready {
+        version: String,
+    },
 }
 
 struct Pending {
@@ -126,7 +131,12 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
             if let Err(error) = check_and_download(&app).await {
                 eprintln!("Updater: {error}");
                 // What was downloaded before stays ready; otherwise try again later.
-                let ready = app.state::<UpdaterState>().pending.lock().unwrap().is_some();
+                let ready = app
+                    .state::<UpdaterState>()
+                    .pending
+                    .lock()
+                    .unwrap()
+                    .is_some();
                 if !ready {
                     set_status(&app, UpdateStatus::Current);
                 }
@@ -157,11 +167,19 @@ async fn check_and_download<R: Runtime>(app: &AppHandle<R>) -> Result<(), String
     {
         let pending = app.state::<UpdaterState>();
         let pending = pending.pending.lock().unwrap();
-        if pending.as_ref().is_some_and(|p| p.update.version == version) {
+        if pending
+            .as_ref()
+            .is_some_and(|p| p.update.version == version)
+        {
             return Ok(());
         }
     }
-    set_status(app, UpdateStatus::Downloading { version: version.clone() });
+    set_status(
+        app,
+        UpdateStatus::Downloading {
+            version: version.clone(),
+        },
+    );
     // Verified against the public key before it's returned.
     let bytes = update
         .download(|_, _| {}, || {})
@@ -202,7 +220,10 @@ pub fn install_pending<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
 fn discard_pending_beta<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<UpdaterState>();
     let mut pending = state.pending.lock().unwrap();
-    if pending.as_ref().is_some_and(|p| p.update.version.contains('-')) {
+    if pending
+        .as_ref()
+        .is_some_and(|p| p.update.version.contains('-'))
+    {
         if let Some(p) = pending.take() {
             let _ = std::fs::remove_file(&p.path);
         }

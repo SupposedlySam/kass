@@ -51,6 +51,10 @@ pub struct LastTakeText {
     pub own_chars: usize,
 }
 
+/// Called when the user names a writing style, with the style before (if
+/// any) and the one asked for. Returns whether it scheduled a style cue.
+type StyleCallback = Box<dyn Fn(Option<String>, String) -> bool + Send>;
+
 pub struct StreamClient {
     sample_rate: Option<u32>,
     opened: bool,
@@ -66,7 +70,7 @@ pub struct StreamClient {
     finish_sent: bool,
     outcome: Option<Outcome>,
     on_provisional: Option<Box<dyn Fn(String) + Send>>,
-    on_style: Option<Box<dyn Fn(Option<String>, String) -> bool + Send>>,
+    on_style: Option<StyleCallback>,
     style_cue_delay_ms: u32,
     style_cue_ms: u32,
     target_app: Option<Box<dyn Fn() -> Option<TargetApp> + Send>>,

@@ -1409,9 +1409,9 @@ mod tests {
     #[test]
     #[ignore = "posts real keyboard events to the frontmost app"]
     fn manual_types_into_frontmost_app() {
-        /// The live target, but with the input source assumed ASCII: the
-        /// cache behind it is filled on the app's main thread, which a test
-        /// does not run. Use a plain keyboard layout.
+        // The live target, but with the input source assumed ASCII: the
+        // cache behind it is filled on the app's main thread, which a test
+        // does not run. Use a plain keyboard layout.
         std::thread::sleep(Duration::from_secs(3));
         let pid = crate::focus_capture::frontmost_pid().expect("frontmost app");
         let r = Request {

@@ -81,7 +81,8 @@ pub fn copy_into_applications() -> Result<PathBuf, String> {
         return Err("Kass is already in Applications".into());
     }
     if dest.exists() {
-        trash(&dest).map_err(|e| format!("Couldn't move the Kass in Applications to the Trash: {e}"))?;
+        trash(&dest)
+            .map_err(|e| format!("Couldn't move the Kass in Applications to the Trash: {e}"))?;
     }
     // ditto keeps the code signature and extended attributes intact.
     let status = Command::new("/usr/bin/ditto")
@@ -90,11 +91,16 @@ pub fn copy_into_applications() -> Result<PathBuf, String> {
         .status()
         .map_err(|e| format!("Couldn't copy Kass into Applications: {e}"))?;
     if !status.success() {
-        return Err(format!("Couldn't copy Kass into Applications (ditto {status})"));
+        return Err(format!(
+            "Couldn't copy Kass into Applications (ditto {status})"
+        ));
     }
     // A copy on a disk image or in a read-only location stays where it is.
     if let Err(e) = trash(&source) {
-        eprintln!("[app-location] left the old copy at {}: {e}", source.display());
+        eprintln!(
+            "[app-location] left the old copy at {}: {e}",
+            source.display()
+        );
     }
     Ok(dest)
 }
@@ -206,12 +212,18 @@ mod tests {
     fn only_a_bundle_in_applications_counts() {
         let installed = |p: &str| is_installed_executable(Path::new(p));
         assert!(installed("/Applications/Kass.app/Contents/MacOS/kass"));
-        assert!(!installed("/Users/me/Applications/Kass.app/Contents/MacOS/kass"));
-        assert!(!installed("/Users/me/Downloads/Kass.app/Contents/MacOS/kass"));
+        assert!(!installed(
+            "/Users/me/Applications/Kass.app/Contents/MacOS/kass"
+        ));
+        assert!(!installed(
+            "/Users/me/Downloads/Kass.app/Contents/MacOS/kass"
+        ));
         assert!(!installed(
             "/Users/me/kass/tauri/src-tauri/target/release/bundle/macos/Kass.app/Contents/MacOS/kass"
         ));
-        assert!(!installed("/Users/me/kass/tauri/src-tauri/target/debug/kass"));
+        assert!(!installed(
+            "/Users/me/kass/tauri/src-tauri/target/debug/kass"
+        ));
         assert!(!installed("/Applications/Kass.app/Contents/Resources/kass"));
         assert!(!installed("/Applications/Kass/Contents/MacOS/kass"));
         assert!(!installed("/kass"));
@@ -220,11 +232,15 @@ mod tests {
     #[test]
     fn a_dev_binary_has_no_bundle() {
         assert_eq!(
-            bundle_of(Path::new("/Users/me/kass/tauri/src-tauri/target/debug/kass")),
+            bundle_of(Path::new(
+                "/Users/me/kass/tauri/src-tauri/target/debug/kass"
+            )),
             None
         );
         assert_eq!(
-            bundle_of(Path::new("/Users/me/Downloads/Kass.app/Contents/MacOS/kass")),
+            bundle_of(Path::new(
+                "/Users/me/Downloads/Kass.app/Contents/MacOS/kass"
+            )),
             Some(Path::new("/Users/me/Downloads/Kass.app"))
         );
     }
@@ -245,7 +261,10 @@ mod tests {
         assert_eq!(old_bundle(&old, None, true), OldBundle::Leave);
 
         std::fs::write(old.join("Contents/MacOS/herga"), "").unwrap();
-        assert_eq!(old_bundle(&old, Some(&dir.join("Kass.app")), true), OldBundle::Retire);
+        assert_eq!(
+            old_bundle(&old, Some(&dir.join("Kass.app")), true),
+            OldBundle::Retire
+        );
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
