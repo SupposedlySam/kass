@@ -190,6 +190,51 @@ def build_server():
         ]
     )
 
+    # Read Aloud (docs/plans/READ_ALOUD.md): mlx-audio's Kokoro and its English
+    # phonemizer. misaki loads spaCy's en_core_web_sm and eSpeak NG (a dylib
+    # plus its data folder), and num2words imports its languages by name.
+    # misaki checks that en_core_web_sm is installed through package metadata,
+    # and spaCy finds its functions through entry points, so their metadata
+    # ships too; without it the bundled server would try to download the model.
+    args.extend(["--hidden-import", "backend.backends.kokoro_backend"])
+    for package in (
+        "misaki",
+        "spacy",
+        "spacy_legacy",
+        "spacy_loggers",
+        "en_core_web_sm",
+        "espeakng_loader",
+        "phonemizer",
+        "num2words",
+    ):
+        args.extend(["--collect-all", package])
+    for distribution in (
+        "spacy",
+        "spacy-legacy",
+        "spacy-loggers",
+        "thinc",
+        "en_core_web_sm",
+        "misaki",
+        "phonemizer-fork",
+    ):
+        args.extend(["--copy-metadata", distribution])
+    # phonemizer imports segments, then csvw, which reads language_tags' JSON,
+    # Babel's locales and jsonschema's schemas as it imports, and finds
+    # rdflib's plugins through entry points.
+    for package in (
+        "language_tags",
+        "babel",
+        "pytz",
+        "dateutil",
+        "jsonschema_specifications",
+        "rdflib",
+        "csvw",
+        "segments",
+    ):
+        args.extend(["--collect-data", package])
+    for distribution in ("csvw", "segments", "rdflib", "jsonschema", "language-tags"):
+        args.extend(["--copy-metadata", distribution])
+
     dist_dir = str(backend_dir / "dist")
     build_dir = str(backend_dir / "build")
 
