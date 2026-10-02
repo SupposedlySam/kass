@@ -30,7 +30,7 @@ The [Command Mode](/docs/command-mode/) chord, and your saved transforms.
 
 ## Read Aloud
 
-The [Read Aloud](/docs/read-aloud/) keys, the voice model, the voice and its speed.
+The [Read Aloud](/docs/read-aloud/) keys, the voice model, the voice and its speed, and **Read naturally**.
 
 ## Transcription & refinement
 

@@ -301,3 +301,5 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "capture_settings", "speak_voice VARCHAR NOT NULL DEFAULT 'af_heart'", "speak_voice")
     if "speak_speed" not in columns:
         _add_column(engine, "capture_settings", "speak_speed FLOAT NOT NULL DEFAULT 1.0", "speak_speed")
+    if "speak_naturally" not in columns:
+        _add_column(engine, "capture_settings", "speak_naturally BOOLEAN NOT NULL DEFAULT 1", "speak_naturally")

@@ -472,6 +472,8 @@ export interface CaptureSettings {
   speak_voice: string;
   /** Read Aloud's speed, 0.5 to 2. */
   speak_speed: number;
+  /** Say lists, symbols and abbreviations the way a person would, not as written. */
+  speak_naturally: boolean;
 }
 
 export interface RetentionStatus {

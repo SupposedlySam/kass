@@ -75,6 +75,8 @@ class CaptureSettings(Base):
     chord_speak_keys = Column(JSON, nullable=False, default=default_speak_chord)
     speak_voice = Column(String, nullable=False, default="af_heart")
     speak_speed = Column(Float, nullable=False, default=1.0)
+    # Say lists, symbols and abbreviations the way a person would (services/speakable.py).
+    speak_naturally = Column(Boolean, nullable=False, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
