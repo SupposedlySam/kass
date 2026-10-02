@@ -30,6 +30,12 @@ from backend.services.spoken_cleanup import apply_spoken_cleanup
         ),
         ("and so I was going to ask, I was going to see if it works", "and so I was going to see if it works"),
         ("we should look at the, we should fix the login page", "we should fix the login page"),
+        # Reworded restart
+        (
+            "is there anything that we can do, that we need to do in this session?",
+            "is there anything that we need to do in this session?",
+        ),
+        ("we should ask them, we should probably ask them first", "we should probably ask them first"),
         # Restart with no pause
         (
             "let's get started working on the tasks for tasks that we just discovered",
@@ -117,6 +123,8 @@ def test_rule_cleans_its_shape(raw, expected):
         "we need to test, we need to ship it today",
         "I told you to ask, I told her to wait",
         "I want to say, I want a word with you, not a lecture",
+        "what we built, what we shipped last week",
+        "as much as we can, as much as we should",
         # Repeated-noun idioms
         "we translated it word for word today",
         "I had the one on one that we planned",

@@ -118,6 +118,34 @@ def _repeated_restart(text: str, tokens: list[re.Match]) -> str | None:
     return None
 
 
+def _reworded_restart(text: str, tokens: list[re.Match]) -> str | None:
+    """Drop a phrase said again with new middle words: "that we can do, that we need to do it" -> "that we need to do it".
+
+    The second attempt opens with the same two words, ends the phrase on the same
+    word and carries on past it, so it replaces the first rather than listing a
+    second thing ("what we built, what we shipped").
+    """
+    words = [_norm(t.group()) for t in tokens]
+    for i in range(len(tokens) - 1):
+        if _gap(text, tokens, i) != ",":
+            continue
+        start = _clause_start(text, tokens, i)
+        end = _clause_end(text, tokens, i + 1)
+        after = words[i + 1 : end + 1]
+        for j in range(i - 2, max(start, i - 6) - 1, -1):
+            fragment = words[j : i + 1]
+            if fragment[:2] != after[:2] or fragment == after[: len(fragment)]:
+                continue
+            last = next(
+                (m for m in range(2, min(len(after) - 1, len(fragment) + 2)) if after[m] == fragment[-1]),
+                None,
+            )
+            if last is not None:
+                return _drop(text, tokens[j].start(), tokens[i + 1].start())
+            break
+    return None
+
+
 _DETERMINERS = _word_set("the a an this these those my your our their his her its some any")
 _PREPOSITIONS = _word_set("for to of in on at with from by about into")
 
@@ -330,6 +358,7 @@ def apply_spoken_cleanup(text: str) -> str:
         cleaned = (
             _immediate_repeat(text, tokens)
             or _repeated_restart(text, tokens)
+            or _reworded_restart(text, tokens)
             or _unpaused_restart(text, tokens)
             or _stuttered_clause(text, tokens)
             or _changed_answer(text)
