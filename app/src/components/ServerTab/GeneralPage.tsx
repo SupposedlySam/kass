@@ -14,6 +14,7 @@ import { HistoryRetentionRow } from './HistoryRetentionRow';
 import { LaunchAtLoginRow } from './LaunchAtLoginRow';
 import { RecordingRetentionRow } from './RecordingRetentionRow';
 import { SettingRow, SettingSection } from './SettingRow';
+import { ShareUsageRow } from './ShareUsageRow';
 import { ThemeSelect } from './ThemeSelect';
 import { VersionRow } from './VersionRow';
 
@@ -86,6 +87,10 @@ export function GeneralPage() {
         <HistoryRetentionRow />
         <RecordingRetentionRow />
         <CapturesFolderRow />
+      </SettingSection>
+
+      <SettingSection title={t('settings.general.sectionPrivacy')}>
+        <ShareUsageRow />
       </SettingSection>
     </>
   );

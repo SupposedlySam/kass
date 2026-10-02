@@ -589,6 +589,7 @@
     },
     "general": {
       "sectionApp": "App",
+      "sectionPrivacy": "Privacy",
       "version": {
         "title": "Version",
         "current": "Kass {{version}}",
@@ -605,7 +606,7 @@
       },
       "server": {
         "title": "Local server",
-        "description": "Runs Whisper and Qwen3 on this Mac. Nothing leaves your machine."
+        "description": "Runs Whisper and Qwen3 on this Mac. Your voice and words never leave it."
       },
       "connection": {
         "connecting": "Connecting",
@@ -626,6 +627,10 @@
         "requiresApproval": "Turned off in System Settings › Login Items.",
         "openLoginItems": "Open Login Items",
         "failed": "Couldn't change launch at login"
+      },
+      "shareUsage": {
+        "title": "Share anonymous usage stats",
+        "description": "Once a day, send counts like dictations, words, time saved and speed, with your Mac's chip and which models you use. Never your words, audio or apps."
       }
     },
     "captures": {
@@ -1671,7 +1676,11 @@
       "speak": "Read the text you’ve selected aloud.",
       "change": "Change any of these in Settings.",
       "start": "Start using Kass",
-      "showMe": "Show me now"
+      "showMe": "Show me now",
+      "share": {
+        "title": "Share anonymous usage stats",
+        "body": "Once a day: how many dictations, words, time saved and how fast they landed, plus your Mac's chip and which models you use. Never your words, your audio or the apps you dictate into. Change it any time in Settings › General."
+      }
     }
   }
 }

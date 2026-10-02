@@ -215,6 +215,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
         editable: editable.clone(),
         capture_id: Arc::new(Mutex::new(None)),
         written,
+        last_state: Arc::new(Mutex::new(None)),
     };
     env.emit(PillEvent::Preparing);
 
@@ -356,6 +357,7 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             "[dictation] take {take_id}: release→delivered {}",
             since_release(&released_for_task)
         );
+        report_take(&env, released_for_task.get().map(Instant::elapsed));
         recording.store(false, Ordering::Relaxed);
         // Settled: Escape has nothing left to cancel here.
         if let Ok(mut takes) = env.app.state::<DictationState>().active.lock() {
@@ -652,6 +654,36 @@ impl ActiveTake {
     }
 }
 
+/// Tell the server how the take ended, for usage reports. A take that
+/// finished without saving anything, like silence, isn't counted.
+fn report_take(env: &AppEnv, since_release: Option<Duration>) {
+    let last = env.last_state.lock().ok().and_then(|l| l.clone());
+    let Some(outcome) = take::report_outcome(last.as_ref()) else {
+        return;
+    };
+    let saved = env
+        .capture_id
+        .lock()
+        .map(|id| id.is_some())
+        .unwrap_or(false);
+    if outcome == "delivered" && !saved {
+        return;
+    }
+    let mode = match env.mode {
+        TakeMode::Dictation => "dictation",
+        TakeMode::Command => "command",
+    };
+    let latency_ms = (outcome == "delivered")
+        .then_some(since_release)
+        .flatten()
+        .map(|d| d.as_millis() as u64);
+    let http = env.http.clone();
+    let server_url = env.server_url.clone();
+    tauri::async_runtime::spawn(async move {
+        http::report_take(&http, &server_url, mode, outcome, latency_ms).await;
+    });
+}
+
 /// Send a take's pill state to every window: the HUD draws it, and the main
 /// window's Dictate button follows it.
 fn send_state(app: &AppHandle, take_id: u64, event: &PillEvent) {
@@ -700,6 +732,8 @@ struct AppEnv {
     capture_id: Arc<Mutex<Option<String>>>,
     /// The live text as it ended, shared with [`AxLive`].
     written: Arc<Mutex<Option<crate::text_insert::Owned>>>,
+    /// The last Done or Error shown, for the usage report.
+    last_state: Arc<Mutex<Option<PillEvent>>>,
 }
 
 impl AppEnv {
@@ -870,6 +904,11 @@ impl TakeEnv for AppEnv {
         }
         if let Some(cue) = event.cue() {
             crate::sound_cues::play(cue);
+        }
+        if matches!(event, PillEvent::Done | PillEvent::Error { .. }) {
+            if let Ok(mut last) = self.last_state.lock() {
+                *last = Some(event.clone());
+            }
         }
         send_state(&self.app, self.take_id, &event);
     }

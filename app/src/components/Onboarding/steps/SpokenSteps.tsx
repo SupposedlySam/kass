@@ -503,11 +503,47 @@ export function RewriteStep({
   );
 }
 
+/**
+ * Anonymous usage counts, on unless switched off here or in Settings ›
+ * General (backend/services/usage_report.py).
+ */
+function ShareUsage({ share, onChange }: { share: boolean; onChange: (share: boolean) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex max-w-[560px] items-start gap-3 rounded-xl border border-white/25 px-4 py-3">
+      <button
+        type="button"
+        role="switch"
+        id="shareUsage"
+        aria-checked={share}
+        onClick={() => onChange(!share)}
+        className={cn(
+          'relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-white transition-colors',
+          share ? 'bg-white' : 'bg-transparent',
+        )}
+      >
+        <span
+          className={cn(
+            'block h-3.5 w-3.5 rounded-full transition-transform',
+            share ? 'translate-x-[17px] bg-[var(--poster-bg)]' : 'translate-x-[2px] bg-white',
+          )}
+        />
+      </button>
+      <label htmlFor="shareUsage" className="flex cursor-pointer flex-col gap-0.5">
+        <span className="font-medium">{t('onboarding.done.share.title')}</span>
+        <span className="text-xs opacity-75">{t('onboarding.done.share.body')}</span>
+      </label>
+    </div>
+  );
+}
+
 export function DoneStep({
   settings,
+  onShareUsage,
   onFinish,
 }: {
   settings: CaptureSettings | undefined;
+  onShareUsage: (share: boolean) => void;
   onFinish: (show: string | null) => void;
 }) {
   const { t } = useTranslation();
@@ -535,6 +571,7 @@ export function DoneStep({
         ))}
         <span className="pt-1.5 text-xs opacity-75">{t('onboarding.done.change')}</span>
       </div>
+      <ShareUsage share={settings?.share_usage ?? true} onChange={onShareUsage} />
       <Actions>
         <PosterButton onClick={() => onFinish(null)} autoFocus>
           {t('onboarding.done.start')}

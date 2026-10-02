@@ -75,6 +75,11 @@ class CaptureSettings(Base):
     chord_speak_keys = Column(JSON, nullable=False, default=default_speak_chord)
     speak_voice = Column(String, nullable=False, default="af_heart")
     speak_speed = Column(Float, nullable=False, default=1.0)
+    # Usage reports (services/usage_report.py): whether to send them, the
+    # random id they're sent under, and the last local day sent (ISO date).
+    share_usage = Column(Boolean, nullable=False, default=True)
+    usage_device_id = Column(String, nullable=True)
+    usage_sent_through = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -213,6 +218,22 @@ class RetiredCapture(Base):
     raw_words = Column(Integer, nullable=False, default=0)
     duration_ms = Column(Integer, nullable=True)
     fixed = Column(Boolean, nullable=False, default=False)
+
+
+class TakeReport(Base):
+    """How one take ended, from the app, for usage reports' speed and failure counts.
+
+    Numbers only. Rows go once their day has been reported, or is too old to report.
+    """
+
+    __tablename__ = "take_reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
+    mode = Column(String, nullable=False)  # dictation | command
+    outcome = Column(String, nullable=False)  # delivered | failed
+    # Key release to the text being in place, for delivered takes.
+    latency_ms = Column(Integer, nullable=True)
 
 
 class KnownName(Base):

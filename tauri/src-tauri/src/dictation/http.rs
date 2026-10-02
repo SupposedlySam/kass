@@ -170,6 +170,22 @@ pub async fn pause_learning(http: &reqwest::Client, server_url: &str) {
         .await;
 }
 
+/// `POST /usage/takes`: how a take ended, for usage reports.
+pub async fn report_take(
+    http: &reqwest::Client,
+    server_url: &str,
+    mode: &str,
+    outcome: &str,
+    latency_ms: Option<u64>,
+) {
+    let _ = http
+        .post(format!("{}/usage/takes", base(server_url)))
+        .json(&serde_json::json!({ "mode": mode, "outcome": outcome, "latency_ms": latency_ms }))
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await;
+}
+
 /// `POST /speech/sentences`: the pieces Read Aloud reads `text` in.
 pub async fn speech_sentences(
     http: &reqwest::Client,

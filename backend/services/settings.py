@@ -7,6 +7,7 @@ the row with defaults and ``update_capture_settings`` accepts a partial
 payload.
 """
 
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -71,6 +72,9 @@ def update_capture_settings(db: Session, patch: dict[str, Any]) -> DBCaptureSett
         # Choosing a window, in Settings or when asked, lets the sweep delete.
         patch = {**patch, "history_retention_confirmed": True}
     row = _get_or_create_capture_row(db)
+    if patch.get("share_usage") and not row.share_usage:
+        # Turned back on: the days it was off are never sent (usage_report.py).
+        patch = {**patch, "usage_sent_through": (date.today() - timedelta(days=1)).isoformat()}
     _apply_patch(row, patch)
     db.commit()
     db.refresh(row)

@@ -350,6 +350,18 @@ def _split(slots: list[_Slot], recordings: list[_Recording], window: _Window) ->
     return window
 
 
+def first_day(db: Session) -> date | None:
+    """The local day of the first dictation still counted, if any."""
+    return _first_day(db)
+
+
+def daily_totals(db: Session, start: date, end: date) -> dict[date, UsageTotals]:
+    """Every app's totals for each local day from ``start`` to ``end`` that has dictation."""
+    slots, recordings = _load(db, start, end)
+    days = sorted({s.day for s in slots})
+    return {day: _totals(_split(slots, recordings, _Window(day, day)), ALL_APPS) for day in days}
+
+
 def usage_stats(
     db: Session,
     period: Period,
