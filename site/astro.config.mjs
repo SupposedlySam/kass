@@ -34,6 +34,7 @@ export default defineConfig({
             { label: 'Writing styles', slug: 'docs/writing-styles' },
             { label: 'Dictionary', slug: 'docs/dictionary' },
             { label: 'Command Mode', slug: 'docs/command-mode' },
+            { label: 'Read Aloud', slug: 'docs/read-aloud' },
             { label: 'Captures and corrections', slug: 'docs/captures' },
           ],
         },

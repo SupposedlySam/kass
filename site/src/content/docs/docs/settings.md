@@ -28,6 +28,10 @@ Open Settings from the sidebar, or search for any setting from the command palet
 
 The [Command Mode](/docs/command-mode/) chord, and your saved transforms.
 
+## Read Aloud
+
+The [Read Aloud](/docs/read-aloud/) keys, the voice model, the voice and its speed.
+
 ## Transcription & refinement
 
 - The [Whisper model](/docs/models/#speech-whisper) and language

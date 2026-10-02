@@ -2,6 +2,12 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### New
+
+- **Hear what you select.** Select text in any app and press <kbd>right ⌥</kbd> + <kbd>right ⇧</kbd>: Kass reads it to you in a natural voice, on your Mac. Press the keys again, press Escape, or click the pill to stop. Pick from 28 English voices and a speed in **Settings › Read Aloud**, which also downloads the voice model (Kokoro, about 345 MB) the first time.
+
 ## 0.7.2 — October 1, 2026
 
 ### New

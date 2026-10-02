@@ -30,6 +30,7 @@ Hold the chord in any app and talk the way you think. Whisper transcribes while 
 - **Writing styles.** Each app gets its own style that learns how you write.
 - **Dictionary.** Names and jargon, spelled the way you want.
 - **Command Mode.** Select text anywhere and say how to rewrite it.
+- **Read Aloud.** Select text anywhere and hear it in a natural voice.
 - **Correction learning.** Fix a result once and Kass learns from it.
 - **Captures.** Every take is kept with its audio, so you can replay, re-transcribe or fix it.
 - **Private.** No account, no server, no analytics. Audio and models stay on your Mac.
