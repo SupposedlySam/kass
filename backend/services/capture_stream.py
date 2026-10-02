@@ -55,6 +55,7 @@ import wave
 import numpy as np
 
 from .. import beta, config, models
+from ..utils import memory
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
 from . import dictionary as dictionaries, voice_edits
@@ -291,6 +292,7 @@ class StreamingCapture:
         self.backlogged = False
         self.peak_backlog = 0.0
         self.started_at = time.monotonic()
+        self.paging_at_start = memory.counters()
         self.finished_at = None
         # Model time spent after release, the part of the wait we control.
         self.after_release = {"recognize": 0.0, "refine": 0.0}
@@ -1097,7 +1099,8 @@ class StreamingCapture:
             f"after_release_refine={self.after_release['refine']:.2f}s "
             f"after_release_tail_words={self.release_tail_words} "
             f"peak_backlog={self.peak_backlog:.2f}s degraded={self.degraded_reason or 'no'} "
-            f"refinement_error={'yes' if self.refinement_error else 'no'}"
+            f"refinement_error={'yes' if self.refinement_error else 'no'} "
+            f"{memory.summary(self.paging_at_start)}"
         )
 
     def stored_audio(self) -> str:

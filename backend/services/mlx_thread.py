@@ -14,15 +14,53 @@ or a different-size load from another request.
 """
 
 import asyncio
+import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
+from ..utils import memory
+
+logger = logging.getLogger(__name__)
+
 _mlx_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-worker")
+# Jobs run one at a time, so a slow one holds up everything queued behind it.
+# Log any job that waited or ran this long, and what it waited behind.
+SLOW_JOB_SECONDS = 1.0
+_current_job = None
+
+
+def _job_name(func) -> str:
+    return getattr(func, "__qualname__", repr(func)).replace("<locals>.", "")
 
 
 def run_on_mlx_thread(func, *args):
     """Run ``func(*args)`` on the single dedicated MLX worker thread."""
     loop = asyncio.get_running_loop()
-    return loop.run_in_executor(_mlx_executor, func, *args)
+    name = _job_name(func)
+    queued = time.monotonic()
+    behind = _current_job
+
+    def timed():
+        global _current_job
+        started = time.monotonic()
+        _current_job = name
+        try:
+            return func(*args)
+        finally:
+            _current_job = None
+            waited = started - queued
+            ran = time.monotonic() - started
+            if waited >= SLOW_JOB_SECONDS or ran >= SLOW_JOB_SECONDS:
+                logger.warning(
+                    "Slow MLX job %s: waited=%.2fs behind=%s ran=%.2fs %s",
+                    name,
+                    waited,
+                    behind or "nothing",
+                    ran,
+                    memory.summary(),
+                )
+
+    return loop.run_in_executor(_mlx_executor, timed)
 
 
 def clear_mlx_cache() -> None:

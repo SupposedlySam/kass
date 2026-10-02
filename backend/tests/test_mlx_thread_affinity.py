@@ -34,6 +34,29 @@ async def test_run_on_mlx_thread_uses_a_single_worker():
     assert idents.pop() != threading.get_ident(), "MLX work must not run on the event loop thread"
 
 
+@pytest.mark.asyncio
+async def test_a_job_stuck_in_line_is_logged_with_what_held_it_up(monkeypatch, caplog):
+    from backend.services import mlx_thread
+
+    monkeypatch.setattr(mlx_thread, "SLOW_JOB_SECONDS", 0.05)
+
+    def prefill():
+        time.sleep(0.1)
+
+    def transcribe():
+        pass
+
+    first = run_on_mlx_thread(prefill)
+    await asyncio.sleep(0.01)
+    with caplog.at_level("WARNING", logger="backend.services.mlx_thread"):
+        await asyncio.gather(first, run_on_mlx_thread(transcribe))
+
+    waited = [r.getMessage() for r in caplog.records if "transcribe" in r.getMessage()]
+    assert len(waited) == 1
+    assert "behind=test_a_job_stuck_in_line_is_logged_with_what_held_it_up.prefill" in waited[0]
+    assert "swap_used=" in waited[0]
+
+
 def _install_fakes(backend, worker_threads):
     """Replace the heavy sync internals with fakes that record their thread.
 
