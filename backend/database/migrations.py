@@ -301,3 +301,9 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "capture_settings", "speak_voice VARCHAR NOT NULL DEFAULT 'af_heart'", "speak_voice")
     if "speak_speed" not in columns:
         _add_column(engine, "capture_settings", "speak_speed FLOAT NOT NULL DEFAULT 1.0", "speak_speed")
+    if "share_usage" not in columns:
+        _add_column(engine, "capture_settings", "share_usage BOOLEAN NOT NULL DEFAULT 1", "share_usage")
+    if "usage_device_id" not in columns:
+        _add_column(engine, "capture_settings", "usage_device_id VARCHAR", "usage_device_id")
+    if "usage_sent_through" not in columns:
+        _add_column(engine, "capture_settings", "usage_sent_through VARCHAR", "usage_sent_through")

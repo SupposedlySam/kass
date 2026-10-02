@@ -82,6 +82,17 @@ impl PillEvent {
     }
 }
 
+/// How a take ended, for usage reports, from the last state it showed: its
+/// text went in, or it failed. A take too short to keep, declined or
+/// cancelled isn't reported.
+pub fn report_outcome(last: Option<&PillEvent>) -> Option<&'static str> {
+    match last? {
+        PillEvent::Done => Some("delivered"),
+        PillEvent::Error { visible_ms, .. } if *visible_ms == ERROR_VISIBLE_MS => Some("failed"),
+        _ => None,
+    }
+}
+
 /// The complete recording, kept for the batch fallback.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Recorded {
@@ -296,6 +307,28 @@ mod tests {
     use serde_json::json;
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn reports_delivered_and_failed_takes_only() {
+        assert_eq!(report_outcome(Some(&PillEvent::Done)), Some("delivered"));
+        assert_eq!(
+            report_outcome(Some(&PillEvent::error("Transcription failed"))),
+            Some("failed")
+        );
+        assert_eq!(
+            report_outcome(Some(&PillEvent::error(delivery::SHORT_RECORDING_MESSAGE))),
+            None
+        );
+        assert_eq!(
+            report_outcome(Some(&PillEvent::notice("Nothing selected"))),
+            None
+        );
+        assert_eq!(
+            report_outcome(Some(&PillEvent::Transcribing { elapsed_ms: 1 })),
+            None
+        );
+        assert_eq!(report_outcome(None), None);
+    }
 
     #[derive(Default)]
     struct FakeEnv {

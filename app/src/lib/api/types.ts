@@ -472,6 +472,8 @@ export interface CaptureSettings {
   speak_voice: string;
   /** Read Aloud's speed, 0.5 to 2. */
   speak_speed: number;
+  /** Send anonymous daily usage counts (backend/services/usage_report.py). */
+  share_usage: boolean;
 }
 
 export interface RetentionStatus {

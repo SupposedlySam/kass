@@ -207,7 +207,13 @@ export function OnboardingWindow() {
         body = <ReadAloudStep settings={settings} onNext={next} />;
         break;
       case 'done':
-        body = <DoneStep settings={settings} onFinish={finish} />;
+        body = (
+          <DoneStep
+            settings={settings}
+            onShareUsage={(share) => update({ share_usage: share })}
+            onFinish={finish}
+          />
+        );
         break;
     }
   }

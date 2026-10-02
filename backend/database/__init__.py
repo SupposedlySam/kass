@@ -14,6 +14,7 @@ from .models import (
     DictionaryEntry,
     KnownName,
     RetiredCapture,
+    TakeReport,
     WritingStyle,
 )
 from .session import SessionLocal, _db_path, engine, get_db, init_db
@@ -28,6 +29,7 @@ __all__ = [
     "KnownName",
     "RetiredCapture",
     "SessionLocal",
+    "TakeReport",
     "WritingStyle",
     "_db_path",
     "engine",

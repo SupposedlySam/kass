@@ -18,6 +18,7 @@ def register_routers(app: FastAPI) -> None:
     from .styles import router as styles_router
     from .tasks import router as tasks_router
     from .transcription import router as transcription_router
+    from .usage import router as usage_router
     from .writing_style import router as writing_style_router
 
     app.include_router(health_router)
@@ -34,3 +35,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(writing_style_router)
     app.include_router(dictionary_router)
     app.include_router(links_router)
+    app.include_router(usage_router)
