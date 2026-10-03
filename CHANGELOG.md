@@ -2,6 +2,12 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
+## Unreleased
+
+### New
+
+- **Apps can get a text field ready for you to dictate into.** When you start dictating, Kass now tells the app in front first, so apps without a regular text field, like terminals, can show one for Kass to type into. Apps opt in, and nothing changes in apps that don't. App developers: see [Dictation handshake](https://github.com/mrgnhnt96/kass/blob/main/docs/DICTATION_HANDSHAKE.md).
+
 ## 0.7.3 — October 2, 2026
 
 ### New

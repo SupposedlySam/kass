@@ -41,6 +41,7 @@ use keytap::{EventKind, Key, RecvTimeoutError, Tap};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::dictation;
+use crate::dictation_handshake;
 use crate::focus_capture;
 
 // ========================================================================
@@ -493,6 +494,13 @@ fn start_take(app: &AppHandle, action: ChordAction, time: Instant) {
         dictation::TakeOrigin::Shortcut,
         action.take_mode(),
     );
+
+    // An app that opted in shows and focuses its field now, so the
+    // snapshot below finds it (docs/DICTATION_HANDSHAKE.md). The microphone
+    // is already open, so the wait loses no words.
+    if let Some(take) = take {
+        dictation_handshake::before_focus(take, action.take_mode());
+    }
 
     // Snapshot focus BEFORE we touch the window — any AppKit
     // reshuffle triggered by set_position / show could in principle

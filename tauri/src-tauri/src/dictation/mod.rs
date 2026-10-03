@@ -358,6 +358,8 @@ pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMo
             since_release(&released_for_task)
         );
         report_take(&env, released_for_task.get().map(Instant::elapsed));
+        let last = env.last_state.lock().ok().and_then(|l| l.clone());
+        crate::dictation_handshake::take_ended(take_id, last.as_ref());
         recording.store(false, Ordering::Relaxed);
         // Settled: Escape has nothing left to cancel here.
         if let Ok(mut takes) = env.app.state::<DictationState>().active.lock() {

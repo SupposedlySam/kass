@@ -6,6 +6,8 @@ mod clipboard;
 mod deep_link;
 #[cfg(desktop)]
 mod dictation;
+#[cfg(desktop)]
+mod dictation_handshake;
 mod focus_capture;
 #[cfg(desktop)]
 mod hotkey_monitor;
@@ -1583,6 +1585,9 @@ pub fn run() {
                 keyboard_layout::init();
                 // ⌘H hides the windows, so the pill can show without them.
                 app_hide::init();
+                // Apps that show a text field when dictation starts
+                // (docs/DICTATION_HANDSHAKE.md) register and reply here.
+                dictation_handshake::listen();
 
                 // HotkeyMonitor is spawned lazily via the `enable_hotkey`
                 // command — see HotkeyState. The hidden dictate webview is
