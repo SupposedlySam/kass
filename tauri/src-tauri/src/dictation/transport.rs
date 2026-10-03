@@ -148,6 +148,8 @@ mod tests {
     /// Real socket, fake server: the transport and driver together deliver
     /// audio recorded before `ready`, then `finish`, then return `final`.
     #[tokio::test]
+    // tungstenite's header callback must return its large error type.
+    #[allow(clippy::result_large_err)]
     async fn streams_a_take_over_a_real_loopback_socket() {
         use crate::dictation::client::{Outcome, StreamClient};
         use crate::dictation::protocol;
