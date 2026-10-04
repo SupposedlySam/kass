@@ -22,6 +22,7 @@ server never sends unless ``KASS_USAGE_REPORTS=1``, and
 """
 
 import asyncio
+import json
 import logging
 import os
 import platform
@@ -207,6 +208,8 @@ def build_events(db: Session, row: DBCaptureSettings, start: date, end: date) ->
 
 
 def _post(events: list[dict[str, Any]]) -> bool:
+    # Exactly what leaves the Mac (less the public API key), so anyone can check it in server.log.
+    logger.info("Sending usage to %s: %s", ENDPOINT, json.dumps(events))
     try:
         response = httpx.post(ENDPOINT, json={"api_key": API_KEY, "events": events}, timeout=15)
     except httpx.HTTPError as error:
