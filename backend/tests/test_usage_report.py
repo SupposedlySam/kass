@@ -205,3 +205,27 @@ def test_dev_servers_do_not_send(monkeypatch):
     monkeypatch.setattr("sys.frozen", True, raising=False)
     monkeypatch.setenv("KASS_USAGE_REPORTS", "0")
     assert not usage_report.sending_allowed()
+
+
+def test_the_exact_payload_is_logged_before_sending(monkeypatch, caplog):
+    import json
+    import logging
+
+    posted = []
+
+    class Response:
+        status_code = 200
+        text = ""
+
+    def fake_post(url, json, timeout):
+        posted.append(json)
+        return Response()
+
+    monkeypatch.setattr(usage_report.httpx, "post", fake_post)
+    events = [{"event_type": "daily_usage", "event_properties": {"words": 10}}]
+    with caplog.at_level(logging.INFO, logger=usage_report.__name__):
+        assert usage_report._post(events)
+
+    logged = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("Sending usage"))
+    assert json.loads(logged.split(": ", 1)[1]) == posted[0]["events"]
+    assert usage_report.API_KEY not in logged
