@@ -118,7 +118,6 @@ def setup_properties(db: Session, row: DBCaptureSettings) -> dict[str, Any]:
         "live_text": row.live_text,
         "voice_edits": row.voice_edits,
         "command_mode": bool(row.chord_command_keys),
-        "read_aloud": bool(row.chord_speak_keys),
         "sound_cues": row.sound_cues,
         "keep_recordings": not row.discard_audio,
         "history_days": row.history_retention_days,

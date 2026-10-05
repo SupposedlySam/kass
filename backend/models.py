@@ -333,7 +333,6 @@ class TakeReportRequest(BaseModel):
     latency_ms: int | None = Field(default=None, ge=0)
 
 
-
 class CommandRunRequest(BaseModel):
     """``POST /commands/run``: rewrite a selection without a recording.
 

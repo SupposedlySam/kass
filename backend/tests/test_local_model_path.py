@@ -1,13 +1,10 @@
 """Downloaded models load from their cached folder, so loading never reaches the network."""
 
-import sys
-import types
 from pathlib import Path
 
 import pytest
 
-from backend.backends import base, kokoro_backend
-from backend.backends.kokoro_backend import KOKORO_REPO, KokoroBackend
+from backend.backends import base
 
 
 @pytest.fixture
@@ -47,27 +44,3 @@ def test_a_local_path_is_used_as_it_is(hub, tmp_path):
     calls, _, _ = hub
     assert base.local_model_path(str(tmp_path)) == str(tmp_path)
     assert calls == []
-
-
-def test_kokoro_loads_from_its_folder_and_reads_voices_from_kass_repo(hub, monkeypatch):
-    calls, cached, tmp_path = hub
-    cached.add(KOKORO_REPO)
-    loaded = []
-    utils = types.ModuleType("mlx_audio.tts.utils")
-    utils.load_model = lambda path: loaded.append(path) or types.SimpleNamespace(repo_id=None)
-    monkeypatch.setitem(sys.modules, "mlx_audio.tts.utils", utils)
-    monkeypatch.setattr(kokoro_backend, "model_load_progress", lambda name, cached: _Nothing())
-    backend = KokoroBackend()
-    backend._ensure_loaded_sync()
-    assert loaded == [tmp_path / "hub" / "models--mlx-community--Kokoro-82M-bf16" / "snapshots" / "abc"]
-    assert calls == [(KOKORO_REPO, True)]
-    # Not mlx-audio's default (prince-canuma/Kokoro-82M), which it would fetch voices from.
-    assert backend.model.repo_id == KOKORO_REPO
-
-
-class _Nothing:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
