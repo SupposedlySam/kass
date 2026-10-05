@@ -58,7 +58,7 @@ from .. import beta, config, models
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
 from ..utils import memory
-from . import dictionary as dictionaries, voice_edits
+from . import dictionary as dictionaries, prosody, voice_edits
 from .captures import _to_response
 from .commands import (
     MAX_SELECTION_CHARS,
@@ -251,6 +251,9 @@ class StreamingCapture:
         # Checked as audio arrives, so a phrase without a voice skips Whisper,
         # which would otherwise invent one ("Thank you.").
         self.speech = SpeechDetector(self.rate, ignore_before=self.rate * start_cue_ms // 1000)
+        # How it was said: measured as it is said, saved after the final
+        # event (docs/plans/EXPRESSIVE_DICTATION.md). Never changes the text.
+        self.expression = prosody.Expression(self.rate)
         self.cuts = []
         self.offset = 0
         self.samples = 0
@@ -328,7 +331,9 @@ class StreamingCapture:
         if self.samples + count > self.rate * MAX_SECONDS:
             raise ValueError("Streaming session exceeds one hour")
         self.archive.writeframesraw(pcm)
-        self.speech.feed(np.frombuffer(pcm, dtype="<i2"))
+        samples = np.frombuffer(pcm, dtype="<i2")
+        self.speech.feed(samples)
+        self.expression.feed(samples)
         self.samples += count
         self.sequence += 1
         if self.backlogged:
@@ -453,7 +458,7 @@ class StreamingCapture:
         if len(styles_snapshot().styles) < 2 and not self.edit_possible:
             self.style_peeks = 2
             return
-        text = await self.recognize(bytes(self.pending))
+        text = await self.recognize(bytes(self.pending), measure=False)
         if self.edit_possible and voice_edits.starts_edit(text) and not self.raw:
             await self.announce_edit()
             return
@@ -634,7 +639,12 @@ class StreamingCapture:
         if self.finished_at is not None:
             self.after_release[stage] += time.monotonic() - max(started, self.finished_at)
 
-    async def recognize(self, pcm, start=None):
+    async def recognize(self, pcm, start=None, measure=True):
+        """Whisper's text for ``pcm``, which starts at sample ``start``.
+
+        ``measure`` keeps the phrase's word times for the expression
+        measurements; a peek at the opening words doesn't.
+        """
         # Earlier phrases give Whisper the sentence it is continuing, so a
         # phrase cut at a pause neither trails off with "..." nor restarts
         # with a capital letter.
@@ -646,8 +656,9 @@ class StreamingCapture:
         if not len(samples) or not self.speech.heard(start, start + len(samples)):
             return ""
         started = time.monotonic()
+        alignments = [] if measure and not self.is_command else None
         try:
-            return (
+            text = (
                 await get_whisper_model().transcribe_array(
                     samples,
                     self.rate,
@@ -656,10 +667,14 @@ class StreamingCapture:
                     previous_text=previous_text,
                     check_speech=False,
                     vocabulary=self.vocabulary,
+                    alignments=alignments,
                 )
             ).strip()
         finally:
             self._spent("recognize", started)
+        if alignments:
+            self.expression.phrase(alignments[0], start, released=self.finished)
+        return text
 
     def close_dictation(self, text, closed=None, learned=None):
         closed = self.cleanup_closed if closed is None else closed

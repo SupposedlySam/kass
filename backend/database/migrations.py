@@ -84,6 +84,7 @@ def _migrate_captures(engine, inspector, tables: set[str]) -> None:
         ("app_category", "VARCHAR"),
         ("teaches_style_id", "VARCHAR"),
         ("audio_deleted", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("prosody", "TEXT"),
     ):
         if column not in columns:
             _add_column(engine, "captures", f"{column} {kind}", column)
@@ -222,6 +223,13 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
             "capture_settings",
             "voice_edits BOOLEAN NOT NULL DEFAULT 1",
             "voice_edits",
+        )
+    if "expressive" not in columns:
+        _add_column(
+            engine,
+            "capture_settings",
+            "expressive BOOLEAN NOT NULL DEFAULT 1",
+            "expressive",
         )
     if "sound_cues" not in columns:
         _add_column(

@@ -270,6 +270,7 @@ class CaptureSettingsResponse(BaseModel):
     allow_auto_paste: bool = True
     live_text: bool = False
     voice_edits: bool = True
+    expressive: bool = True
     sound_cues: bool = True
     sound_cue_volume: float = Field(default=0.5, ge=0, le=1)
     input_device_id: str | None = Field(
@@ -308,6 +309,7 @@ class CaptureSettingsUpdate(BaseModel):
     allow_auto_paste: bool | None = None
     live_text: bool | None = None
     voice_edits: bool | None = None
+    expressive: bool | None = None
     sound_cues: bool | None = None
     sound_cue_volume: float | None = Field(default=None, ge=0, le=1)
     input_device_id: str | None = Field(

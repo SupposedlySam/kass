@@ -792,6 +792,10 @@
           "title": "Remove self-corrections",
           "description": "When you change your mind mid-sentence (\"actually, no...\", \"wait, I meant...\"), drop the retracted part and keep the final intent."
         },
+        "expressive": {
+          "title": "Write how it was said",
+          "description": "Add \"!\" when you say something with energy, and draw out a word you stretch (\"wayyy\"). Kass keeps learning from your voice and edits while this is off."
+        },
         "preserveTechnical": {
           "title": "Preserve technical terms",
           "description": "Keep code identifiers, command names, and acronyms exactly as spoken. Turn on when you dictate into a code prompt."

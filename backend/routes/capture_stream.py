@@ -14,6 +14,7 @@ from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
 from ..services.captures import target_app, target_app_category
 from ..services.commands import MAX_SELECTION_CHARS
+from ..services.prosody import measure_and_save
 from ..services.refinement import load_cleanup_model, prefill_cleanup
 from ..services.settings import get_capture_settings
 from ..utils.origins import is_allowed_websocket_origin
@@ -227,6 +228,9 @@ async def stream_capture(websocket: WebSocket):
             await send_finalizing(result)
             if "edit" in result:
                 _start(asyncio.to_thread(session.learn_from_edit))
+            elif not session.is_command:
+                # How it was said, measured once the text is out.
+                _start(measure_and_save(session.id, session.expression))
             return
     except WebSocketDisconnect:
         pass

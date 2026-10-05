@@ -442,6 +442,8 @@ export interface CaptureSettings {
   live_text: boolean;
   /** Fix the last dictation by voice ("fix that, Morgan not Megan"). A beta feature. */
   voice_edits: boolean;
+  /** Write "!" and drawn-out words ("wayyy") from how something was said. */
+  expressive: boolean;
   /** Chime when dictation starts, stops or fails. */
   sound_cues: boolean;
   /** Chime volume, 0 to 1. */

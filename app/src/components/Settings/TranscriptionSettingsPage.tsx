@@ -63,6 +63,7 @@ export function TranscriptionSettingsPage() {
   const llmModel = settings?.llm_model ?? '0.6B';
   const qwen = QWEN_MODELS.find((m) => m.value === llmModel) ?? QWEN_MODELS[0];
   const selfCorrection = settings?.self_correction ?? true;
+  const expressive = settings?.expressive ?? true;
 
   return (
     <>
@@ -138,6 +139,20 @@ export function TranscriptionSettingsPage() {
               id="selfCorrection"
               checked={selfCorrection}
               onCheckedChange={(v) => update({ self_correction: v })}
+              disabled={!autoRefine}
+            />
+          }
+        />
+
+        <SettingRow
+          title={t(`${R}.expressive.title`)}
+          description={t(`${R}.expressive.description`)}
+          htmlFor="expressive"
+          action={
+            <Toggle
+              id="expressive"
+              checked={expressive}
+              onCheckedChange={(v) => update({ expressive: v })}
               disabled={!autoRefine}
             />
           }
