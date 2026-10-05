@@ -139,13 +139,7 @@ function DictateSurface({ session }: { session: NativeDictationSession }) {
             inputDb={session.inputDb}
             errorMessage={session.errorMessage}
             onDismiss={session.dismissError}
-            onStop={
-              session.isRecording
-                ? session.stopRecording
-                : session.isSpeaking
-                  ? session.stopSpeaking
-                  : undefined
-            }
+            onStop={session.isRecording ? session.stopRecording : undefined}
           />
         ) : null}
       </div>

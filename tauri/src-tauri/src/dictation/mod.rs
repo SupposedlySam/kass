@@ -167,8 +167,6 @@ pub enum TakeMode {
 /// Begin a take at chord start. `keydown` is the chord's event time, used for
 /// latency logging. Returns the take id, or `None` if one is already recording.
 pub fn start(app: &AppHandle, keydown: Instant, origin: TakeOrigin, mode: TakeMode) -> Option<u64> {
-    // Dictating over Kass's own voice would put it in the recording.
-    crate::read_aloud::stop(app);
     let state = app.state::<DictationState>();
     let mut active = state.active.lock().ok()?;
     if active.is_recording() {

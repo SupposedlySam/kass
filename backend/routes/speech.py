@@ -15,23 +15,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/speech/voices", response_model=models.SpeechVoicesResponse)
-async def speech_voices_endpoint():
-    """The voices Read Aloud can speak in, for its settings."""
-    return models.SpeechVoicesResponse(
-        voices=[
-            models.SpeechVoice(
-                id=voice,
-                name=name,
-                accent="american" if voice[0] == "a" else "british",
-                gender="female" if voice[1] == "f" else "male",
-            )
-            for voice, name in speech.VOICES.items()
-        ],
-        default=speech.DEFAULT_VOICE,
-    )
-
-
 @router.post("/speech/sentences", response_model=models.SpeechSentencesResponse)
 async def speech_sentences_endpoint(request: models.SpeechRequest):
     """The pieces a selection is read in, so the app can fetch the next while one plays."""
