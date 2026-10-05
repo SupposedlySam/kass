@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Merge Morgan's Kass (the `upstream` remote) into this fork's current branch,
+# without taking the upstream commits listed in scripts/fork/skip-upstream.
+#
+# Those are upstream commits that remove what only this fork keeps, like the
+# Read Aloud removal. Each is merged with `-s ours`: git records it as merged,
+# so later merges never offer it again, but its changes are left out. Every
+# other upstream commit merges normally. See FORK.md.
+#
+#   scripts/fork/sync-upstream          merge upstream/main
+#   scripts/fork/sync-upstream --dry    list what would merge, and what's skipped
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+SKIP_FILE=scripts/fork/skip-upstream
+DRY=false
+[[ "${1:-}" == "--dry" ]] && DRY=true
+
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+  echo "sync-upstream: commit or stash your changes first." >&2
+  exit 1
+fi
+
+git fetch --quiet upstream
+TARGET=$(git rev-parse upstream/main)
+
+# Skipped commits, as full SHAs, one per line, ignoring comments and blank lines.
+# (Plain strings, not arrays: macOS ships bash 3.2.)
+SKIPS=""
+while read -r sha _; do
+  [[ -z "$sha" || "$sha" == \#* ]] && continue
+  full=$(git rev-parse --verify --quiet "$sha^{commit}") || {
+    echo "sync-upstream: unknown commit $sha in $SKIP_FILE" >&2
+    exit 1
+  }
+  SKIPS="$SKIPS $full"
+done < "$SKIP_FILE"
+
+is_skipped() {
+  [[ " $SKIPS " == *" $1 "* ]]
+}
+
+# Upstream's first-parent line we don't have yet, oldest first. A skipped
+# commit must be on that line: for a squash merge list the squashed commit,
+# for a merge commit list the merge commit, and for a rebase merge list each
+# rebased commit.
+PENDING=$(git rev-list --reverse --first-parent HEAD.."$TARGET")
+if [[ -z "$PENDING" ]]; then
+  echo "Up to date with upstream/main."
+  exit 0
+fi
+
+# Files only this fork has. An upstream commit that deletes one, and isn't
+# listed to skip, is almost certainly a removal like Read Aloud's that was
+# squash-merged under a new SHA, so stop before merging it.
+PROTECTED=scripts/fork/protected
+for sha in $PENDING; do
+  is_skipped "$sha" && continue
+  deleted=$(git diff --name-only --diff-filter=D "$sha^1" "$sha" | grep -Fxf <(grep -v '^#' "$PROTECTED" | sed '/^$/d') || true)
+  if [[ -n "$deleted" ]]; then
+    echo "sync-upstream: upstream $(git log -1 --format='%h "%s"' "$sha") deletes files only this fork has:" >&2
+    echo "$deleted" | sed 's/^/    /' >&2
+    echo "If it's a removal this fork doesn't take, add it to $SKIP_FILE and run this again:" >&2
+    echo "    echo '$(git rev-parse "$sha")  $(git log -1 --format=%s "$sha")' >> $SKIP_FILE" >&2
+    exit 1
+  fi
+done
+
+for sha in $PENDING; do
+  if is_skipped "$sha"; then
+    subject=$(git log -1 --format=%s "$sha")
+    if $DRY; then
+      echo "skip   $(git log -1 --format='%h %s' "$sha")"
+      continue
+    fi
+    # Everything before it, normally; then it, as merged but not applied.
+    if ! git merge-base --is-ancestor "$sha^" HEAD; then
+      git merge --no-edit -m "Merge upstream up to before \"$subject\"" "$sha^"
+    fi
+    git merge --no-edit -s ours -m "Keep this fork's version over upstream \"$subject\"" "$sha"
+  elif $DRY; then
+    echo "merge  $(git log -1 --format='%h %s' "$sha")"
+  fi
+done
+
+$DRY && exit 0
+if ! git merge-base --is-ancestor "$TARGET" HEAD; then
+  git merge --no-edit -m "Merge upstream/main" "$TARGET"
+fi
+echo "Merged upstream/main ($(git log -1 --format=%h "$TARGET"))."

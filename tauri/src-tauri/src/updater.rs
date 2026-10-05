@@ -29,8 +29,10 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATUS_EVENT: &str = "update:status";
 /// Tells every window the channel changed, which turns beta features on or off.
 const CHANNEL_EVENT: &str = "update:channel";
+// This fork's releases, not Morgan's, so a copy built here never replaces
+// itself with his app, which has no Read Aloud (FORK.md).
 const BETA_ENDPOINT: &str =
-    "https://github.com/mrgnhnt96/kass/releases/download/channels/beta.json";
+    "https://github.com/SupposedlySam/kass/releases/download/channels/beta.json";
 /// Present (containing `beta`) while this copy is on the beta channel. It
 /// sits in the app data dir, where the server reads it too (backend/beta.py).
 const CHANNEL_FILE: &str = "update-channel";

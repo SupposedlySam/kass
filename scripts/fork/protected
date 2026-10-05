@@ -1,0 +1,12 @@
+# Files only this fork has (FORK.md). scripts/fork/sync-upstream stops before
+# merging an upstream commit that deletes one, unless it's in skip-upstream.
+FORK.md
+scripts/fork/sync-upstream
+tauri/src-tauri/src/read_aloud.rs
+backend/backends/kokoro_backend.py
+backend/services/speech.py
+backend/services/speakable.py
+backend/routes/speech.py
+app/src/components/Settings/ReadAloudPage.tsx
+app/src/components/Onboarding/steps/ReadAloudStep.tsx
+docs/plans/READ_ALOUD.md
