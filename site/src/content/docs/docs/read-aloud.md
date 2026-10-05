@@ -22,11 +22,12 @@ In **Settings › Read Aloud** you can also:
 - Change the keys, or turn Read Aloud off. The keys must be different from your dictation and Command Mode keys.
 - Pick a voice: 28 American and British English voices. **Preview** plays the voice you picked.
 - Change the speed, from half to twice normal.
+- Turn **Read naturally** on or off. When it's on, which is the default, Kass reads the text the way you'd say it. Slashes, brackets and lettered options become pauses, so `Keyboard policy (resize / lift / hold)` is read "Keyboard policy, for example resize, lift, and hold". "e.g." is read "for example", Markdown is read as its text, and a link as its site. Turn it off to hear the text exactly as written.
 
 ## Limits
 
 - A selection can be up to 16,000 characters, which is several minutes of speech. Kass reads it a sentence at a time.
 - Voices are English. Text in other languages is read with English pronunciation.
-- Code, URLs and symbols are read as written.
+- Code is read as written.
 - Password fields are never read. Terminals and web pages can be.
 - If nothing is selected, Kass asks you to select text first.

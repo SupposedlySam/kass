@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Toggle } from '@/components/ui/toggle';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { SpeechVoice } from '@/lib/api/types';
@@ -29,7 +30,7 @@ const ACCENTS: SpeechVoice['accent'][] = ['american', 'british'];
 
 /**
  * Read Aloud (docs/plans/READ_ALOUD.md): the chord that speaks the selected
- * text, the Kokoro voice it speaks in, and how fast.
+ * text, the Kokoro voice it speaks in, how fast, and whether it reads naturally.
  */
 export function ReadAloudPage() {
   const { t } = useTranslation();
@@ -236,6 +237,19 @@ function VoiceSection() {
             onPointerUp={commitSpeed}
             onKeyUp={commitSpeed}
             className="w-[240px] cursor-pointer accent-accent"
+          />
+        }
+      />
+      <SettingRow
+        htmlFor="speakNaturally"
+        title={t(`${P}.naturally.title`)}
+        description={t(`${P}.naturally.description`)}
+        action={
+          <Toggle
+            id="speakNaturally"
+            checked={settings?.speak_naturally ?? true}
+            disabled={!settings}
+            onCheckedChange={(v) => update({ speak_naturally: v })}
           />
         }
       />

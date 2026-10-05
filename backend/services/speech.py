@@ -91,6 +91,18 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
+# misaki reads a capital "A" that starts a sentence as the article ("uh or B?").
+# One followed by punctuation, the end, or "or"/"and" can only be the letter,
+# so it gets the letter's phonemes, in misaki's [word](/phonemes/) form.
+_LETTER_A = re.compile(r"(?<![\w'’\[])A(?![\w'’\]])(?=\s*(?:[,.;:!?)…\"”]|$|(?:or|and|nor|versus|vs)\b))")
+_LETTER_A_SAID = "[A](/ˈA/)"
+
+
+def pronounce_letters(text: str) -> str:
+    """``text`` with each lone letter "A" marked to be said "ay", never "uh"."""
+    return _LETTER_A.sub(_LETTER_A_SAID, text)
+
+
 def validate_text(text: str) -> str:
     """``text`` stripped, or a ValueError the app shows."""
     text = text.strip()
@@ -130,5 +142,7 @@ async def speak(text: str, voice: str, speed: float) -> bytes:
     text = validate_text(text)
     voice = validate_voice(voice)
     ensure_model_ready()
-    samples = await get_speech_backend().synthesize(text, voice, min(max(speed, MIN_SPEED), MAX_SPEED))
+    samples = await get_speech_backend().synthesize(
+        pronounce_letters(text), voice, min(max(speed, MIN_SPEED), MAX_SPEED)
+    )
     return to_wav(samples, SAMPLE_RATE)

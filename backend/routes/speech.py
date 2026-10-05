@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..database import get_db
 from ..services import settings as settings_service, speech
+from ..services.speakable import speakable
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,18 @@ async def speech_voices_endpoint():
 
 
 @router.post("/speech/sentences", response_model=models.SpeechSentencesResponse)
-async def speech_sentences_endpoint(request: models.SpeechRequest):
-    """The pieces a selection is read in, so the app can fetch the next while one plays."""
+async def speech_sentences_endpoint(request: models.SpeechRequest, db: Session = Depends(get_db)):
+    """The pieces a selection is read in, so the app can fetch the next while one plays.
+
+    With Read naturally on, they're the selection as it would be said aloud.
+    """
     try:
         text = speech.validate_text(request.text)
         speech.ensure_model_ready()
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    if settings_service.get_capture_settings(db).speak_naturally:
+        text = speakable(text)
     return models.SpeechSentencesResponse(sentences=speech.split_sentences(text))
 
 

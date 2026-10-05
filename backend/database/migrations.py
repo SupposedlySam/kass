@@ -307,3 +307,5 @@ def _migrate_capture_settings(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "capture_settings", "usage_device_id VARCHAR", "usage_device_id")
     if "usage_sent_through" not in columns:
         _add_column(engine, "capture_settings", "usage_sent_through VARCHAR", "usage_sent_through")
+    if "speak_naturally" not in columns:
+        _add_column(engine, "capture_settings", "speak_naturally BOOLEAN NOT NULL DEFAULT 1", "speak_naturally")

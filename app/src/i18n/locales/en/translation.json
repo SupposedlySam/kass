@@ -1002,6 +1002,10 @@
       "speed": {
         "title": "Speed",
         "value": "{{speed}}× normal speed"
+      },
+      "naturally": {
+        "title": "Read naturally",
+        "description": "Say lists, symbols and abbreviations the way a person would, with a pause wherever there’s a slash or bracket. Turn off to read the text exactly as written."
       }
     }
   },

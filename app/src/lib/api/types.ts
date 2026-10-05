@@ -474,6 +474,8 @@ export interface CaptureSettings {
   speak_speed: number;
   /** Send anonymous daily usage counts (backend/services/usage_report.py). */
   share_usage: boolean;
+  /** Say lists, symbols and abbreviations the way a person would, not as written. */
+  speak_naturally: boolean;
 }
 
 export interface RetentionStatus {

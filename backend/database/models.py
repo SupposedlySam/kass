@@ -80,6 +80,8 @@ class CaptureSettings(Base):
     share_usage = Column(Boolean, nullable=False, default=True)
     usage_device_id = Column(String, nullable=True)
     usage_sent_through = Column(String, nullable=True)
+    # Say lists, symbols and abbreviations the way a person would (services/speakable.py).
+    speak_naturally = Column(Boolean, nullable=False, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

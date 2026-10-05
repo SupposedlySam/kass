@@ -137,6 +137,18 @@ def test_sentences_come_back_for_the_app_to_fetch_one_by_one(client, kokoro):
     assert response.json() == {"sentences": ["One sentence here.", "And another one."]}
 
 
+def test_read_naturally_says_a_selection_the_way_a_person_would(client, kokoro, storage):
+    selection = {"text": "A. Pick one (tab / page / sheet)"}
+    assert client.post("/speech/sentences", json=selection).json() == {
+        "sentences": ["Option A: Pick one, for example tab, page, and sheet."]
+    }
+    with storage() as db:
+        update_capture_settings(db, {"speak_naturally": False})
+    assert client.post("/speech/sentences", json=selection).json() == {
+        "sentences": ["A. Pick one (tab / page / sheet)"]
+    }
+
+
 def test_a_piece_is_spoken_as_16_bit_wav_in_the_saved_voice_and_speed(client, kokoro, storage):
     with storage() as db:
         update_capture_settings(db, {"speak_voice": "bf_emma", "speak_speed": 1.25})
@@ -186,7 +198,7 @@ def test_read_aloud_defaults_to_its_own_chord_heart_and_normal_speed(storage):
     with storage() as db:
         saved = get_capture_settings(db)
         assert saved.chord_speak_keys == ["AltGr", "ShiftRight"]
-        assert (saved.speak_voice, saved.speak_speed) == ("af_heart", 1.0)
+        assert (saved.speak_voice, saved.speak_speed, saved.speak_naturally) == ("af_heart", 1.0, True)
         for other in (saved.chord_push_to_talk_keys, saved.chord_command_keys):
             assert set(saved.chord_speak_keys) != set(other)
 
@@ -204,8 +216,10 @@ def test_upgrading_adds_read_alouds_settings(tmp_path):
     run_migrations(engine)
     run_migrations(engine)
     with engine.connect() as connection:
-        row = connection.execute(text("SELECT chord_speak_keys, speak_voice, speak_speed FROM capture_settings")).one()
-    assert tuple(row) == ('["AltGr", "ShiftRight"]', "af_heart", 1.0)
+        row = connection.execute(
+            text("SELECT chord_speak_keys, speak_voice, speak_speed, speak_naturally FROM capture_settings")
+        ).one()
+    assert tuple(row) == ('["AltGr", "ShiftRight"]', "af_heart", 1.0, 1)
 
 
 def test_kokoro_is_a_model_the_models_tab_lists():
@@ -214,3 +228,33 @@ def test_kokoro_is_a_model_the_models_tab_lists():
     assert (config.engine, config.hf_repo_id) == ("kokoro", "mlx-community/Kokoro-82M-bf16")
     assert config in get_all_model_configs()
     assert backends._backend_for_config(config) is backends.get_speech_backend()
+
+
+# -- pronunciation -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("written", "marked"),
+    [
+        # misaki says a sentence-starting "A" as "uh"; these can only be the letter.
+        ("A or B?", "[A](/ˈA/) or B?"),
+        ("A, B, or C.", "[A](/ˈA/), B, or C."),
+        ("A and B both work.", "[A](/ˈA/) and B both work."),
+        ("I recommend A.", "I recommend [A](/ˈA/)."),
+        ("Option A: cut them.", "Option [A](/ˈA/): cut them."),
+        ("“A” or “B”?", "“[A](/ˈA/)” or “B”?"),
+        # The article, and words with an A in them, are left alone.
+        ("A host must pass it.", "A host must pass it."),
+        ("A lot or a little?", "A lot or a little?"),
+        ("AI or ML?", "AI or ML?"),
+    ],
+)
+def test_a_lone_letter_a_is_said_ay_not_uh(written, marked):
+    assert speech.pronounce_letters(written) == marked
+
+
+def test_the_letter_is_marked_whether_or_not_read_naturally_is_on(client, kokoro, storage):
+    with storage() as db:
+        update_capture_settings(db, {"speak_naturally": False})
+    assert client.post("/speech", json={"text": "A or B?"}).status_code == 200
+    assert kokoro.calls[-1][0] == "[A](/ˈA/) or B?"

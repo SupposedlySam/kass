@@ -292,6 +292,7 @@ class CaptureSettingsResponse(BaseModel):
     chord_speak_keys: list[str] = Field(default_factory=default_speak_chord)
     speak_voice: str = "af_heart"
     speak_speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    speak_naturally: bool = True
     # Send anonymous daily usage counts (services/usage_report.py).
     share_usage: bool = True
 
@@ -331,6 +332,7 @@ class CaptureSettingsUpdate(BaseModel):
     chord_speak_keys: list[str] | None = Field(default=None, max_length=6)
     speak_voice: str | None = None
     speak_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    speak_naturally: bool | None = None
     share_usage: bool | None = None
 
 
