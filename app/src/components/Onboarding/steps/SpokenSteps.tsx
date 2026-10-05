@@ -551,7 +551,6 @@ export function DoneStep({
     { keys: settings?.chord_push_to_talk_keys ?? [], text: t('onboarding.done.push') },
     { keys: settings?.chord_toggle_to_talk_keys ?? [], text: t('onboarding.done.toggle') },
     { keys: settings?.chord_command_keys ?? [], text: t('onboarding.done.command') },
-    { keys: settings?.chord_speak_keys ?? [], text: t('onboarding.done.speak') },
   ].filter((row) => row.keys.length > 0);
   return (
     <>
