@@ -58,7 +58,7 @@ from .. import beta, config, models
 from ..backends.qwen_llm_backend import generation_hint, generation_listener, generation_stop
 from ..database import Capture
 from ..utils import memory
-from . import dictionary as dictionaries, prosody, voice_edits
+from . import dictionary as dictionaries, expression_learning, prosody, voice_edits
 from .captures import _to_response
 from .commands import (
     MAX_SELECTION_CHARS,
@@ -252,8 +252,19 @@ class StreamingCapture:
         # which would otherwise invent one ("Thank you.").
         self.speech = SpeechDetector(self.rate, ignore_before=self.rate * start_cue_ms // 1000)
         # How it was said: measured as it is said, saved after the final
-        # event (docs/plans/EXPRESSIVE_DICTATION.md). Never changes the text.
-        self.expression = prosody.Expression(self.rate)
+        # event (docs/plans/EXPRESSIVE_DICTATION.md). With "Write how it was
+        # said" on, a sentence said with clearly more energy ends with "!" and
+        # a drawn-out word is written so. Off, it is still measured, but the
+        # text never changes.
+        self.expressive = bool(getattr(settings, "expressive", False) and settings.auto_refine) and not self.is_command
+        self.expression = prosody.Expression(self.rate, eager=self.expressive)
+        # The speaker's norm and what their edits taught
+        # (expression_learning.py), read when the run starts, and the voice
+        # and words so far, worked out on a thread after each phrase.
+        self.baseline = None
+        self.taught = expression_learning.Learned()
+        self.baseline_loading = None
+        self.voice = None
         self.cuts = []
         self.offset = 0
         self.samples = 0
@@ -674,6 +685,48 @@ class StreamingCapture:
             self._spent("recognize", started)
         if alignments:
             self.expression.phrase(alignments[0], start, released=self.finished)
+            if self.expressive:
+                self.voice = asyncio.create_task(self.voice_so_far())
+        return text
+
+    async def voice_so_far(self) -> tuple[prosody.Voice, list[dict]] | None:
+        """The voice up to now with every phrase's words, and the words drawn out, worked out off the event loop."""
+        try:
+            words = await self.expression.words()
+            if not words or self.expression.failed:
+                return None
+            return await asyncio.to_thread(
+                self._work_out_voice, self.expression.track.frames(), words, self.taught.rule
+            )
+        except Exception:
+            logger.exception('Couldn\'t follow how the dictation was said; no "!" this time')
+            return None
+
+    @staticmethod
+    def _work_out_voice(frames, words, rule) -> tuple[prosody.Voice, list[dict]]:
+        voice = prosody.Voice(frames, words)
+        return voice, prosody.measure_voice(voice, None, rule)["stretched"]
+
+    def express(self, text: str, final: bool = False) -> str:
+        """``text`` with "!" where it was said with clearly more energy, and words drawn out written so ("wayyy").
+
+        Uses only what is already worked out: never waits, so after release
+        it adds no time. A sentence not yet measured keeps its period.
+        """
+        voice = self.voice
+        ready = (
+            voice is not None
+            and voice.done()
+            and not voice.cancelled()
+            and voice.exception() is None
+            and voice.result() is not None
+        )
+        if self.expressive and text and ready:
+            said, stretched = voice.result()
+            exclaimed = prosody.exclaim(text, said, self.baseline, self.taught.cutoff)
+            return prosody.stretch(exclaimed, said, stretched)
+        if self.expressive and text and final:
+            logger.info("How the dictation was said wasn't worked out in time; written as it is")
         return text
 
     def close_dictation(self, text, closed=None, learned=None):
@@ -754,7 +807,7 @@ class StreamingCapture:
             if self.flags.punctuation_style == "learned":
                 refined = learned(refined)
             text = self.corrected(self.compose(prefix, refined, prompt, learned))
-            return self.close_dictation(text, refined.rstrip().endswith("."), learned)
+            return self.express(self.close_dictation(text, refined.rstrip().endswith("."), learned))
 
         return project
 
@@ -881,7 +934,8 @@ class StreamingCapture:
 
     def settle(self, text, raw, gap):
         self.last_settle = (self.settled, self.settled_gap, raw, self.settled_reviews)
-        self.settled = self.compose(self.settled, text, raw)
+        # Settled text is shown as it is after release, so it gets its "!" now.
+        self.settled = self.express(self.compose(self.settled, text, raw))
         self.settled_gap = gap
         self.settled_reviews = list(self.reviews)
 
@@ -949,7 +1003,7 @@ class StreamingCapture:
             logger.exception("Streaming refinement failed")
             self.refinement_error = str(error)
             return
-        if (closed := self.close_dictation(text)) != self.refined:
+        if (closed := self.express(self.close_dictation(text), final=True)) != self.refined:
             self.refined = closed
             await self.emit("refined", text=self.refined)
 
@@ -957,10 +1011,22 @@ class StreamingCapture:
         # Read while the first phrase is still being spoken; recognition never
         # waits for it.
         self.names_loading = asyncio.create_task(self.load_names())
+        if self.expressive:
+            self.baseline_loading = asyncio.create_task(self.load_baseline())
         try:
             await self._run()
         finally:
             self.names_loading.cancel()
+            if self.baseline_loading is not None:
+                self.baseline_loading.cancel()
+
+    async def load_baseline(self):
+        try:
+            self.baseline, self.taught = await asyncio.to_thread(
+                lambda: (prosody.load_baseline(), expression_learning.load())
+            )
+        except Exception:
+            logger.exception('Could not read how the speaker usually sounds; no "!" this time')
 
     async def load_names(self):
         try:
@@ -1089,7 +1155,7 @@ class StreamingCapture:
                 self.refined, verdict = guard_phrase_refinement(self.raw, refined, self.flags)
                 self.refined = self.start_like_raw(self.refined)
                 self.reviews = [verdict]
-                self.refined = self.corrected(self.refined)
+                self.refined = self.express(self.corrected(self.refined), final=True)
                 self.refinement_error = None
                 await self.emit("refined", text=self.refined)
             except Exception as error:

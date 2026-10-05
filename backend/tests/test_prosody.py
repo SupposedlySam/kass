@@ -12,10 +12,14 @@ from backend.services.prosody import (
     Expression,
     Frames,
     PitchTrack,
+    Voice,
+    exclaim,
     measure,
     semitones,
+    stretch,
     stretch_word,
     syllables,
+    written_sentences,
 )
 
 
@@ -195,3 +199,160 @@ async def test_measuring_never_raises(monkeypatch):
     monkeypatch.setattr(prosody, "load_baseline", broken)
     await prosody.measure_and_save("capture", Expression(16000))
     await asyncio.sleep(0)
+
+
+# Plain sentences at 150 Hz; excited ones higher and louder.
+CALM_HZ, EXCITED_HZ = 150.0, 220.0
+NORM = Baseline((12 * np.log2(1.5), 1.0), (0.0, 1.0), (-20.0, 1.0))
+
+
+def spoken(*phrases):
+    """The voice and words of ``phrases``, each (words, excited), one word per 0.3 s."""
+    hz, db, words = [], [], []
+    for text, excited in phrases:
+        for word in text.split():
+            start = len(hz) * prosody.HOP
+            hz += [EXCITED_HZ if excited else CALM_HZ] * 30
+            db += [-14.0 if excited else -20.0] * 30
+            words.append(Word(word, start, start + 0.3))
+    return Voice(Frames(np.array(hz), np.array(db)), words)
+
+
+def test_a_sentence_said_with_more_energy_ends_with_an_exclamation_mark():
+    # Whisper ran the three together; the cleanup wrote three sentences.
+    voice = spoken(("first we met", False), ("we finally shipped it", True), ("then we went home", False))
+    text = "First we met. We finally shipped it. Then we went home."
+    assert exclaim(text, voice, NORM) == "First we met. We finally shipped it! Then we went home."
+    sentences = written_sentences(text, voice, NORM)
+    assert [sentence["text"] for sentence in sentences] == [
+        "First we met.",
+        "We finally shipped it.",
+        "Then we went home.",
+    ]
+    assert [sentence["energy"] >= prosody.EXCLAIM_ENERGY for sentence in sentences] == [False, True, False]
+    assert text[: sentences[1]["end"]].endswith("shipped it.")
+
+
+def test_said_calmly_nothing_changes():
+    voice = spoken(("that's great news", False))
+    assert exclaim("That's great news.", voice, NORM) == "That's great news."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # A question stays a question.
+        "Did we finally ship it?",
+        # A sentence left open keeps its ending: none.
+        "We finally shipped it",
+        # Cleanup rewrote it past finding.
+        "The release is out.",
+    ],
+)
+def test_only_a_period_said_with_energy_changes(text):
+    voice = spoken(("did we finally ship it", True))
+    assert exclaim(text, voice, NORM) == text
+
+
+def test_no_exclamation_until_the_speaker_has_a_norm():
+    voice = spoken(("we finally shipped it", True))
+    assert exclaim("We finally shipped it.", voice, None) == "We finally shipped it."
+    assert written_sentences("We finally shipped it.", voice, None) == []
+
+
+def test_a_period_the_speaker_said_is_kept():
+    voice = spoken(("we finally shipped it period", True))
+    assert exclaim("We finally shipped it.", voice, NORM) == "We finally shipped it."
+
+
+def test_an_abbreviation_does_not_end_the_sentence():
+    voice = spoken(("i saw dr smith today and it went great", True))
+    text = "I saw Dr. Smith today and it went great."
+    assert exclaim(text, voice, NORM) == "I saw Dr. Smith today and it went great!"
+    assert [sentence["text"] for sentence in written_sentences(text, voice, NORM)] == [text]
+
+
+def test_the_mark_goes_inside_a_closing_quote():
+    voice = spoken(("she said this is amazing", True))
+    assert exclaim('She said "this is amazing."', voice, NORM) == 'She said "this is amazing!"'
+
+
+@pytest.mark.parametrize(
+    ("text", "written"),
+    [
+        # A file name's dot isn't a sentence end; the period after "now" is.
+        ("Read privacy.md now.", "Read privacy.md now!"),
+        # A number's or an ellipsis's dots never change.
+        ("Step 3.", "Step 3."),
+        ("Well...", "Well..."),
+    ],
+)
+def test_only_a_period_after_a_word_changes(text, written):
+    voice = spoken((text.replace(".", " "), True))
+    assert exclaim(text, voice, NORM) == written
+
+
+@pytest.mark.asyncio
+async def test_the_returned_text_is_measured_and_saved_even_with_the_switch_off(monkeypatch):
+    voice = spoken(("first we met", False), ("we finally shipped it", True))
+    expression = Expression(16000)
+    expression.phrase(Said(*[(word.text, word.start, word.end) for word in voice.words]), 0, released=True)
+    hz = np.where(np.arange(210) >= 90, EXCITED_HZ, CALM_HZ)
+    db = np.where(np.arange(210) >= 90, -14.0, -20.0)
+    monkeypatch.setattr(expression.track, "frames", lambda: Frames(hz, db))
+    monkeypatch.setattr(prosody, "load_baseline", lambda: NORM)
+    saved = {}
+    monkeypatch.setattr(prosody, "save", lambda capture_id, measured: saved.update({capture_id: measured}))
+    # Delivered without "!": what the user later changes is learned against this.
+    await prosody.measure_and_save("capture", expression, "First we met. We finally shipped it.")
+    written = saved["capture"]["written"]
+    assert [sentence["text"] for sentence in written] == ["First we met.", "We finally shipped it."]
+    assert written[1]["energy"] >= prosody.EXCLAIM_ENERGY > written[0]["energy"]
+
+
+def test_a_drawn_out_word_is_written_drawn_out_where_the_text_kept_it():
+    frames, words = far_said()
+    voice = Voice(frames, words)
+    stretched = prosody.measure_voice(voice, None)["stretched"]
+    assert stretch("That was really far away from the old house.", voice, stretched) == (
+        "That was really faaar away from the old house."
+    )
+    # The cleanup wrote another word: nothing to draw out.
+    assert stretch("That was really distant from the old house.", voice, stretched) == (
+        "That was really distant from the old house."
+    )
+    # Already written drawn out: left as it is.
+    assert stretch("That was really faaar away.", voice, stretched) == "That was really faaar away."
+
+
+def test_every_content_word_shape_is_saved_to_learn_from():
+    frames, words = far_said()
+    measured = measure(frames, words, None)
+    # Neither first nor last.
+    assert [shape[0] for shape in measured["shapes"]] == ["was", "really", "far", "away", "from", "the", "old"]
+    far = measured["shapes"][2]
+    assert far[1:] == [measured["stretched"][0][key] for key in ("stretch", "louder", "plateau")]
+
+
+def test_a_speakers_own_rule_can_draw_out_more():
+    frames, words = far_said(louder=0.0)
+    assert measure(frames, words, None)["stretched"] == []
+    rule = prosody.StretchRule(louder_db=-1.0)
+    voice = Voice(frames, words)
+    assert [word["word"] for word in prosody.measure_voice(voice, None, rule)["stretched"]] == ["far"]
+
+
+def test_a_closed_class_word_is_drawn_out_only_by_a_speakers_own_rule():
+    shape = dict(word="so", stretch=4.0, louder=3.0, plateau=0.4)
+    assert not prosody.StretchRule().holds(shape)
+    assert prosody.StretchRule(words=frozenset(["so"])).holds(shape)
+
+
+def test_energy_alone_agrees_with_the_full_stats():
+    voice = spoken(("first we met", False), ("we finally shipped it", True))
+    for start, end in [(0.0, 0.9), (0.9, 2.1), (0.0, 2.1)]:
+        stats = voice.stats(start, end)
+        assert voice.energy(start, end, NORM) == pytest.approx(
+            NORM.energy(stats["level"], stats["span"], stats["loudness"])
+        )
+    assert voice.energy(0.0, 0.05, NORM) is None

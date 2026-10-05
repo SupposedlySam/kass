@@ -18,6 +18,7 @@ tuning, and the text is never changed.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import itertools
 import json
 import logging
@@ -52,6 +53,31 @@ MIN_RUN_FRAMES = 3
 STRETCH_PACE = 3.0
 STRETCH_LOUDER_DB = 1.5
 STRETCH_PLATEAU_S = (0.3, 0.6)
+
+
+@dataclass(frozen=True)
+class StretchRule:
+    """When a word counts as drawn out (all must hold).
+
+    A closed-class word never does, but for ``words``: the ones this speaker
+    has written drawn out themselves ("sooo").
+    """
+
+    pace: float = STRETCH_PACE
+    louder_db: float = STRETCH_LOUDER_DB
+    plateau: tuple[float, float] = STRETCH_PLATEAU_S
+    words: frozenset[str] = frozenset()
+
+    def holds(self, shape: dict) -> bool:
+        word = _key(shape["word"])
+        return (
+            (word not in FUNCTION_WORDS or word in self.words)
+            and shape["stretch"] >= self.pace
+            and shape["louder"] >= self.louder_db
+            and self.plateau[0] <= shape["plateau"] <= self.plateau[1]
+        )
+
+
 # Pitch steps under this (semitones per frame) keep a vowel steady.
 STEADY_STEP = 0.35
 # The question hint looks at the last stretch of each sentence's voice.
@@ -400,94 +426,260 @@ def sentences(words: list) -> list[list]:
     return grouped
 
 
+class Voice:
+    """A recording's words and its voice, ready to measure any stretch of it."""
+
+    def __init__(self, frames: Frames, words: list):
+        self.words = words
+        self.st = semitones(frames.hz.copy())
+        self.db = frames.db
+
+    def frames_in(self, start: float, end: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Pitch over ``start``–``end`` (seconds), its voiced frames' loudness and their indices."""
+        part = slice(max(0, int(start / HOP)), min(len(self.st), int(np.ceil(end / HOP))))
+        values = self.st[part]
+        return values, self.db[part][~np.isnan(values)], np.flatnonzero(~np.isnan(values)) + part.start
+
+    def energy(self, start: float, end: float, baseline: Baseline) -> float | None:
+        """``Baseline.energy`` of the voice from ``start`` to ``end``: ``stats``' level, span and loudness only.
+
+        Used after release, so kept to one pass over the frames.
+        """
+        values, loud, _ = self.frames_in(start, end)
+        pitched = values[~np.isnan(values)]
+        if len(pitched) < 10:
+            return None
+        low, level, high = np.percentile(pitched, [10, 50, 90])
+        return baseline.energy(float(level), float(high - low), float(np.median(loud)))
+
+    def stats(self, start: float, end: float) -> dict | None:
+        """How high, how varied and how loud the voice was from ``start`` to ``end``.
+
+        None with under 10 voiced frames (0.1 s): too little to say.
+        """
+        values, loud, indices = self.frames_in(start, end)
+        pitched = values[~np.isnan(values)]
+        if len(pitched) < 10:
+            return None
+        level = float(np.median(pitched))
+        final = indices[indices * HOP >= indices[-1] * HOP - FINAL_S]
+        return dict(
+            level=level,
+            span=float(np.percentile(pitched, 90) - np.percentile(pitched, 10)),
+            loudness=float(np.median(loud)),
+            slope=_theil_sen(final * HOP, self.st[final]),
+            rise=float(np.median(self.st[final])) - level,
+        )
+
+
 def measure(frames: Frames, words: list, baseline: Baseline | None) -> dict:
     """Per-sentence pitch, loudness and energy, and drawn-out words.
 
     ``words`` have times in seconds from the recording's start (word_timing.Word).
     """
-    st = semitones(frames.hz.copy())
-    db = frames.db
-    count = len(st)
+    return measure_voice(Voice(frames, words), baseline)
 
-    def span_of(start: float, end: float) -> slice:
-        return slice(max(0, int(start / HOP)), min(count, int(np.ceil(end / HOP))))
 
-    def voiced_in(start, end):
-        part = span_of(start, end)
-        values = st[part]
-        return values, db[part][~np.isnan(values)], np.flatnonzero(~np.isnan(values)) + part.start
+def measure_voice(voice: Voice, baseline: Baseline | None, rule: StretchRule | None = None) -> dict:
+    """``measure`` of a voice already worked out.
 
-    # The recording's time per syllable, from its voiced frames.
-    per_syllable = []
-    for word in words:
-        voiced, _, _ = voiced_in(word.start, word.end)
-        seconds = np.count_nonzero(~np.isnan(voiced)) * HOP
-        if seconds:
-            per_syllable.append(seconds / syllables(word.text))
-    pace = float(np.median(per_syllable)) if per_syllable else None
-
-    measured, stretched = [], []
-    for number, sentence in enumerate(sentences(words)):
+    ``shapes`` are how drawn out each content word was, against the
+    recording's pace: what a speaker's own stretches are learned from.
+    """
+    rule = rule or StretchRule()
+    measured, shapes = [], []
+    pace, offset = _pace(voice), 0
+    for number, sentence in enumerate(sentences(voice.words)):
         start, end = sentence[0].start, sentence[-1].end
-        values, loud, indices = voiced_in(start, end)
-        pitched = values[~np.isnan(values)]
         entry = dict(text=" ".join(word.text for word in sentence), start=round(start, 2), end=round(end, 2))
-        if len(pitched) >= 10:
-            level = float(np.median(pitched))
-            span = float(np.percentile(pitched, 90) - np.percentile(pitched, 10))
-            loudness = float(np.median(loud))
-            final = indices[indices * HOP >= indices[-1] * HOP - FINAL_S]
-            slope = _theil_sen(final * HOP, st[final])
-            entry.update(
-                level=round(level, 2),
-                span=round(span, 2),
-                loudness=round(loudness, 2),
-                slope=round(slope, 2),
-                rise=round(float(np.median(st[final])) - level, 2),
-                energy=round(baseline.energy(level, span, loudness), 2) if baseline else None,
+        if (stats := voice.stats(start, end)) is not None:
+            entry.update({key: round(value, 2) for key, value in stats.items()})
+            entry["energy"] = (
+                round(baseline.energy(stats["level"], stats["span"], stats["loudness"]), 2) if baseline else None
             )
         measured.append(entry)
         if pace and "loudness" in entry:
-            stretched += _stretched(sentence, number, entry["loudness"], pace, voiced_in, st)
+            shapes += _shapes(sentence, number, offset, entry["loudness"], pace, voice)
+        offset += len(sentence)
     return dict(
         version=1,
         pace=round(pace, 3) if pace else None,
-        voiced=round(float(np.count_nonzero(~np.isnan(st)) * HOP), 2),
+        voiced=round(float(np.count_nonzero(~np.isnan(voice.st)) * HOP), 2),
         sentences=measured,
-        stretched=stretched,
+        stretched=[
+            dict(shape, written=stretch_word(shape["word"], _letters(shape["stretch"])))
+            for shape in shapes
+            if rule.holds(shape)
+        ],
+        shapes=[[shape["word"], shape["stretch"], shape["louder"], shape["plateau"]] for shape in shapes],
     )
 
 
-def _stretched(sentence, number, sentence_loudness, pace, voiced_in, st) -> list[dict]:
+def _pace(voice: Voice) -> float | None:
+    """The recording's time per syllable, from its voiced frames."""
+    per_syllable = []
+    for word in voice.words:
+        seconds = len(voice.frames_in(word.start, word.end)[2]) * HOP
+        if seconds:
+            per_syllable.append(seconds / syllables(word.text))
+    return float(np.median(per_syllable)) if per_syllable else None
+
+
+def _letters(stretch: float) -> int:
+    """How many times a drawn-out word's vowel is written."""
+    return 5 if stretch >= 6 else 4 if stretch >= 4.5 else 3
+
+
+# A sentence said with at least this much energy (spreads above the
+# speaker's statements) ends with "!". On the user's labelled takes, excited
+# sentences scored 2.96–4.07 and everything else 2.03 or less; none of 198
+# ordinary sentences reached it. Strict on purpose: it adapts per user from
+# their edits, never by lowering this (docs/plans/EXPRESSIVE_DICTATION.md).
+EXCLAIM_ENERGY = 2.5
+# At least this share of a written sentence's words must be found among the
+# words heard, or it isn't measured (cleanup rewrote it).
+MIN_FOUND = 0.5
+# A period after one of these ends the word, not the sentence.
+_ABBREVIATIONS = frozenset(["mr", "mrs", "ms", "dr", "st", "vs", "etc", "jr", "sr", "prof", "inc", "ltd", "eg", "ie"])
+_CLOSERS = re.escape("\"')]\u201d\u2019")
+_ENDS_SENTENCE = re.compile(f"[.!?][{_CLOSERS}]*$")
+# A period after a letter: not an ellipsis, a number ("3.") or a file name.
+_PERIOD = re.compile(f"(?<=[^\\W\\d_])\\.(?=[{_CLOSERS}]*$)")
+
+
+def _key(word: str) -> str:
+    return re.sub(r"[\W_]", "", word.lower())
+
+
+def _said_period(words: list, index: int) -> bool:
+    """Whether the speaker said the period after ``words[index]``: what they said wins."""
+    after = [_key(word.text) for word in words[index + 1 : index + 3]]
+    return after[:1] == ["period"] or after == ["full", "stop"]
+
+
+def _heard(text: str, voice: Voice) -> tuple[list[re.Match], dict[int, int]]:
+    """``text``'s words, and for each one found among the words heard, which it is."""
+    tokens = list(re.finditer(r"\S+", text))
+    matcher = difflib.SequenceMatcher(
+        None, [_key(word.text) for word in voice.words], [_key(token.group()) for token in tokens], autojunk=False
+    )
+    heard_at = {}
+    for block in matcher.get_matching_blocks():
+        for offset in range(block.size):
+            heard_at[block.b + offset] = block.a + offset
+    return tokens, heard_at
+
+
+def stretch(text: str, voice: Voice, stretched: list[dict]) -> str:
+    """``text`` with each drawn-out word (``measure_voice``'s ``stretched``) written drawn out.
+
+    Only where the written word is the word heard: one the cleanup changed
+    stays as written.
+    """
+    if not stretched:
+        return text
+    tokens, heard_at = _heard(text, voice)
+    written_at = {heard: index for index, heard in heard_at.items()}
+    changed = text
+    # From the end, so earlier positions stay put.
+    for shape in sorted(stretched, key=lambda shape: shape["at"], reverse=True):
+        index = written_at.get(shape["at"])
+        if index is None:
+            continue
+        token = tokens[index]
+        changed = (
+            changed[: token.start()] + stretch_word(token.group(), _letters(shape["stretch"])) + changed[token.end() :]
+        )
+    return changed
+
+
+def written_sentences(text: str, voice: Voice, baseline: Baseline | None) -> list[dict]:
+    """The sentences of ``text`` that were said and measured, with their energy.
+
+    Sentences are the written text's (the cleanup's), each found in the
+    recording by its words, so a sentence Whisper ran into the next one is
+    still measured on its own. One too rewritten to find, or with too little
+    voice, is left out. Each has its ``text``, where it ends in ``text``
+    (``end``), its ``energy`` and whether the speaker said its period.
+    """
+    if baseline is None or not voice.words:
+        return []
+    tokens, heard_at = _heard(text, voice)
+    found, first = [], 0
+    for index, token in enumerate(tokens):
+        word = token.group()
+        if not _ENDS_SENTENCE.search(word) or (word.endswith(".") and _key(word) in _ABBREVIATIONS):
+            continue
+        sentence, first = range(first, index + 1), index + 1
+        heard = [heard_at[i] for i in sentence if i in heard_at and _key(tokens[i].group())]
+        if not heard or len(heard) < MIN_FOUND * len(sentence):
+            continue
+        energy = voice.energy(voice.words[min(heard)].start, voice.words[max(heard)].end, baseline)
+        if energy is None:
+            continue
+        found.append(
+            dict(
+                text=text[tokens[sentence[0]].start() : token.end()],
+                end=token.end(),
+                energy=energy,
+                said_period=_said_period(voice.words, max(heard)),
+            )
+        )
+    return found
+
+
+def exclaim(text: str, voice: Voice, baseline: Baseline | None, cutoff: float = EXCLAIM_ENERGY) -> str:
+    """``text`` with "!" ending each sentence said with clearly more energy than the speaker's statements.
+
+    Only a period changes, and not one the speaker said: a question, a
+    sentence left without an ending and one too rewritten to find keep theirs.
+    """
+    changed = list(text)
+    for sentence in written_sentences(text, voice, baseline):
+        period = _PERIOD.search(sentence["text"])
+        if period is not None and sentence["energy"] >= cutoff and not sentence["said_period"]:
+            changed[sentence["end"] - len(sentence["text"]) + period.start()] = "!"
+    return "".join(changed)
+
+
+def _shapes(sentence, number, offset, sentence_loudness, pace, voice: Voice) -> list[dict]:
+    """How drawn out each word of a sentence that could be was.
+
+    Not the first or last word, a number or an initialism ("UI", said letter
+    by letter). Closed-class words are measured too, though only a speaker's
+    own rule may draw one out: "the...", "a..." are mostly hesitations.
+    """
     found = []
     for index, word in enumerate(sentence[1:-1], start=1):
         core = re.sub(r"[^\w']", "", word.text)
-        # An initialism ("UI", "API") is said letter by letter: nothing to draw out.
-        if not core or core.lower() in FUNCTION_WORDS or not core.isalpha() or (len(core) > 1 and core.isupper()):
+        if not core or not core.isalpha() or (len(core) > 1 and core.isupper()):
             continue
-        values, loud, indices = voiced_in(word.start, word.end)
-        seconds = len(indices) * HOP
-        ratio = seconds / syllables(word.text) / pace
-        louder = float(np.median(loud)) - sentence_loudness if len(loud) else 0.0
-        plateau = _longest_steady(values) * HOP
-        if (
-            ratio >= STRETCH_PACE
-            and louder >= STRETCH_LOUDER_DB
-            and STRETCH_PLATEAU_S[0] <= plateau <= STRETCH_PLATEAU_S[1]
-        ):
-            letters = 5 if ratio >= 6 else 4 if ratio >= 4.5 else 3
-            found.append(
-                dict(
-                    word=word.text,
-                    sentence=number,
-                    index=index,
-                    stretch=round(ratio, 2),
-                    louder=round(louder, 2),
-                    plateau=round(plateau, 2),
-                    written=stretch_word(word.text, letters),
-                )
+        values, loud, indices = voice.frames_in(word.start, word.end)
+        found.append(
+            dict(
+                word=word.text,
+                sentence=number,
+                index=index,
+                at=offset + index,
+                stretch=round(len(indices) * HOP / syllables(word.text) / pace, 2),
+                louder=round(float(np.median(loud)) - sentence_loudness if len(loud) else 0.0, 2),
+                plateau=round(_longest_steady(values) * HOP, 2),
             )
+        )
     return found
+
+
+def _placed(found: list, start: float, words: list) -> list:
+    """``found`` and a phrase's ``words``, which began ``start`` seconds into the recording.
+
+    Where a forced cut overlaps the phrase before, the overlap's words are kept once.
+    """
+    from ..backends.word_timing import Word
+
+    reached = found[-1].end if found else 0.0
+    return found + [
+        Word(word.text, start + word.start, start + word.end) for word in words if start + word.start >= reached - 0.05
+    ]
 
 
 class Expression:
@@ -496,11 +688,14 @@ class Expression:
     The voice is tracked as audio arrives; each phrase's word times are
     worked out on a worker thread as soon as it is recognized. A phrase
     recognized after release waits until the final text is sent, so nothing
-    here ever adds to the wait for it.
+    here ever adds to the wait for it, unless the text is written how it was
+    said (``eager``): then its word times are worked out on the CPU while
+    cleanup runs on the GPU, and are ready before it ends.
     """
 
-    def __init__(self, rate: int):
+    def __init__(self, rate: int, eager: bool = False):
         self.rate = rate
+        self.eager = eager
         self.track = PitchTrack(rate)
         self.failed = False
         # (start in seconds, alignment or its words being worked out)
@@ -520,32 +715,21 @@ class Expression:
         """A recognized phrase's alignment (word_timing.Alignment), which began at ``start_sample``."""
         if alignment is None or self.failed:
             return
-        if released:
+        if released and not self.eager:
             self._phrases.append((start_sample / self.rate, alignment))
             return
         words = asyncio.get_running_loop().run_in_executor(None, alignment.words)
         self._phrases.append((start_sample / self.rate, words))
 
     async def words(self) -> list:
-        """Every phrase's words, in seconds from the recording's start.
-
-        Where a forced cut overlaps the phrase before, the overlap's words are
-        kept once.
-        """
-        from ..backends.word_timing import Word
-
+        """Every phrase's words, in seconds from the recording's start."""
         found = []
         for start, pending in self._phrases:
             if isinstance(pending, asyncio.Future):
                 words = await pending
             else:
                 words = await asyncio.to_thread(pending.words)
-            reached = found[-1].end if found else 0.0
-            found += [
-                Word(word.text, start + word.start, start + word.end)
-                for word in words
-                if start + word.start >= reached - 0.05
-            ]
+            found = _placed(found, start, words)
         return found
 
     async def measure(self, baseline: Baseline | None) -> dict | None:
@@ -592,12 +776,29 @@ def save(capture_id: str, measured: dict) -> None:
         db.commit()
 
 
-async def measure_and_save(capture_id: str, expression: Expression) -> None:
-    """Measure a sent dictation and save it with its capture. Run after the final event."""
+async def measure_and_save(capture_id: str, expression: Expression, text: str = "") -> None:
+    """Measure a sent dictation and save it with its capture. Run after the final event.
+
+    ``text`` is the text it returned; its sentences are saved with their
+    energy, whether or not "!" is written, to learn from the user's edits of
+    them (docs/plans/EXPRESSIVE_DICTATION.md).
+    """
     try:
         baseline = await asyncio.to_thread(load_baseline)
-        measured = await expression.measure(baseline)
-        if measured is not None:
-            await asyncio.to_thread(save, capture_id, measured)
+        words = await expression.words() if not expression.failed else []
+        if not words:
+            return
+        voice = await asyncio.to_thread(Voice, expression.track.frames(), words)
+        measured = await asyncio.to_thread(_measure_voice, voice, baseline, text)
+        await asyncio.to_thread(save, capture_id, measured)
     except Exception:
         logger.exception("Couldn't measure how the dictation was said")
+
+
+def _measure_voice(voice: Voice, baseline: Baseline | None, text: str) -> dict:
+    measured = measure_voice(voice, baseline)
+    measured["written"] = [
+        dict(text=sentence["text"], energy=round(sentence["energy"], 2))
+        for sentence in written_sentences(text, voice, baseline)
+    ]
+    return measured

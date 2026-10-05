@@ -1,6 +1,6 @@
 # Expressive dictation: "!" and stretched words from the voice
 
-Status: phase 1 (measure only) built, 2026-10-05; phases 2–4 not started. Planned 2026-10-01. Prototype and evidence: a scratch prototype run over 312 of the user's saved captures (not in the repo).
+Status: phases 1–4 built, 2026-10-05 (see "Phases 2–4 as built"); timing check of phases 2–3 below. Planned 2026-10-01. Prototype and evidence: a scratch prototype run over 312 of the user's saved captures (not in the repo).
 
 ## Goal
 
@@ -57,6 +57,34 @@ Not in scope: question marks from intonation (hint only, see below) and sarcasm.
 - `backend/services/prosody.py`: a numpy YIN pitch tracker instead of parselmouth (no new dependency): 95.8% of frames within ½ semitone of Praat, 0.6 ms per 100 ms chunk. `measure` gives per-sentence level, span, loudness, final slope and rise, energy against the speaker's baseline (from the last 200 captures' statements, at least 20), and stretched words with how they'd be written.
 - Phrases recognized while speaking get their word times on a worker thread at once; the last phrase's, and the measurement itself (2–7 ms), run after the final event is sent. Saved as JSON in `captures.prosody`. Commands aren't measured.
 - Timing check, 8 saved dictations × 2 rounds, real-time replay, on/off alternated: release to final text median 429 ms on vs 434 ms off; paired difference median −5 ms (−61 to +23). No added time.
+
+## Phases 2–4 as built
+
+Built 2026-10-05, while the user was away, from their go-ahead to continue.
+
+- **"!" is decided in code, not by the cleanup model** (a change from step 6). `prosody.exclaim` splits the *cleaned* text into sentences and finds each in the recording by its words (difflib against Whisper's timed words). A sentence ending in a period (after a letter, not an abbreviation like "Dr.", not a period the speaker said aloud) gets "!" when its energy against the speaker's baseline is at least `EXCLAIM_ENERGY` = 2.5. Why not the hint: no prompt change (the cached prefill stays valid, no added tokens), the small model can't misplace or drop it, and a strict fixed cutoff is what the user asked for. Because sentences come from the cleaned text, the mixed take now works: only its middle sentence got "!".
+- **Stretched words** (`prosody.stretch`): the strict rule (`StretchRule`) picks words in the recording, and the written word that matches the heard word is drawn out ("faaar"). A word the cleanup changed is left alone.
+- **No added time.** `StreamingCapture.express` uses only what is already worked out and never waits. With the switch on, the last phrase's word times start on a worker thread as soon as it is recognized (`Expression(eager=True)`), so they are ready while the cleanup still runs. If they aren't, the text goes out as written and the log says so. Settled sentences get their "!" when they settle, so provisional text (live text, off by default) already has it.
+- **Switch.** Only `capture_settings.expressive` (with cleanup on, not commands) applies anything. Measuring and learning run either way.
+- **Saved for learning** (`captures.prosody`, after the final event): `written` (each sentence of the delivered text with its energy) and `shapes` (each word's stretch, loudness and steady vowel), with or without the switch.
+- **Learning** (`expression_learning.py`), read again when each dictation starts, from saved measurements and refined-text reports (Captures edits and voice fixes; newest report per capture):
+  - "." changed to "!" on a sentence said with energy ≥ 1.5 lowers the cutoff to 0.25 below it. This needs 2 such edits. It is never lower than 98% of the speaker's own plain sentences (with 50+ of them), and never below 1.5. A "!" typed on a calm sentence teaches nothing.
+  - "!" changed back to "." raises the cutoff 0.25 above that sentence, from one edit.
+  - Words written drawn out ("way" to "wayyy") set the speaker's own stretch rule. This needs 2 such edits; the rule goes 10% under their slowest, 0.5 dB under their quietest, and widens the steady vowel. Closed-class words they stretched ("sooo") are allowed for them only. The rule is slowed until at most 0.5% of their plain words would pass.
+  - A word drawn out that they wrote plainly again raises the pace above it.
+
+### Phase 2 checks (2026-10-05)
+
+Full pipeline, real-time replay through `StreamingCapture` (4B cleanup, baseline from the 80 earlier dictations):
+
+- **Labelled set:**
+  - All 5 excited takes got "!" ("Perfect!", "That's great news!", "We finally shipped it!", "I can't believe that actually worked!", "Okay, sounds good!").
+  - The mixed take gave "!" to its middle sentence only ("…budget. That is amazing! Let's do it…").
+  - Nothing else changed: flat takes, stretched takes, the hesitation, the commands and the question kept their marks.
+  - The voice was ready in time on all 20.
+- **False alarms, 150 ordinary dictations** (2026-10-04 to 10-05): no "!" added, and the voice was ready in time on all 150.
+- **Work on the critical path:** applying "!" and stretches to the final text takes 0.2 ms for a short dictation, and 1.4 ms for a 60 s one with 12 sentences. The voice itself (27 ms for 60 s) is worked out on a thread while cleanup runs.
+- **Release-time A/B (blocks shipping): not yet clean.** The first run overlapped another session's shared-adapter evaluation on the GPU. Release-to-text was ~1.2 s in both arms, against 0.43 s in phase 1. The paired difference was a median of +60 ms and a mean of +14 ms, ranging from −345 to +275: noise. Rerun on an idle machine.
 
 ## Labelled set (2026-10-05)
 

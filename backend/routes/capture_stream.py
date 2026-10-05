@@ -230,7 +230,8 @@ async def stream_capture(websocket: WebSocket):
                 _start(asyncio.to_thread(session.learn_from_edit))
             elif not session.is_command:
                 # How it was said, measured once the text is out.
-                _start(measure_and_save(session.id, session.expression))
+                text = capture.transcript_refined or capture.transcript_raw or ""
+                _start(measure_and_save(session.id, session.expression, text))
             return
     except WebSocketDisconnect:
         pass
