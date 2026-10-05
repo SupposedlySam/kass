@@ -3,13 +3,12 @@ title: Models
 description: Choose the speech and cleanup models, and where they're stored.
 ---
 
-Kass uses local models, all running on your Mac's GPU through Apple's MLX framework:
+Kass uses two local models, both running on your Mac's GPU through Apple's MLX framework:
 
 - **Whisper** turns your speech into text.
 - **Qwen3** cleans that text up.
-- **Kokoro** reads text aloud, for [Read Aloud](/docs/read-aloud/). It's only downloaded if you use Read Aloud.
 
-Choose Whisper and Qwen3 in **Settings › Transcription & refinement**, and manage downloads in the **Models** tab.
+Choose them in **Settings › Transcription & refinement**, and manage downloads in the **Models** tab.
 
 ## Speech (Whisper)
 
@@ -36,10 +35,6 @@ Turbo is the right choice for almost everyone. Whisper stays loaded while Kass i
 Larger models give better results but take longer and use more memory.
 
 To skip cleanup and get Whisper's text as-is, turn off **Refine transcripts automatically**. You can still refine any capture later.
-
-## Read Aloud (Kokoro)
-
-Kokoro 82M takes about 345 MB on disk and reads about 25 times faster than real time. Its voices are picked in **Settings › Read Aloud**.
 
 ## The Models tab
 
