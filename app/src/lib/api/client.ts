@@ -29,7 +29,6 @@ import type {
   ResolvedDictionaryResponse,
   RetentionPreview,
   RetentionStatus,
-  SpeechVoicesResponse,
   StyledApp,
   TeachDictated,
   TeachFinishResult,
@@ -455,28 +454,6 @@ class ApiClient {
 
   async getRetentionPreview(days: HistoryRetentionDays): Promise<RetentionPreview> {
     return this.request<RetentionPreview>(`/settings/captures/retention-preview?days=${days}`);
-  }
-
-  // Read Aloud (docs/plans/READ_ALOUD.md)
-  async getSpeechVoices(): Promise<SpeechVoicesResponse> {
-    return this.request<SpeechVoicesResponse>('/speech/voices');
-  }
-
-  /** `text` spoken as WAV, in `voice` and at `speed`, or the saved ones. */
-  async speak(text: string, voice?: string, speed?: number): Promise<Blob> {
-    const response = await fetch(`${this.getBaseUrl()}/speech`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice, speed }),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new ApiError(
-        formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`),
-        response.status,
-      );
-    }
-    return response.blob();
   }
 
   // Model Management

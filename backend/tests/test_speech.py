@@ -171,14 +171,6 @@ def test_nothing_selected_is_reported_before_anything_is_synthesized(client, kok
     assert kokoro.calls == []
 
 
-def test_the_voices_are_listed_with_their_accent_and_gender(client):
-    body = client.get("/speech/voices").json()
-    assert body["default"] == "af_heart"
-    assert len(body["voices"]) == len(speech.VOICES)
-    assert {"id": "bm_george", "name": "George", "accent": "british", "gender": "male"} in body["voices"]
-    assert {"id": "af_heart", "name": "Heart", "accent": "american", "gender": "female"} in body["voices"]
-
-
 # -- settings and models -----------------------------------------------------
 
 

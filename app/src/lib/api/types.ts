@@ -466,12 +466,6 @@ export interface CaptureSettings {
   onboarding_completed: boolean;
   /** Delete each recording once its transcript is saved. */
   discard_audio: boolean;
-  /** keytap key names for Read Aloud (docs/plans/READ_ALOUD.md); empty turns it off. */
-  chord_speak_keys: string[];
-  /** The Kokoro voice Read Aloud speaks in, e.g. `af_heart`. */
-  speak_voice: string;
-  /** Read Aloud's speed, 0.5 to 2. */
-  speak_speed: number;
   /** Send anonymous daily usage counts (backend/services/usage_report.py). */
   share_usage: boolean;
 }
@@ -684,17 +678,4 @@ export interface CorrectionLearningStatus {
     median_rule_ms: number;
     latency_passed: boolean;
   } | null;
-}
-
-/** One of Kokoro's voices for Read Aloud (docs/plans/READ_ALOUD.md). */
-export interface SpeechVoice {
-  id: string;
-  name: string;
-  accent: 'american' | 'british';
-  gender: 'female' | 'male';
-}
-
-export interface SpeechVoicesResponse {
-  voices: SpeechVoice[];
-  default: string;
 }
