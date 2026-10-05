@@ -19,9 +19,6 @@ def startup(monkeypatch):
         preserve_technical=True,
         punctuation_style="standard",
         language="en",
-        # Read Aloud off unless a test turns it on.
-        chord_speak_keys=[],
-        speak_voice="af_heart",
     )
     monkeypatch.setattr(model_startup.session, "SessionLocal", MagicMock())
     monkeypatch.setattr(model_startup.settings, "get_capture_settings", lambda db: saved)
@@ -212,52 +209,3 @@ async def test_unreadable_recordings_fall_back_to_noise(startup, tmp_path, monke
     samples, rate = stt.transcribe_array.await_args.args[:2]
     assert rate == 48000
     assert len(samples) == 48000
-
-
-@pytest.fixture
-def voice(monkeypatch):
-    import backend.backends as backends
-
-    kokoro = SimpleNamespace(is_cached=MagicMock(return_value=True), synthesize=AsyncMock())
-    monkeypatch.setattr(backends, "get_speech_backend", lambda: kokoro)
-    return kokoro
-
-
-async def _settled():
-    if model_startup._speech_warmup is not None:
-        await model_startup._speech_warmup
-
-
-@pytest.mark.asyncio
-async def test_read_aloud_warms_its_voice_after_dictation_when_turned_on(startup, voice):
-    saved, _, _ = startup
-    saved.chord_speak_keys = ["AltGr", "ShiftRight"]
-    saved.speak_voice = "bm_george"
-    await model_startup.load_startup_models()
-    await _settled()
-    voice.synthesize.assert_awaited_once_with("Ready.", "bm_george", 1.0)
-
-
-@pytest.mark.asyncio
-async def test_read_aloud_off_or_not_downloaded_warms_nothing(startup, voice):
-    saved, _, _ = startup
-    model_startup._speech_warmup = None
-    await model_startup.load_startup_models()
-    await _settled()
-    voice.synthesize.assert_not_awaited()
-
-    saved.chord_speak_keys = ["AltGr", "ShiftRight"]
-    voice.is_cached.return_value = False
-    await model_startup.load_startup_models()
-    await _settled()
-    voice.synthesize.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_a_failing_voice_warm_up_is_logged_not_raised(startup, voice, caplog):
-    saved, _, _ = startup
-    saved.chord_speak_keys = ["AltGr", "ShiftRight"]
-    voice.synthesize.side_effect = RuntimeError("no voice")
-    await model_startup.load_startup_models()
-    await _settled()
-    assert "Could not warm Read Aloud" in caplog.text

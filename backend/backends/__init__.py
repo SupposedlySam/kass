@@ -39,7 +39,7 @@ class ModelConfig:
 
     model_name: str  # e.g. "whisper-turbo", "qwen3-0.6b"
     display_name: str  # e.g. "Whisper Turbo"
-    engine: str  # "whisper", "qwen_llm" or "kokoro"
+    engine: str  # "whisper" or "qwen_llm"
     hf_repo_id: str  # e.g. "openai/whisper-large-v3-turbo"
     model_size: str = "default"
     size_mb: int = 0
@@ -250,26 +250,9 @@ def _get_qwen_llm_configs() -> list[ModelConfig]:
     ]
 
 
-def _get_kokoro_configs() -> list[ModelConfig]:
-    """Return the Read Aloud voice model config."""
-    from .kokoro_backend import KOKORO_MODEL_NAME, KOKORO_REPO
-
-    return [
-        ModelConfig(
-            model_name=KOKORO_MODEL_NAME,
-            display_name="Kokoro",
-            engine="kokoro",
-            hf_repo_id=KOKORO_REPO,
-            model_size="82M",
-            size_mb=345,
-            languages=["en"],
-        )
-    ]
-
-
 def get_all_model_configs() -> list[ModelConfig]:
-    """Return the full list of model configs (STT + LLM + Read Aloud's voice)."""
-    return _get_whisper_configs() + _get_qwen_llm_configs() + _get_kokoro_configs()
+    """Return the full list of model configs (STT + LLM)."""
+    return _get_whisper_configs() + _get_qwen_llm_configs()
 
 
 def get_llm_model_configs() -> list[ModelConfig]:
@@ -319,8 +302,6 @@ def _backend_for_config(config: ModelConfig):
         return transcribe.get_whisper_model()
     if config.engine == "qwen_llm":
         return llm_service.get_llm_model()
-    if config.engine == "kokoro":
-        return get_speech_backend()
     raise ValueError(f"Unknown model engine: {config.engine}")
 
 
@@ -386,24 +367,8 @@ def get_llm_backend_for_engine(engine: str) -> LLMBackend:
         return backend
 
 
-_speech_backend = None
-
-
-def get_speech_backend():
-    """Get or create Read Aloud's Kokoro backend."""
-    global _speech_backend
-
-    if _speech_backend is None:
-        from .kokoro_backend import KokoroBackend
-
-        _speech_backend = KokoroBackend()
-
-    return _speech_backend
-
-
 def reset_backends():
     """Reset backend instances (useful for testing)."""
-    global _stt_backend, _llm_backends, _speech_backend
+    global _stt_backend, _llm_backends
     _stt_backend = None
-    _speech_backend = None
     _llm_backends.clear()
