@@ -1,6 +1,6 @@
 # Expressive dictation: "!" and stretched words from the voice
 
-Status: phases 1–4 built, 2026-10-05 (see "Phases 2–4 as built"); timing check of phases 2–3 below. Planned 2026-10-01. Prototype and evidence: a scratch prototype run over 312 of the user's saved captures (not in the repo).
+Status: phases 1–4 built, 2026-10-05 (see "Phases 2–4 as built"); timing check passed (no added time). Planned 2026-10-01. Prototype and evidence: a scratch prototype run over 312 of the user's saved captures (not in the repo).
 
 ## Goal
 
@@ -84,7 +84,10 @@ Full pipeline, real-time replay through `StreamingCapture` (4B cleanup, baseline
   - The voice was ready in time on all 20.
 - **False alarms, 150 ordinary dictations** (2026-10-04 to 10-05): no "!" added, and the voice was ready in time on all 150.
 - **Work on the critical path:** applying "!" and stretches to the final text takes 0.2 ms for a short dictation, and 1.4 ms for a 60 s one with 12 sentences. The voice itself (27 ms for 60 s) is worked out on a thread while cleanup runs.
-- **Release-time A/B (blocks shipping): not yet clean.** The first run overlapped another session's shared-adapter evaluation on the GPU. Release-to-text was ~1.2 s in both arms, against 0.43 s in phase 1. The paired difference was a median of +60 ms and a mean of +14 ms, ranging from −345 to +275: noise. Rerun on an idle machine.
+- **Release-time A/B (blocks shipping): passed.**
+  - The rerun was after the other job finished: 8 dictations × 2 rounds, alternating on and off, 0.6B cleanup.
+  - Paired difference (on − off): median −1 ms, mean +1 ms (−176 to +190). No added time.
+  - Absolute release-to-text was ~1.1 s in both arms, against 0.43 s in phase 1's check. The extra time is in Whisper after release, not in this feature: the same audio took 0.34 s on fresh runs and 0.7 s on later ones, with or without expression. The first run also overlapped another session's shared-adapter evaluation on the GPU (~1.2 s in both arms) and doesn't count.
 
 ## Labelled set (2026-10-05)
 
