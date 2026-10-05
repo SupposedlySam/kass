@@ -22,6 +22,7 @@ pub mod cancel;
 pub mod capture;
 pub mod client;
 pub mod command;
+pub mod corrections;
 pub mod delivery;
 pub mod http;
 pub mod last_take;
@@ -777,15 +778,57 @@ impl AppEnv {
     }
 
     /// Keep what this take wrote into `pid`'s field as the last take.
-    fn remember(&self, pid: i32, owned: crate::text_insert::Owned) {
+    fn remember(&self, pid: i32, owned: crate::text_insert::Owned, typed: bool) {
         let capture_id = self.capture_id.lock().ok().and_then(|id| id.clone());
         last_take::remember(last_take::LastTake {
             pid,
             capture_id,
             owned,
+            typed,
+        });
+    }
+
+    /// Keep `text`, typed or pasted into `pid`'s field, as the last take
+    /// once it reads back there, for a correction saved in Captures
+    /// (docs/plans/CORRECTIONS_IN_PLACE.md). Keys and ⌘V land a moment
+    /// after they are sent, so it is read on its own thread, and kept only
+    /// while no newer take has gone in.
+    fn remember_typed(&self, pid: i32, bundle_id: Option<String>, text: String) {
+        if !crate::updater::beta_features_on() {
+            return;
+        }
+        let generation = last_take::generation();
+        let capture_id = self.capture_id.clone();
+        std::thread::spawn(move || {
+            for _ in 0..TYPED_READ_BACK_TRIES {
+                std::thread::sleep(TYPED_READ_BACK_INTERVAL);
+                if last_take::generation() != generation {
+                    return;
+                }
+                let read =
+                    crate::text_insert::owned_before_focused(pid, bundle_id.as_deref(), &text);
+                if let Some(owned) = read {
+                    let capture_id = capture_id.lock().ok().and_then(|id| id.clone());
+                    last_take::remember_if(
+                        generation,
+                        last_take::LastTake {
+                            pid,
+                            capture_id,
+                            owned,
+                            typed: true,
+                        },
+                    );
+                    return;
+                }
+            }
         });
     }
 }
+
+/// How often, and how many times, text that went in by keys or ⌘V is looked
+/// for before the caret: about a second in all.
+const TYPED_READ_BACK_INTERVAL: Duration = Duration::from_millis(40);
+const TYPED_READ_BACK_TRIES: u32 = 25;
 
 /// Live text goes into the target's focused field through Accessibility.
 struct AxLive {
@@ -993,7 +1036,7 @@ impl TakeEnv for AppEnv {
             if let Finish::Done(result) = live.finish(Some(text.clone())).await {
                 let written = env.written.lock().ok().and_then(|mut w| w.take());
                 if let (true, Some(focus), Some(owned)) = (env.voice_edits, &focus, written) {
-                    env.remember(focus.pid, owned);
+                    env.remember(focus.pid, owned, false);
                 }
                 return result;
             }
@@ -1003,11 +1046,14 @@ impl TakeEnv for AppEnv {
                 }
                 Some(focus) => {
                     let pid = focus.pid;
-                    let (result, owned) =
+                    let bundle_id = focus.bundle_id.clone();
+                    let (result, tracked) =
                         crate::paste_final_text_tracked(text, focus, prepared, env.voice_edits)
                             .await;
-                    if let Some(owned) = owned {
-                        env.remember(pid, owned);
+                    match tracked {
+                        crate::Tracked::Owned(owned) => env.remember(pid, owned, false),
+                        crate::Tracked::Typed(text) => env.remember_typed(pid, bundle_id, text),
+                        crate::Tracked::Untracked => {}
                     }
                     result
                 }

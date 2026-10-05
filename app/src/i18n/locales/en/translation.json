@@ -255,7 +255,9 @@
       "remove": "Remove",
       "undoFailed": "Could not undo the correction",
       "alter": "Alter",
-      "correctedByYou": "Corrected by you"
+      "correctedByYou": "Corrected by you",
+      "updatedIn": "Updated in {{app}}",
+      "updatedInApp": "Updated where you dictated it"
     },
     "transcript": {
       "refined": "Refined",

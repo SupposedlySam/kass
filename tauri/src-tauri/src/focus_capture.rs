@@ -188,6 +188,11 @@ unsafe fn app_for_pid(pid: i32) -> (Option<String>, Option<String>) {
     (ns_string_to_rust(bundle), ns_string_to_rust(name))
 }
 
+/// Bundle id and display name of the app running as `pid`.
+pub fn app_identity(pid: i32) -> (Option<String>, Option<String>) {
+    unsafe { app_for_pid(pid) }
+}
+
 /// Filesystem path of the app bundle running as `pid`.
 pub fn app_bundle_path(pid: i32) -> Option<String> {
     unsafe {

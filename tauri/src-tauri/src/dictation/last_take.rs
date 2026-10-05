@@ -3,12 +3,15 @@
 //! Morgan not Megan"), and Kass's own last take, which says how much of
 //! that text Kass wrote, so only a fix there is learned from.
 //!
-//! A take is remembered only where Accessibility wrote it and it read back
-//! (the live path, or the insertion chain's Accessibility step). The next
+//! A take is remembered only where it read back: where Accessibility wrote
+//! it (the live path, or the insertion chain's Accessibility step), or, for
+//! a correction saved in Captures (docs/plans/CORRECTIONS_IN_PLACE.md),
+//! where keys or ⌘V put it in an app that ignores Accessibility writes. The next
 //! take that pastes anything replaces it; an edit updates it. Whether the
 //! text is still as it was read (the user hasn't typed, moved the caret, or
 //! left the field) is checked when an edit is applied.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use crate::text_insert::{utf16_len, EditError, Owned};
@@ -25,6 +28,9 @@ pub struct LastTake {
     /// The capture that wrote it.
     pub capture_id: Option<String>,
     pub owned: Owned,
+    /// Put in by keys or ⌘V: the app ignores Accessibility writes, so a
+    /// correction is typed over it, once the app is in front again.
+    pub typed: bool,
 }
 
 /// The text before the caret in `pid`'s field when a take started.
@@ -64,6 +70,9 @@ impl Editable {
 }
 
 static LAST: Mutex<Option<LastTake>> = Mutex::new(None);
+/// Counts every [`remember`] and [`forget`], so a take read back later is
+/// kept only while no other take has replaced it.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub fn current() -> Option<LastTake> {
     LAST.lock().ok()?.clone()
@@ -71,14 +80,35 @@ pub fn current() -> Option<LastTake> {
 
 pub fn remember(take: LastTake) {
     if let Ok(mut last) = LAST.lock() {
+        GENERATION.fetch_add(1, Ordering::SeqCst);
         *last = Some(take);
     }
 }
 
 pub fn forget() {
     if let Ok(mut last) = LAST.lock() {
+        GENERATION.fetch_add(1, Ordering::SeqCst);
         *last = None;
     }
+}
+
+/// Where the last take is now, for [`remember_if`].
+pub fn generation() -> u64 {
+    GENERATION.load(Ordering::SeqCst)
+}
+
+/// [`remember`], unless a take was remembered or forgotten since
+/// `generation`. Returns whether it was kept.
+pub fn remember_if(generation: u64, take: LastTake) -> bool {
+    let Ok(mut last) = LAST.lock() else {
+        return false;
+    };
+    if GENERATION.load(Ordering::SeqCst) != generation {
+        return false;
+    }
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+    *last = Some(take);
+    true
 }
 
 /// After an edit of `edited`: Kass's last take, where it ended the text,
@@ -102,6 +132,120 @@ pub fn edited(edited: &Editable, result: &Result<Owned, EditError>) {
         Err(EditError::NotApplied) => Some(take.clone()),
         Err(_) => None,
     };
+}
+
+/// A correction saved in Captures, from `before` to `after`, for the field
+/// `take` went to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Correction {
+    pub take: LastTake,
+    pub before: String,
+    pub after: String,
+}
+
+/// What became of a correction saved in Captures.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Corrected {
+    /// The field reads corrected, in the app with this pid.
+    Applied(i32),
+    /// Held for when its app is in front again ([`take_held`]).
+    Held,
+    /// Not Kass's last take, or its field changed: nothing was done.
+    Nothing,
+}
+
+/// A typed take's correction, until its app is in front.
+static HELD: Mutex<Option<Correction>> = Mutex::new(None);
+
+/// A correction saved in Captures for `capture_id`, from `before` to
+/// `after`, made in the field Kass's last take went to, through `correct`.
+/// Only for the last take, and only while the field shows it as Kass left
+/// it. A typed take's correction is held instead, for [`take_held`].
+pub fn apply_correction(
+    capture_id: &str,
+    before: &str,
+    after: &str,
+    correct: impl FnOnce(i32, &Owned, &str, &str) -> Result<Owned, EditError>,
+) -> Corrected {
+    let Some(take) = current().filter(|take| take.capture_id.as_deref() == Some(capture_id)) else {
+        return Corrected::Nothing;
+    };
+    if take.typed {
+        return match hold(take, before, after) {
+            true => Corrected::Held,
+            false => Corrected::Nothing,
+        };
+    }
+    let correction = Correction {
+        take,
+        before: before.into(),
+        after: after.into(),
+    };
+    match apply_held(&correction, correct) {
+        Some(pid) => Corrected::Applied(pid),
+        None => Corrected::Nothing,
+    }
+}
+
+/// Hold a correction of the typed `take`. A later correction of the same
+/// text joins the held one, so the field goes from what it shows to the
+/// newest fix in one edit. Returns whether one is held.
+fn hold(take: LastTake, before: &str, after: &str) -> bool {
+    let Ok(mut held) = HELD.lock() else {
+        return false;
+    };
+    let before = match held.take() {
+        Some(earlier) if earlier.take == take && earlier.after == before => earlier.before,
+        _ => before.to_string(),
+    };
+    *held = (before != after).then(|| Correction {
+        take,
+        before,
+        after: after.into(),
+    });
+    held.is_some()
+}
+
+/// The held correction, while its take is still Kass's last take; one whose
+/// take was replaced is dropped. It stays held.
+pub fn held() -> Option<Correction> {
+    let mut held = HELD.lock().ok()?;
+    if held
+        .as_ref()
+        .is_some_and(|c| current().as_ref() != Some(&c.take))
+    {
+        *held = None;
+    }
+    held.clone()
+}
+
+/// [`held`], no longer held.
+pub fn take_held() -> Option<Correction> {
+    let correction = held()?;
+    drop_held();
+    Some(correction)
+}
+
+pub fn drop_held() {
+    if let Ok(mut held) = HELD.lock() {
+        *held = None;
+    }
+}
+
+/// Make `correction` through `correct`, where its take is still Kass's last
+/// take. Returns the app's pid when the field now reads corrected.
+pub fn apply_held(
+    correction: &Correction,
+    correct: impl FnOnce(i32, &Owned, &str, &str) -> Result<Owned, EditError>,
+) -> Option<i32> {
+    let take = &correction.take;
+    if current().as_ref() != Some(take) {
+        return None;
+    }
+    let editable = Editable::new(take.pid, take.owned.clone(), Some(take.clone()));
+    let result = correct(take.pid, &take.owned, &correction.before, &correction.after);
+    edited(&editable, &result);
+    result.ok().map(|_| take.pid)
 }
 
 /// Kass's part `own` of the text `before`, once the edit made it `after`:
@@ -155,11 +299,15 @@ mod tests {
         }
     }
 
+    /// Tests that use the one last take run one at a time.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
     fn take(start: i64, text: &str) -> LastTake {
         LastTake {
             pid: 7,
             capture_id: Some("c1".into()),
             owned: owned(start, text),
+            typed: false,
         }
     }
 
@@ -214,12 +362,66 @@ mod tests {
 
     #[test]
     fn a_fix_remembers_the_take_as_it_now_reads() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         forget();
         let last = take(14, "Hi Megan.");
         remember(last.clone());
         let editable = Editable::new(7, owned(0, "I typed this. Hi Megan."), Some(last));
         edited(&editable, &Ok(owned(0, "I typed this. Hi Morgan.")));
         assert_eq!(current().map(|l| l.owned), Some(owned(14, "Hi Morgan.")));
+        forget();
+    }
+
+    #[test]
+    fn a_saved_correction_applies_only_to_the_last_take() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        forget();
+        remember(take(14, "Hi Megan."));
+        let fixed = |_: i32, own: &Owned, _: &str, _: &str| Ok(owned(own.start, "Hi Morgan."));
+        let corrected = |id| apply_correction(id, "Hi Megan.", "Hi Morgan.", fixed);
+        assert_eq!(corrected("c0"), Corrected::Nothing);
+        assert_eq!(corrected("c1"), Corrected::Applied(7));
+        // Remembered as it now reads, so the next correction finds it.
+        assert_eq!(current().map(|l| l.owned), Some(owned(14, "Hi Morgan.")));
+        let changed = |_: i32, _: &Owned, _: &str, _: &str| Err(EditError::Changed);
+        assert_eq!(
+            apply_correction("c1", "Hi Morgan.", "Hi Morgana.", changed),
+            Corrected::Nothing
+        );
+        // A field that changed is no longer Kass's to correct.
+        assert_eq!(current(), None);
+        forget();
+    }
+
+    #[test]
+    fn a_typed_take_s_corrections_wait_and_join() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        forget();
+        drop_held();
+        let typed = LastTake {
+            typed: true,
+            ..take(14, "Hi Megan, Tuesday.")
+        };
+        remember(typed.clone());
+        let unused = |_: i32, _: &Owned, _: &str, _: &str| -> Result<Owned, EditError> {
+            panic!("a typed take is corrected only once its app is in front")
+        };
+        let first = apply_correction("c1", "Hi Megan, Tuesday.", "Hi Morgan, Tuesday.", unused);
+        assert_eq!(first, Corrected::Held);
+        let second = apply_correction("c1", "Hi Morgan, Tuesday.", "Hi Morgan, Thursday.", unused);
+        assert_eq!(second, Corrected::Held);
+        // One edit, from what the field shows to the newest fix.
+        let joined = held().unwrap();
+        assert_eq!(
+            (joined.before.as_str(), joined.after.as_str()),
+            ("Hi Megan, Tuesday.", "Hi Morgan, Thursday.")
+        );
+        // A newer take drops it.
+        let generation = generation();
+        remember(take(0, "Something else."));
+        assert_eq!(held(), None);
+        // And a take read back late doesn't replace the newer one.
+        assert!(!remember_if(generation, typed));
         forget();
     }
 }
