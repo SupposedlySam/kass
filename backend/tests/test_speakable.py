@@ -27,10 +27,8 @@ from backend.services.speech import split_sentences
         ("Your rule (decision 22) already covers it.", "Your rule, decision 22, already covers it."),
         ("It covers the Duo (decision 22)", "It covers the Duo, decision 22."),
         ("Display features (a foldable's hinge): stored.", "Display features, a foldable's hinge: stored."),
-        # Slashes between words are "or", never "slash".
-        ("Pick tab/page.", "Pick tab or page."),
+        # Spaced slashes between words are a choice.
         ("Pick tab / page / sheet.", "Pick tab, page, or sheet."),
-        ("Use and/or here.", "Use and or here."),
         # A lettered option keeps a pause after its letter.
         ("A. Cut them until something reads them.", "Option A: Cut them until something reads them."),
         ("B) Keep them for later.", "Option B: Keep them for later."),
@@ -66,9 +64,69 @@ def test_plain_prose_is_left_as_it_is():
     assert speakable(prose) == prose
 
 
-def test_dates_paths_and_initials_are_not_turned_into_words():
-    assert speakable("On 10/2 it moved to /usr/local/bin.") == "On 10/2 it moved to /usr/local/bin."
-    assert speakable("J. Smith wrote it.") == "J. Smith wrote it."
+def test_dates_versions_and_initials_are_left_alone():
+    assert speakable("On 10/2, version 0.7.3 shipped.") == "On 10/2, version 0.7.3 shipped."
+    assert speakable("J. Smith wrote it with Node.js.") == "J. Smith wrote it with Node.js."
+
+
+@pytest.mark.parametrize(
+    ("written", "said"),
+    [
+        # A slash is read by what it's part of, with what that is said first.
+        (
+            "The player lives in tauri/src-tauri/src/read_aloud.rs.",
+            "The player lives in the file tauri slash src hyphen tauri slash src slash read underscore aloud dot rs.",
+        ),
+        ("It's written up in FORK.md.", "It's written up in the file FORK dot md."),
+        ("Look in scripts/fork/ for it.", "Look in the folder scripts slash fork for it."),
+        (
+            "Commits listed in scripts/fork/skip-upstream are skipped.",
+            "Commits listed in the path scripts slash fork slash skip hyphen upstream are skipped.",
+        ),
+        (
+            "Delete it in ~/.cache/huggingface/hub to free space.",
+            "Delete it in the path tilde slash dot cache slash huggingface slash hub to free space.",
+        ),
+        ("It moved to /usr/local/bin.", "It moved to the path slash usr slash local slash bin."),
+        # A path that starts the sentence starts with a capital.
+        ("scripts/fork/sync-upstream merges it.", "The path scripts slash fork slash sync hyphen upstream merges it."),
+        # Branches are read as named, with no label.
+        ("Branch from upstream/main first.", "Branch from upstream slash main first."),
+        ("Merge feature/read-aloud.", "Merge feature slash read hyphen aloud."),
+        # A GitHub owner, with capitals or digits inside, makes a repository.
+        ("The fork is SupposedlySam/kass.", "The fork is the repository SupposedlySam slash kass."),
+        ("PRs go to mrgnhnt96/kass.", "PRs go to the repository mrgnhnt96 slash kass."),
+        # Already named, so not named twice.
+        ("Edit the file FORK.md.", "Edit the file FORK dot md."),
+        ("Use the scripts/fork/ folder.", "Use the scripts slash fork folder."),
+        # Only two plain words are a choice.
+        ("Pick tab/page.", "Pick tab or page."),
+        ("Use and/or here.", "Use and or here."),
+        ("Ask Morgan/Jonah.", "Ask Morgan or Jonah."),
+    ],
+)
+def test_a_slash_is_read_as_what_it_is_part_of(written, said):
+    assert speakable(written) == said
+
+
+@pytest.mark.parametrize(
+    ("written", "said"),
+    [
+        (
+            "A plain `git merge upstream/main` would apply it.",
+            "A plain command, git merge upstream slash main, would apply it.",
+        ),
+        (
+            "Run `scripts/fork/sync-upstream --dry` first.",
+            "Run the command, scripts slash fork slash sync hyphen upstream dash dash dry, first.",
+        ),
+        ("Then `just install`.", "Then the command, just install."),
+        # A one-word code span is just the word.
+        ("Set `speak_naturally` off.", "Set speak_naturally off."),
+    ],
+)
+def test_a_command_in_backticks_is_said_to_be_one(written, said):
+    assert speakable(written) == said
 
 
 def test_lines_are_still_read_one_by_one():

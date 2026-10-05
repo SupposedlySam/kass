@@ -22,7 +22,7 @@ In **Settings › Read Aloud** you can also:
 - Change the keys, or turn Read Aloud off. The keys must be different from your dictation and Command Mode keys.
 - Pick a voice: 28 American and British English voices. **Preview** plays the voice you picked.
 - Change the speed, from half to twice normal.
-- Turn **Read naturally** on or off. When it's on, which is the default, Kass reads the text the way you'd say it. Slashes, brackets and lettered options become pauses, so `Keyboard policy (resize / lift / hold)` is read "Keyboard policy, for example resize, lift, and hold". "e.g." is read "for example", Markdown is read as its text, and a link as its site. Turn it off to hear the text exactly as written.
+- Turn **Read naturally** on or off. When it's on, which is the default, Kass reads the text the way you'd say it. Slashes, brackets and lettered options become pauses, so `Keyboard policy (resize / lift / hold)` is read "Keyboard policy, for example resize, lift, and hold". Paths, branches and commands are read as what they are: `FORK.md` is "the file FORK dot md", `upstream/main` is "upstream slash main", and a command in backticks is "the command, …". "e.g." is read "for example", Markdown is read as its text, and a link as its site. Turn it off to hear the text exactly as written.
 
 ## Limits
 

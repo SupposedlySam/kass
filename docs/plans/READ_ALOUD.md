@@ -50,12 +50,13 @@ A Read Aloud page in Settings, next to Command Mode: the chord (with Turn off), 
 **Read naturally** (`speak_naturally`, on by default) reads the selection the way a person would say it (`services/speakable.py`, applied by `/speech/sentences`). Kokoro's phonemizer, misaki, keeps only `; : , . ! ? — …` and quotes as pauses: it reads ` / ` as "slash" in one breath, drops the period after a lettered option ("A. Cut them" is read "A cut them"), and spells out "e.g.". So every symbol the rules remove leaves one of those pauses in its place:
 
 - A slash list in brackets is a list of examples: `(resize / lift / hold)` → `, for example resize, lift, and hold,`; one that trails off (`…`) ends `, and so on`.
-- Other brackets are set off by commas; slashes between words are "or".
+- Other brackets are set off by commas.
+- A slash without spaces is read by what it's part of, judged by the token's form, with what it is said first: a path with a file extension or a bare file name is "the file …" (`FORK.md` → "the file FORK dot md"), one ending in `/` "the folder …", any other path "the path …"; `upstream/main` and `feature/x` are branches ("upstream slash main"); an owner with digits or inner capitals makes a repository ("the repository SupposedlySam slash kass"). In paths, `/ - _ .` are said "slash", "hyphen", "underscore" and "dot". Only two plain words are a choice ("tab or page"). A code span that starts with a command (`git`, `just`, `scripts/…`) is "the command, …," with its flags read out. Without an extension, a path can't tell a file from a folder, so it's "the path".
 - A lettered option line (`A.`, `B)`) becomes `Option A:`.
 - e.g., i.e., etc., vs., w/, `&` and `->` are said in words; Markdown is read as its text and a URL as its site.
 - A line with no closing punctuation, such as a heading or bullet, ends with a period.
 
-Dates and paths (`10/2`, `/usr/bin`) are left alone. Off, the text is read exactly as written. A later step could rewrite with the cleanup model for what fixed rules can't cover.
+Dates (`10/2`) and versions (`0.7.3`) are left alone. Off, the text is read exactly as written. A rewrite by the cleanup model could cover what fixed rules can't, such as whether an extensionless path is a file or a folder, but the 0.6B model, tried on these cases, repeated its instructions and dropped sentences.
 
 ## Risks
 

@@ -23,7 +23,7 @@ just setup-hooks
 ## What only this fork has
 
 - Read Aloud: the backend (`services/speech.py`, `services/speakable.py`, `backends/kokoro_backend.py`, `routes/speech.py`), the chord and player (`tauri/src-tauri/src/read_aloud.rs`), the settings page, the onboarding step, and their docs.
-- **Read naturally** (on by default, in Settings › Read Aloud): text is read the way you'd say it, with a pause wherever a slash or bracket was. A lone letter "A" is said "ay", not "uh".
+- **Read naturally** (on by default, in Settings › Read Aloud): text is read the way you'd say it, with a pause wherever a slash or bracket was, and paths, branches, repositories and commands said as what they are. A lone letter "A" is said "ay", not "uh".
 - Updates come from this fork's releases, not Morgan's (`tauri.conf.json`'s updater endpoint and `BETA_ENDPOINT` in `updater.rs`). Otherwise a copy built here would replace itself with Morgan's next release, which has no Read Aloud. The fork publishes no releases, so a copy built here keeps the version it was built from until you run `just install` again.
 - This file and `scripts/fork/`.
 
