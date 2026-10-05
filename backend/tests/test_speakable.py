@@ -40,6 +40,9 @@ from backend.services.speech import split_sentences
         ("Ship it -> done.", "Ship it to done."),
         ("Read & write.", "Read and write."),
         ("React vs. Vue.", "React versus Vue."),
+        ("Merge #2169 first.", "Merge number 2169 first."),
+        # A numbered item's number is followed by a colon, one short pause.
+        ("1. Merge it.\n2) Rerun the checks.", "1: Merge it.\n2: Rerun the checks."),
         # Markdown is read as its text.
         ("## Decision 9 of 11", "Decision 9 of 11."),
         ("- **Bold** and `code` and *this*", "Bold and code and this."),

@@ -258,3 +258,47 @@ def test_the_letter_is_marked_whether_or_not_read_naturally_is_on(client, kokoro
         update_capture_settings(db, {"speak_naturally": False})
     assert client.post("/speech", json={"text": "A or B?"}).status_code == 200
     assert kokoro.calls[-1][0] == "[A](/ˈA/) or B?"
+
+
+# -- numbered lists ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        "Order from here:\n\n1. Merge #2169.\n2. Merge main into the branch.\n3. The walkthrough.",
+        # Electron apps' Accessibility text runs a list's items together.
+        "Order from here:1. Merge #2169.2. Merge main into the branch.3. The walkthrough.",
+        "Order from here: 1. Merge #2169. 2. Merge main into the branch. 3. The walkthrough.",
+    ],
+)
+def test_each_numbered_item_is_read_as_its_own_piece(selection):
+    assert speech.split_sentences(speech.separate_list_items(selection)) == [
+        "Order from here:",
+        "1. Merge #2169.",
+        "2. Merge main into the branch.",
+        "3. The walkthrough.",
+    ]
+
+
+def test_numbers_that_dont_count_up_from_one_are_not_a_list():
+    for prose in ("Kass 0.7.3. Then 2. it shipped.", "Only 2. Not a list.", "Step 1. Then nothing else."):
+        assert speech.separate_list_items(prose) == prose
+
+
+def test_a_numbered_item_is_its_number_a_pause_and_the_item_after_a_pause(client, kokoro):
+    response = client.post("/speech", json={"text": "2: Merge main."})
+    assert [call[0] for call in kokoro.calls] == ["2.", "Merge main."]
+    samples, rate = sf.read(io.BytesIO(response.content))
+    # Silence first, so the item before doesn't run into this number.
+    assert not samples[: int(speech.PAUSE_BEFORE_ITEM_SECONDS * rate)].any()
+
+
+def test_text_that_isnt_a_numbered_item_is_one_synthesis(client, kokoro):
+    client.post("/speech", json={"text": "Version 2.5 shipped."})
+    assert [call[0] for call in kokoro.calls] == ["Version 2.5 shipped."]
+
+
+def test_read_naturally_reads_a_run_together_list_with_a_pause_after_each_number(client, kokoro):
+    body = client.post("/speech/sentences", json={"text": "Order from here:1. Merge #2169.2. Merge main."}).json()
+    assert body == {"sentences": ["Order from here:", "1: Merge number 2169.", "2: Merge main."]}

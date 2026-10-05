@@ -30,6 +30,8 @@ _SYMBOLS = [
     (re.compile(r"\s*(?:->|=>|→)\s*"), " to "),
     (re.compile(r"\s+&\s+"), " and "),
     (re.compile(r"\.\.\.+"), "…"),
+    # "#2169" is a number, which misaki would read with the # left out.
+    (re.compile(r"(?<![\w&#])#(\d+)\b"), r"number \1"),
 ]
 
 _LINK = re.compile(r"!?\[([^\]]+)\]\([^)\s]+\)")
@@ -148,6 +150,10 @@ _EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1|(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(
 
 # At a line's start: headings, bullets, quotes. A number list ("1. ") is kept.
 _LINE_MARKER = re.compile(r"^\s*(?:#{1,6}\s+|[-*•+]\s+|>\s*)")
+# A numbered item ("1. ", "2) "). misaki drops the period after "1" and keeps
+# a full stop after "2", so it's said with a colon: one short pause after the
+# number, the same for every item. speech.py adds the pause before it.
+_NUMBERED = re.compile(r"^(\d{1,3})[.)]\s+(?=\S)")
 # "A. Cut them": a lettered option, which misaki would read "A cut them".
 _OPTION = re.compile(r"^([A-F])[.)]\s+(?=[A-Z\"'“])")
 _PARENS = re.compile(r"\s*\(([^()\n]*)\)")
@@ -291,6 +297,7 @@ def _tidy(line: str) -> str:
 
 def _line(line: str) -> str:
     line = _LINE_MARKER.sub("", line)
+    line = _NUMBERED.sub(r"\1: ", line)
     line = _OPTION.sub(r"Option \1: ", line)
     line = _TECHNICAL.sub(_technical, line)
     line = _label_commands(line)

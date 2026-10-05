@@ -44,6 +44,7 @@ async def speech_sentences_endpoint(request: models.SpeechRequest, db: Session =
         speech.ensure_model_ready()
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    text = speech.separate_list_items(text)
     if settings_service.get_capture_settings(db).speak_naturally:
         text = speakable(text)
     return models.SpeechSentencesResponse(sentences=speech.split_sentences(text))
