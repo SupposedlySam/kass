@@ -40,14 +40,7 @@ on the onboarding designs canvas.
 10. **Rewrite a selection.** A paragraph is selected in a text box. Hold the
    command keys (right ⌘ + right ⇧ by default) and say an instruction, or click
    one. The text changes in place, with Undo.
-11. **Read Aloud (optional).** Kass can speak selected text
-    (docs/plans/READ_ALOUD.md), but its Kokoro voice is a separate download
-    that the setup downloads in step 2 leave out. "Download the voice" starts
-    it and "Skip for now" moves on; the user can keep going while it downloads,
-    or get it later in Settings › Read Aloud. Once it's downloaded, "Listen"
-    reads a sample, since the chord doesn't read Kass's own windows. Never
-    locked.
-12. **You're set.** "Go talk." The shortcuts that are set. "Start using Kass"
+11. **You're set.** "Go talk." The three shortcuts. "Start using Kass"
     closes onboarding and shows the main window; "Show me now" opens
     Settings › Features.
 

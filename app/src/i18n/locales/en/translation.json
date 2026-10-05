@@ -1654,28 +1654,12 @@
         "bullets": "turn it into bullets"
       }
     },
-    "readAloud": {
-      "title": "Kass can talk back.",
-      "body": "Read Aloud speaks the text you select, in any app. It’s optional: its voice is a separate {{size}} MB download. Skip it now and download it any time in Settings › Read Aloud.",
-      "download": "Download the voice",
-      "retry": "Try again",
-      "starting": "Starting the download…",
-      "downloading": "Downloading the voice… {{percent}}%",
-      "failed": "The download stopped.",
-      "continue": "Keep going while it downloads",
-      "readyBody": "The voice is ready. Hear how it sounds:",
-      "sample": "Select any text, press the keys, and Kass reads it to you. Press them again, or Escape, to stop.",
-      "chord": "Reads what you’ve selected in other apps.",
-      "listen": "Listen",
-      "playing": "Speaking…"
-    },
     "done": {
       "title": "Go talk.",
       "body": "We’ll show you the rest when it’s useful.",
       "push": "Hold, talk, let go. Works in any app.",
       "toggle": "Hands-free. Tap to start, tap to stop.",
       "command": "Rewrite the text you’ve selected.",
-      "speak": "Read the text you’ve selected aloud.",
       "change": "Change any of these in Settings.",
       "start": "Start using Kass",
       "showMe": "Show me now",
