@@ -2,11 +2,17 @@
 
 Notable changes to Kass for users. Each release gets a section here, newest first. The website shows this file at [kass.mrgnhnt.com/changelog](https://kass.mrgnhnt.com/changelog/).
 
-## Unreleased
+## 0.7.4 — October 6, 2026
 
 ### New
 
+- **Write how it was said.** Say something with energy and Kass ends it with "!" when the words fit; draw a word out and it's written that way ("wayyy"). It adds no time after you release the keys. Remove or add one in your edits and Kass learns how you like it. Turn it off with **Write how it was said** in Settings › Transcription.
+- **Cleaner text from your first take.** Kass now ships cleanup models it trained for each model size, so your text reads well before your Mac has trained on your own dictations, and your own training builds on them. Turn this off with **Use Kass's trained models** in Settings › Transcription.
 - **Apps can get a text field ready for you to dictate into.** When you start dictating, Kass now tells the app in front first, so apps without a regular text field, like terminals, can show one for Kass to type into. Apps opt in, and nothing changes in apps that don't. App developers: see [Dictation handshake](https://github.com/mrgnhnt96/kass/blob/main/docs/DICTATION_HANDSHAKE.md).
+
+### Improved
+
+- **Kass spells its own name.** "Kass" is now in every dictionary to start, instead of "Cass" or "Kas". Edit or delete it like any other word; deleted, it stays deleted.
 
 ### Removed
 
