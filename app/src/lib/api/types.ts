@@ -470,6 +470,8 @@ export interface CaptureSettings {
   discard_audio: boolean;
   /** Send anonymous daily usage counts (backend/services/usage_report.py). */
   share_usage: boolean;
+  /** Start from the cleanup and voice models Kass ships (backend/services/shared_adapters.py). */
+  shared_adapters: boolean;
 }
 
 export interface RetentionStatus {

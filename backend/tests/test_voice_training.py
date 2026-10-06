@@ -261,6 +261,23 @@ def test_adapter_merges_into_the_same_outputs(tmp_path):
     assert not any(hasattr(p, "merged") for _, p in fresh.named_modules())
 
 
+def test_a_float16_adapter_loads_for_training_in_float32(tmp_path):
+    """The shared voice adapter ships in float16 (scripts/shared-adapters/publish.py)."""
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+
+    model = tiny_whisper()
+    lora.add(model)
+    lora.save(model, tmp_path / "voice", {"model_size": "turbo"})
+    path = str(tmp_path / "voice" / lora.ADAPTER_FILE)
+    half = {name: value.astype(mx.float16) for name, value in mx.load(path).items()}
+    mx.eval(half)
+    mx.save_safetensors(path, half)
+    fresh = tiny_whisper()
+    lora.load_into(fresh, tmp_path / "voice")
+    assert {value.dtype for _, value in tree_flatten(fresh.trainable_parameters())} == {mx.float32}
+
+
 def test_adapter_for_a_different_model_is_refused(tmp_path):
     import mlx.core as mx
 

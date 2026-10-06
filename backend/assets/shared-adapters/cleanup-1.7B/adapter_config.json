@@ -1,0 +1,10 @@
+{
+  "fine_tune_type": "lora",
+  "num_layers": 4,
+  "lora_parameters": {
+    "rank": 8,
+    "dropout": 0.0,
+    "scale": 16.0
+  },
+  "kass_base_path": "mlx-community/Qwen3-1.7B-4bit"
+}

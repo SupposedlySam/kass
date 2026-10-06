@@ -148,7 +148,7 @@ class MLXSTTBackend:
                     logger.exception("The voice model failed to load; using plain %s", model_size)
                     from ..services.model_improvement.manager import quarantine_voice
 
-                    quarantine_voice("The trained voice model failed to load and was turned off.")
+                    quarantine_voice("The trained voice model failed to load and was turned off.", adapter)
                     self.model = mlx_whisper_loader.load_whisper(
                         local_model_path(model_name, (".safetensors", ".bin", ".npz"))
                     )

@@ -79,6 +79,8 @@ class CaptureSettings(Base):
     share_usage = Column(Boolean, nullable=False, default=True)
     usage_device_id = Column(String, nullable=True)
     usage_sent_through = Column(String, nullable=True)
+    # Start from the adapters Kass ships (services/shared_adapters.py).
+    shared_adapters = Column(Boolean, nullable=False, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

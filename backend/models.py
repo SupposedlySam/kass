@@ -290,6 +290,8 @@ class CaptureSettingsResponse(BaseModel):
     discard_audio: bool = False
     # Send anonymous daily usage counts (services/usage_report.py).
     share_usage: bool = True
+    # Start from the adapters Kass ships (services/shared_adapters.py).
+    shared_adapters: bool = True
 
     class Config:
         from_attributes = True
@@ -325,6 +327,7 @@ class CaptureSettingsUpdate(BaseModel):
     onboarding_completed: bool | None = None
     discard_audio: bool | None = None
     share_usage: bool | None = None
+    shared_adapters: bool | None = None
 
 
 class TakeReportRequest(BaseModel):

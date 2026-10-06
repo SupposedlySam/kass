@@ -539,7 +539,9 @@ async def refine_transcript(
                 raise
             from .model_improvement.manager import quarantine_adapter
 
-            quarantine_adapter("The personal adapter failed to load or generate; reverted to the base model.")
+            quarantine_adapter(
+                "The personal adapter failed to load or generate; reverted to the base model.", adapter_path
+            )
             options.clear()
             text = await backend.generate(**arguments)
         # The model closes every text with a period, even one that ends on "!"

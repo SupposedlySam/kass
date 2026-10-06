@@ -728,6 +728,13 @@
           "description": "Keep the original recording alongside every transcript."
         }
       },
+      "sharedAdapters": {
+        "title": "Kass training",
+        "toggle": {
+          "title": "Use Kass's trained models",
+          "description": "Kass ships cleanup models it trained on made-up examples, so your text reads well from your first take. Your Mac's own training builds on them. Turn this off to use the plain models."
+        }
+      },
       "voiceTraining": {
         "title": "Voice training",
         "description": "Kass trains its speech model on your own takes, with other people talking and busy rooms mixed in, so it follows your voice when it isn't quiet. Training runs while your Mac is idle, and a new version is used only when it makes fewer mistakes.",

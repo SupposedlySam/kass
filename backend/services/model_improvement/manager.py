@@ -20,7 +20,7 @@ from pathlib import Path
 
 from ... import beta, config
 from ...database import session as database_session
-from .. import correction_learning
+from .. import correction_learning, shared_adapters
 from .data import collect, digest, readiness
 from .evaluation import score_rows, score_speech
 
@@ -185,15 +185,20 @@ def status():
 
 
 def active_adapter(model_size, flags):
-    item = _active.get("llm")
-    if not item or item["model_size"] != model_size:
-        return None
-    if digest(correction_learning._state["rules"] if correction_learning._state else []) != item["rules_digest"]:
-        return None
+    """The personal adapter for cleanup, else the shared one (shared_adapters.py), else None."""
     from ..refinement import RefinementFlags
 
     normalized = RefinementFlags.from_dict(flags).to_dict()
-    if normalized not in item["tested_flags"]:
+    return _personal_adapter(model_size, normalized) or shared_adapters.cleanup(model_size, normalized)
+
+
+def _personal_adapter(model_size, flags):
+    item = _active.get("llm")
+    if not item or item["model_size"] != model_size or not shared_adapters.usable(item.get("shared")):
+        return None
+    if digest(correction_learning._state["rules"] if correction_learning._state else []) != item["rules_digest"]:
+        return None
+    if flags not in item["tested_flags"]:
         return None
     return item["path"]
 
@@ -217,20 +222,26 @@ def _voice_status():
     }
 
 
-def voice_adapter(model_size):
-    """The voice adapter to merge into ``model_size``, or None for plain weights."""
+def _personal_voice(model_size):
     item = _active.get("voice")
-    if not item or item["model_size"] != model_size:
+    if not item or item["model_size"] != model_size or not shared_adapters.usable(item.get("shared")):
         return None
     return item["path"]
 
 
-def quarantine_voice(message):
+def voice_adapter(model_size):
+    """The voice adapter to merge into ``model_size``: personal, else shared, else None for plain weights."""
+    return _personal_voice(model_size) or shared_adapters.voice(model_size)
+
+
+def quarantine_voice(message, path=None):
     """Stop using a voice adapter that failed to load; plain turbo takes over."""
     global _active
     initialize()
     with _lock:
-        if "voice" not in _active:
+        if "voice" not in _active or (path and path != _active["voice"]["path"]):
+            if path:
+                shared_adapters.quarantine(path)
             return
         _state["blocked"].append(_active["voice"]["id"])
         _active = {key: value for key, value in _active.items() if key != "voice"}
@@ -246,11 +257,13 @@ def speech_model(configured):
     return item["model"] if item and item["configured"] == configured else configured
 
 
-def quarantine_adapter(message):
+def quarantine_adapter(message, path=None):
     global _active
     initialize()
     with _lock:
-        if "llm" not in _active:
+        if "llm" not in _active or (path and path != _active["llm"]["path"]):
+            if path:
+                shared_adapters.quarantine(path)
             return
         _state["blocked"].append(_active["llm"]["id"])
         _active = {key: value for key, value in _active.items() if key != "llm"}
@@ -380,8 +393,21 @@ def _prepare():
     rules = deepcopy(correction_learning._state["rules"])
     path = _cached(MLX_HF_REPOS[size]) if train_ready or (len(raw_tests) >= 5 and counts["audio_test"] >= 5) else None
     prior = active.get("llm")
-    if prior and (prior["model_size"] != size or prior["rules_digest"] != digest(rules)):
+    if prior and (
+        prior["model_size"] != size
+        or prior["rules_digest"] != digest(rules)
+        or not shared_adapters.usable(prior.get("shared"))
+    ):
         prior = None
+    # Training starts from the shared adapter when the personal one isn't
+    # built on this release's (docs/plans/SHARED_ADAPTERS.md); otherwise from
+    # the personal one. Either way the candidate must beat the model in use.
+    shared = shared_adapters.cleanup(size)
+    shared_id = shared_adapters.cleanup_id(size) if shared else None
+    if shared and (not prior or prior.get("shared") != shared_id):
+        start, lineage = shared, shared_id
+    else:
+        start, lineage = (prior["path"], prior.get("shared")) if prior else (None, None)
     plan = {
         "samples": samples,
         "model_size": size,
@@ -391,7 +417,9 @@ def _prepare():
         "speech_candidates": speech_candidates,
         "rules": rules,
         "pipeline": pipeline_id(),
-        "baseline_adapter": prior["path"] if prior else None,
+        "baseline_adapter": prior["path"] if prior else shared,
+        "start_adapter": start,
+        "shared": lineage,
         "train_ready": train_ready and bool(path),
         "has_training_data": train_ready,
         "baseline_revision": _state["revision"],
@@ -407,6 +435,7 @@ def _prepare():
             "stt": current_stt,
             "rules": rules,
             "pipeline": pipeline_id(),
+            "start": start,
         }
     )
     # The refinement model trains first when it has new data; otherwise the
@@ -462,14 +491,26 @@ def _voice_plan(summary, active, raw_tests, language):
         resume = str(_inside_root(resume)) if resume and (Path(resume) / "adapter.safetensors").is_file() else None
     except ValueError:
         resume = None
-    production = active.get("voice", {}).get("path")
+    personal = active.get("voice")
+    if personal and not shared_adapters.usable(personal.get("shared")):
+        personal = None
+    shared = shared_adapters.voice("turbo")
+    shared_id = shared_adapters.voice_id("turbo") if shared else None
+    production = personal["path"] if personal else shared
+    start = resume or (personal["path"] if personal else None)
+    lineage = _voice_lineage(start) if start else None
+    if (start and not shared_adapters.usable(lineage)) or (shared and lineage != shared_id):
+        # Continue from this release's shared adapter rather than from a
+        # model built on another one, or on plain turbo.
+        start, lineage = shared, shared_id
     return {
         "repo": WHISPER_HF_REPOS["turbo"],
         "takes": takes,
         "room": bank.room_paths(),
         "language": language,
-        "resume": resume or production,
+        "resume": start,
         "production": production,
+        "shared": lineage,
         "bank_digest": bank.digest(),
         "corrections": [
             {"id": s["id"], "audio": s["audio"], "audio_hash": s["audio_hash"], "expected": s["expected"]}
@@ -478,6 +519,16 @@ def _voice_plan(summary, active, raw_tests, language):
         "train_seconds": 900,
         "max_updates": 250,
     }
+
+
+def _voice_lineage(path):
+    """The shared voice adapter a trained one was built on (its config's ``shared``), or None."""
+    from ..voice_training import lora
+
+    try:
+        return json.loads((Path(path) / lora.CONFIG_FILE).read_text()).get("shared")
+    except (OSError, ValueError):
+        return None
 
 
 def _command(plan):
@@ -517,6 +568,8 @@ def _promote(plan, directory, result, fingerprint):
                 "base_path": plan["model_path"],
                 "pipeline": plan["pipeline"],
                 "rules_digest": digest(plan["rules"]),
+                # The shared adapter it was built on (shared_adapters.py), or None.
+                "shared": plan.get("shared"),
                 "tested_flags": [RefinementFlags.from_dict(flags).to_dict() for flags in report["tested_flags"]],
                 "sha256": hashlib.sha256((path / "adapters.safetensors").read_bytes()).hexdigest(),
                 "config_sha256": hashlib.sha256((path / "adapter_config.json").read_bytes()).hexdigest(),
@@ -561,6 +614,7 @@ def _promote(plan, directory, result, fingerprint):
                 "sha256": sha,
                 "config_sha256": config_sha,
                 "activated": datetime.now(UTC).isoformat(),
+                "shared": (plan.get("voice") or {}).get("shared"),
             }
             if not _valid_voice(active["voice"]):
                 raise ValueError("Candidate voice adapter integrity check failed")

@@ -1,0 +1,188 @@
+{
+  "id": "cleanup-4B-6b523e39c385",
+  "pipeline": "d1bf8b6f5b5b24bfcfd693ae9123d81cf9e0c66d2da631625fc417d84d160712",
+  "tested_flags": [
+    {
+      "smart_cleanup": true,
+      "self_correction": true,
+      "preserve_technical": true
+    }
+  ],
+  "scores": {
+    "adapter": {
+      "categories": {
+        "filler": {
+          "cases": 9,
+          "errors": 7,
+          "exact": 6,
+          "facts_changed": 0,
+          "words_dropped": 2
+        },
+        "restart": {
+          "cases": 8,
+          "errors": 17,
+          "exact": 5,
+          "facts_changed": 0,
+          "words_dropped": 2
+        },
+        "repeat": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "changed_answer": {
+          "cases": 8,
+          "errors": 6,
+          "exact": 6,
+          "facts_changed": 1,
+          "words_dropped": 1
+        },
+        "technical": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "question": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "command": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "punctuation": {
+          "cases": 8,
+          "errors": 5,
+          "exact": 4,
+          "facts_changed": 0,
+          "words_dropped": 1
+        },
+        "numbers": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "leave": {
+          "cases": 10,
+          "errors": 1,
+          "exact": 9,
+          "facts_changed": 0,
+          "words_dropped": 0
+        }
+      },
+      "errors": 36,
+      "exact": 70,
+      "cases": 83,
+      "facts_changed": 1,
+      "words_dropped": 6,
+      "median_seconds": 1.6224329169781413,
+      "median_prompt_tokens": 1086
+    },
+    "stock": {
+      "categories": {
+        "filler": {
+          "cases": 9,
+          "errors": 6,
+          "exact": 6,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "restart": {
+          "cases": 8,
+          "errors": 40,
+          "exact": 1,
+          "facts_changed": 0,
+          "words_dropped": 4
+        },
+        "repeat": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "changed_answer": {
+          "cases": 8,
+          "errors": 20,
+          "exact": 4,
+          "facts_changed": 3,
+          "words_dropped": 2
+        },
+        "technical": {
+          "cases": 8,
+          "errors": 0,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "question": {
+          "cases": 8,
+          "errors": 11,
+          "exact": 6,
+          "facts_changed": 1,
+          "words_dropped": 3
+        },
+        "command": {
+          "cases": 8,
+          "errors": 273,
+          "exact": 4,
+          "facts_changed": 2,
+          "words_dropped": 16
+        },
+        "punctuation": {
+          "cases": 8,
+          "errors": 6,
+          "exact": 5,
+          "facts_changed": 0,
+          "words_dropped": 0
+        },
+        "numbers": {
+          "cases": 8,
+          "errors": 8,
+          "exact": 7,
+          "facts_changed": 1,
+          "words_dropped": 0
+        },
+        "leave": {
+          "cases": 10,
+          "errors": 4,
+          "exact": 8,
+          "facts_changed": 0,
+          "words_dropped": 3
+        }
+      },
+      "errors": 368,
+      "exact": 57,
+      "cases": 83,
+      "facts_changed": 7,
+      "words_dropped": 28,
+      "median_seconds": 1.5479672500223387,
+      "median_prompt_tokens": 1086
+    }
+  },
+  "training": {
+    "size": "4B",
+    "repo": "mlx-community/Qwen3-4B-4bit",
+    "iters": 2000,
+    "accumulate": 4,
+    "lr": 5e-05,
+    "interruptions": 7,
+    "train_pairs": 2999,
+    "validation_pairs": 150,
+    "minutes": 151.0,
+    "data_sha256": "f02dbfa89f750a6210524ae03bdb1ec8ebf5dcedc3ca8f9d222c91a7ddcba33c",
+    "adapter_sha256": "6b523e39c3853471a49a61b5d045b28f216cda2eef1244722287cdc2bac6ca92"
+  }
+}
