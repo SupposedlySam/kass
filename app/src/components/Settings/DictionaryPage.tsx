@@ -1,6 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Loader2, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ import {
   allOptions,
   buildScopeOptions,
   type EntryAge,
+  type EntryKind,
   EVERYWHERE_KEY,
   entriesIn,
   entryAge,
@@ -37,14 +38,25 @@ import {
   type InheritedGroup,
   inheritedForApp,
   inheritedForStyle,
+  inheritedOfKind,
+  isKind,
   looksLikeCode,
   newEntry,
+  newPhrase,
+  placeInput,
   placesFromKeys,
   type ScopeOption,
   type ScopeOptions,
   samePlaces,
   togglePlace,
 } from './dictionaryScopes';
+import {
+  PhraseHint,
+  PhraseSayField,
+  PhraseTextField,
+  useFilled,
+  usePhraseDictation,
+} from './PhraseDictation';
 
 const P = 'dictionary';
 /** Matches the server's limit. */
@@ -55,14 +67,16 @@ const ROW_GRID =
   'grid grid-cols-[minmax(0,200px)_auto_minmax(0,1fr)_auto_auto] items-center gap-x-3';
 
 /**
- * Dictionary: words dictation should get right. The scope list on the left
- * picks where (`?scope=`): everywhere, one writing style or one app. An
- * entry can apply in several places at once.
+ * Dictionary: words dictation should get right, and phrases that write
+ * something for you (`?kind=phrases`). The scope list on the left picks
+ * where (`?scope=`): everywhere, one writing style or one app. An entry can
+ * apply in several places at once.
  */
 export function DictionaryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/settings/dictionary' });
-  const { scope: scopeParam } = useSearch({ from: '/settings/dictionary' });
+  const { scope: scopeParam, kind: kindParam } = useSearch({ from: '/settings/dictionary' });
+  const kind: EntryKind = kindParam ?? 'words';
   const styles = useWritingStyles();
   const dictionary = useDictionary();
 
@@ -77,8 +91,14 @@ export function DictionaryPage() {
   const options = buildScopeOptions(styles.data, all);
   // A deleted style or unknown key falls back to everywhere.
   const current = allOptions(options).find((o) => o.key === scopeParam) ?? options.everywhere;
-  const select = (key: string) =>
-    navigate({ search: key === EVERYWHERE_KEY ? {} : { scope: key }, replace: true });
+  const go = (key: string, nextKind: EntryKind) =>
+    navigate({
+      search: {
+        scope: key === EVERYWHERE_KEY ? undefined : key,
+        kind: nextKind === 'phrases' ? 'phrases' : undefined,
+      },
+      replace: true,
+    });
   const styleNames = new Map([...stylesById(styles.data)].map(([id, s]) => [id, s.name]));
 
   return (
@@ -88,14 +108,16 @@ export function DictionaryPage() {
         <p className="mt-1 text-xs text-muted-foreground">{t(`${P}.description`)}</p>
       </header>
       <div className="flex min-h-[420px] overflow-hidden rounded-lg border border-border">
-        <ScopeList options={options} current={current} onSelect={select} />
+        <ScopeList options={options} current={current} onSelect={(key) => go(key, kind)} />
         <div className="min-w-0 flex-1 px-6 py-5">
           <ScopePane
-            key={current.key}
+            key={`${current.key}:${kind}`}
             option={current}
             options={options}
             entries={all}
             styleNames={styleNames}
+            kind={kind}
+            onKind={(next) => go(current.key, next)}
           />
         </div>
       </div>
@@ -165,21 +187,80 @@ function ScopeList({
   );
 }
 
+/** Words | Phrases, each with how many the scope has. */
+function KindSwitch({
+  kind,
+  counts,
+  onKind,
+}: {
+  kind: EntryKind;
+  counts: Record<EntryKind, number>;
+  onKind: (kind: EntryKind) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="tablist"
+      aria-label={t(`${P}.kind.label`)}
+      className="flex shrink-0 rounded-[7px] border border-border bg-muted/40 p-0.5"
+    >
+      {(['words', 'phrases'] as const).map((each) => {
+        const selected = each === kind;
+        return (
+          <button
+            key={each}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onKind(each)}
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-[5px] px-3 text-xs transition-colors',
+              selected
+                ? 'bg-muted font-medium text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t(`${P}.kind.${each}`)}
+            <span
+              className={cn(
+                'font-mono text-[11px] tabular-nums',
+                selected ? 'text-accent' : 'text-muted-foreground',
+              )}
+            >
+              {counts[each]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScopePane({
   option,
   options,
   entries,
   styleNames,
+  kind,
+  onKind,
 }: {
   option: ScopeOption;
   options: ScopeOptions;
   entries: DictionaryEntry[];
   styleNames: Map<string, string>;
+  kind: EntryKind;
+  onKind: (kind: EntryKind) => void;
 }) {
   const { t } = useTranslation();
   const label = useScopeLabel();
-  const inScope = entriesIn(entries, option.scope);
+  const inScopeAll = entriesIn(entries, option.scope);
+  const inScope = inScopeAll.filter((entry) => isKind(entry, kind));
+  const counts = {
+    words: inScopeAll.filter((entry) => isKind(entry, 'words')).length,
+    phrases: inScopeAll.filter((entry) => isKind(entry, 'phrases')).length,
+  };
   const name = label(option);
+  const phrases = kind === 'phrases';
 
   let subtitle: string | null;
   if (option.scope.kind === 'global') subtitle = t(`${P}.header.everywhere`);
@@ -194,18 +275,26 @@ function ScopePane({
     <>
       <div className="mb-5 flex items-center gap-2.5">
         {option.scope.kind === 'app' && <ScopeIcon option={option} className="size-7" />}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold">{name}</h3>
           {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
         </div>
+        <KindSwitch kind={kind} counts={counts} onKind={onKind} />
       </div>
 
-      <AddForm option={option} full={entries.length >= MAX_ENTRIES} />
+      {phrases ? (
+        <PhraseAddForm option={option} full={entries.length >= MAX_ENTRIES} />
+      ) : (
+        <AddForm option={option} full={entries.length >= MAX_ENTRIES} />
+      )}
 
       <div className="mt-5 overflow-hidden rounded-md border border-border">
         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
           <span className={MONO_LABEL}>
-            {t(`${P}.list.title`, { scope: name, count: inScope.length })}
+            {t(phrases ? `${P}.phrases.listTitle` : `${P}.list.title`, {
+              scope: name,
+              count: inScope.length,
+            })}
           </span>
           <span className={MONO_LABEL}>{t(`${P}.list.order`)}</span>
         </div>
@@ -217,18 +306,23 @@ function ScopePane({
           </ul>
         ) : (
           <p className="px-3 py-4 text-xs leading-relaxed text-muted-foreground">
-            {t(`${P}.list.empty`)}
+            {t(phrases ? `${P}.phrases.empty` : `${P}.list.empty`)}
           </p>
         )}
       </div>
 
       {option.scope.kind === 'app' && (
-        <AppInherited bundleId={option.scope.bundleId} scopeName={name} styleNames={styleNames} />
+        <AppInherited
+          bundleId={option.scope.bundleId}
+          scopeName={name}
+          styleNames={styleNames}
+          kind={kind}
+        />
       )}
       {option.scope.kind === 'style' && (
         <Inherited
           scopeName={name}
-          groups={inheritedForStyle(entries, option.scope)}
+          groups={inheritedOfKind(inheritedForStyle(entries, option.scope), kind)}
           styleNames={styleNames}
         />
       )}
@@ -308,6 +402,87 @@ function AddForm({ option, full }: { option: ScopeOption; full: boolean }) {
   );
 }
 
+/**
+ * Adds a phrase: what you say, typed or said (the mic, or the shortcut
+ * while no other field is focused), and the text it writes, exactly, line
+ * breaks and all. ⏎ adds from "When I say"; in "Write exactly", ⏎ starts a
+ * new line and ⌘⏎ adds.
+ */
+function PhraseAddForm({ option, full }: { option: ScopeOption; full: boolean }) {
+  const { t } = useTranslation();
+  const add = useAddDictionaryEntry();
+  const [spoken, setSpoken] = useState('');
+  const [written, setWritten] = useState('');
+  const say = useRef<HTMLInputElement>(null);
+  const [filled, markFilled] = useFilled();
+  const dictation = usePhraseDictation(say, (phrase) => {
+    if (add.error) add.reset();
+    setSpoken(phrase);
+    markFilled();
+  });
+  const ready = !!spoken.trim() && !!written.trim() && !full && !add.isPending;
+
+  const submit = () => {
+    if (!ready) return;
+    const appName = option.scope.kind === 'app' ? option.name : null;
+    add.mutate(newPhrase(spoken, written, [placeInput(option.scope, appName)]), {
+      onSuccess: () => {
+        setSpoken('');
+        setWritten('');
+      },
+    });
+  };
+  const edit = (set: (value: string) => void) => (value: string) => {
+    if (add.error) add.reset();
+    set(value);
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.25fr)_auto] items-start gap-x-3 gap-y-1.5">
+        <label htmlFor="dictionary-phrase-say" className="text-xs text-muted-foreground">
+          {t(`${P}.add.say`)}
+        </label>
+        <span />
+        <label htmlFor="dictionary-phrase-write" className="text-xs text-muted-foreground">
+          {t(`${P}.phrases.write`)}
+        </label>
+        <span />
+        <PhraseSayField
+          id="dictionary-phrase-say"
+          value={spoken}
+          onChange={edit(setSpoken)}
+          onKeyDown={submitKeys(submit)}
+          inputRef={say}
+          dictation={dictation}
+          filled={filled}
+          size="sm"
+        />
+        <div className="flex h-8 items-center">
+          <Arrow amber />
+        </div>
+        <PhraseTextField
+          id="dictionary-phrase-write"
+          value={written}
+          onChange={edit(setWritten)}
+          onSubmit={submit}
+        />
+        <Button size="sm" disabled={!ready} onClick={submit}>
+          {t(`${P}.add.action`)}
+        </Button>
+      </div>
+      <PhraseHint dictation={dictation} className="mt-2" />
+      {full ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {t(`${P}.add.limit`, { count: MAX_ENTRIES })}
+        </p>
+      ) : add.error ? (
+        <p className="mt-1.5 text-xs text-destructive">{add.error.message}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function AgeText({ createdAt }: { createdAt: string }) {
   const { t, i18n } = useTranslation();
   const age: EntryAge = entryAge(createdAt);
@@ -348,10 +523,24 @@ function WrittenText({
   entry,
 }: {
   entry: Pick<DictionaryEntry, 'written'> &
-    Partial<Pick<DictionaryEntry, 'match_sound' | 'source'>>;
+    Partial<Pick<DictionaryEntry, 'match_sound' | 'source' | 'phrase'>>;
 }) {
   const { t } = useTranslation();
-  const note = useBetaFeature('voice_edits') ? entryNote(entry) : null;
+  const exactSpelling = useBetaFeature('voice_edits');
+  if (entry.phrase) {
+    // Shown as it is written: its lines, and its spaces.
+    return (
+      <span
+        className={cn(
+          'line-clamp-3 whitespace-pre-line break-words text-sm leading-normal',
+          looksLikeCode(entry.written) && 'font-mono text-[13px]',
+        )}
+      >
+        {entry.written}
+      </span>
+    );
+  }
+  const note = exactSpelling ? entryNote(entry) : null;
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span
@@ -403,12 +592,12 @@ function EntryRow({
 
   return (
     <li>
-      <div className={cn(ROW_GRID, 'px-3 py-2')}>
+      <div className={cn(ROW_GRID, 'px-3 py-2', entry.phrase && 'items-start')}>
         <SaidText spoken={entry.spoken} />
         <Arrow />
         <WrittenText entry={entry} />
         <AgeText createdAt={entry.created_at} />
-        <div className="flex">
+        <div className={cn('flex', entry.phrase && '-mt-1')}>
           <Button
             size="icon"
             variant="ghost"
@@ -471,7 +660,11 @@ function EditEntryRow({
   const initialMatchSound = entry.match_sound !== false;
   const [matchSound, setMatchSound] = useState(initialMatchSound);
   const exactSpelling = useBetaFeature('voice_edits');
-  const canSave = !!written.trim() && places.length > 0 && !update.isPending;
+  const canSave =
+    !!written.trim() &&
+    places.length > 0 &&
+    !update.isPending &&
+    (!entry.phrase || !!spoken.trim());
 
   const save = () => {
     if (!canSave) return;
@@ -493,7 +686,7 @@ function EditEntryRow({
 
   return (
     <li>
-      <div className={cn(ROW_GRID, 'px-3 py-2')}>
+      <div className={cn(ROW_GRID, 'px-3 py-2', entry.phrase && 'items-start')}>
         <Input
           value={spoken}
           onChange={(e) => edit(setSpoken)(e.target.value)}
@@ -504,16 +697,26 @@ function EditEntryRow({
           className="h-7"
         />
         <Arrow />
-        <Input
-          value={written}
-          onChange={(e) => edit(setWritten)(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={t(`${P}.add.write`)}
-          aria-label={t(`${P}.add.write`)}
-          maxLength={MAX_LENGTH}
-          autoFocus
-          className="h-7"
-        />
+        {entry.phrase ? (
+          <PhraseTextField
+            value={written}
+            onChange={edit(setWritten)}
+            onSubmit={save}
+            onCancel={onDone}
+            autoFocus
+          />
+        ) : (
+          <Input
+            value={written}
+            onChange={(e) => edit(setWritten)(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={t(`${P}.add.write`)}
+            aria-label={t(`${P}.add.write`)}
+            maxLength={MAX_LENGTH}
+            autoFocus
+            className="h-7"
+          />
+        )}
         <span />
         <span className="w-14" />
       </div>
@@ -537,7 +740,7 @@ function EditEntryRow({
             {t(`${P}.list.save`)}
           </Button>
         </div>
-        {exactSpelling && (
+        {exactSpelling && !entry.phrase && (
           <div className="mt-2 flex items-center gap-2" title={t(`${P}.list.matchSoundHint`)}>
             <Toggle
               id={`dictionary-match-sound-${entry.id}`}
@@ -565,10 +768,12 @@ function AppInherited({
   bundleId,
   scopeName,
   styleNames,
+  kind,
 }: {
   bundleId: string;
   scopeName: string;
   styleNames: Map<string, string>;
+  kind: EntryKind;
 }) {
   const { t } = useTranslation();
   const resolved = useResolvedDictionary(bundleId);
@@ -577,10 +782,10 @@ function AppInherited({
     <>
       <Inherited
         scopeName={scopeName}
-        groups={inheritedForApp(resolved.data?.entries)}
+        groups={inheritedOfKind(inheritedForApp(resolved.data?.entries), kind)}
         styleNames={styleNames}
       />
-      {dropped > 0 && (
+      {dropped > 0 && kind === 'words' && (
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
           {t(`${P}.inherited.dropped`, { count: dropped })}
         </p>
@@ -645,7 +850,10 @@ function InheritedGroupRow({ group, source }: { group: InheritedGroup; source: s
       {open && (
         <ul className="divide-y divide-border/50 border-t border-border/70 bg-muted/20">
           {group.entries.map((entry) => (
-            <li key={entry.id} className={cn(ROW_GRID, 'px-3 py-1.5 pl-8')}>
+            <li
+              key={entry.id}
+              className={cn(ROW_GRID, 'px-3 py-1.5 pl-8', entry.phrase && 'items-start')}
+            >
               <SaidText spoken={entry.spoken} />
               <Arrow />
               <WrittenText entry={entry} />

@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   dictionaryWord,
+  firedPhrases,
+  markPhrases,
+  phraseFromHunk,
+  phraseKey,
   respellChange,
   respellSelection,
   selectionPhrase,
@@ -85,5 +89,67 @@ describe('respellChange', () => {
 describe('respellSelection', () => {
   test('the selected word takes the new spelling inside the punctuation it picked up', () => {
     expect(respellSelection('ask sagar, then', 4, 11, 'Saggar')).toBe('ask Saggar, then');
+  });
+});
+
+describe('phraseFromHunk', () => {
+  test('words replaced by other text are what to say and what to write', () => {
+    expect(phraseFromHunk({ removed: 'Add my email', added: 'you@example.com' })).toEqual({
+      said: 'add my email',
+      written: 'you@example.com',
+    });
+  });
+
+  test('words only added or removed, or a sentence said, are not a phrase', () => {
+    expect(phraseFromHunk({ removed: '', added: 'you@example.com' })).toBeNull();
+    expect(phraseFromHunk({ removed: 'my email', added: '' })).toBeNull();
+    expect(
+      phraseFromHunk({ removed: 'one two three four five six seven eight nine', added: 'x' }),
+    ).toBeNull();
+  });
+});
+
+describe('firedPhrases', () => {
+  const email = {
+    id: 'e',
+    spoken: 'insert my email',
+    written: 'you@example.com',
+    phrase: true,
+  };
+
+  test('a phrase said and written fired', () => {
+    expect(
+      firedPhrases('send it to insert-my email thanks', 'Send it to you@example.com. Thanks!', [
+        email,
+      ]),
+    ).toEqual([{ id: 'e', spoken: 'insert my email', written: 'you@example.com' }]);
+  });
+
+  test('a phrase not said, said inside other words, or a word fix, did not', () => {
+    expect(firedPhrases('send it to you', 'Send it to you@example.com', [email])).toEqual([]);
+    expect(
+      firedPhrases('reinsert my emails', 'you@example.com', [email, { ...email, id: 'f' }]),
+    ).toEqual([]);
+    expect(
+      firedPhrases('insert my email', 'you@example.com', [{ ...email, phrase: false }]),
+    ).toEqual([]);
+  });
+});
+
+describe('markPhrases', () => {
+  test('marks every place a phrase wrote, the longest first', () => {
+    const short = { id: 's', spoken: 'my site', written: 'example.com' };
+    const long = { id: 'l', spoken: 'my email', written: 'you@example.com' };
+    expect(markPhrases('Mail you@example.com or see example.com.', [short, long])).toEqual([
+      { text: 'Mail ' },
+      { text: 'you@example.com', phrase: long },
+      { text: ' or see ' },
+      { text: 'example.com', phrase: short },
+      { text: '.' },
+    ]);
+  });
+
+  test('compares written text by letters and digits only', () => {
+    expect(phraseKey('Thanks,\nMorgan')).toBe(phraseKey('thanks morgan'));
   });
 });

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
-import { BookPlus, Check } from 'lucide-react';
+import { BookPlus, Check, MessageSquareQuote } from 'lucide-react';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,13 @@ import { useBetaFeature } from '@/lib/betaFeatures';
 import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
 import { AddToDictionaryDialog, type DictionaryWord } from './AddToDictionary';
-import { dictionaryWord, respellChange } from './captureDictionary';
+import {
+  dictionaryWord,
+  type PhraseDraft,
+  phraseFromHunk,
+  respellChange,
+} from './captureDictionary';
+import { MakePhraseDialog } from './MakePhrase';
 import { type DiffHunk, diffWords } from './wordDiff';
 
 export type TeachTarget = 'raw' | 'refined';
@@ -205,18 +211,46 @@ export function useTeachCorrection(
 
 export type TeachState = ReturnType<typeof useTeachCorrection>;
 
+/** A small action beside a change; it keeps the edit open while the pointer is down. */
+function HunkAction({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      // Keeps the edit open: the text losing focus first would settle it.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      className="ml-2 h-6 gap-1 px-1.5 align-middle font-sans text-xs text-muted-foreground hover:text-foreground"
+    >
+      {icon}
+      {label}
+    </Button>
+  );
+}
+
 /**
  * "post grass → Postgres" for each place the text changed. With `onAdd`,
- * a change that can be a dictionary entry offers to add it.
+ * a change that can be a dictionary entry offers to add it; with
+ * `onPhrase`, words replaced by other text offer to become a phrase.
  */
 export function HunkList({
   hunks,
   className,
   onAdd,
+  onPhrase,
 }: {
   hunks: DiffHunk[];
   className?: string;
   onAdd?: (word: DictionaryWord) => void;
+  onPhrase?: (phrase: PhraseDraft) => void;
 }) {
   const { t } = useTranslation();
   const shown = hunks.slice(0, MAX_HUNKS_SHOWN);
@@ -231,20 +265,24 @@ export function HunkList({
           {hunk.added && <span className="text-success">{hunk.added}</span>}
           {hunk.count && <span className="text-muted-foreground"> ×{hunk.count}</span>}
           {onAdd && dictionaryWord(hunk) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              // Keeps the edit open: the text losing focus first would settle it.
-              onMouseDown={(event) => event.preventDefault()}
+            <HunkAction
+              icon={<BookPlus className="size-3.5!" />}
+              label={t('captures.dictionary.add')}
               onClick={() => {
                 const word = dictionaryWord(hunk);
                 if (word) onAdd(word);
               }}
-              className="ml-2 h-6 gap-1 px-1.5 align-middle font-sans text-xs text-muted-foreground hover:text-foreground"
-            >
-              <BookPlus className="size-3.5!" />
-              {t('captures.dictionary.add')}
-            </Button>
+            />
+          )}
+          {onPhrase && phraseFromHunk(hunk) && (
+            <HunkAction
+              icon={<MessageSquareQuote className="size-3.5!" />}
+              label={t('captures.phrase.make')}
+              onClick={() => {
+                const phrase = phraseFromHunk(hunk);
+                if (phrase) onPhrase(phrase);
+              }}
+            />
           )}
         </li>
       ))}
@@ -362,12 +400,14 @@ export function EditableTranscript({
  * Under an edited transcript: what this round changed, an optional note and
  * Save. Shown only once the text differs from where the round started. A changed word can go
  * straight into the dictionary, which saves the correction too, with the
- * word spelled the way it was added.
+ * word spelled the way it was added. Words replaced by other text can
+ * become a phrase, which saves the correction too.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
   const notesId = useId();
   const [word, setWord] = useState<DictionaryWord | null>(null);
+  const [phrase, setPhrase] = useState<PhraseDraft | null>(null);
   const hunks = useMemo(
     () => (teach.changed && teach.draft !== null ? diffWords(teach.base, teach.draft).hunks : []),
     [teach.changed, teach.draft, teach.base],
@@ -379,7 +419,14 @@ export function TeachActions({ teach }: { teach: TeachState }) {
   if (!teach.changed) return null;
   return (
     <div className="flex flex-col gap-3.5">
-      {hunks.length > 0 && <HunkList hunks={hunks} className="space-y-0.5" onAdd={setWord} />}
+      {hunks.length > 0 && (
+        <HunkList hunks={hunks} className="space-y-0.5" onAdd={setWord} onPhrase={setPhrase} />
+      )}
+      <MakePhraseDialog
+        phrase={phrase}
+        onAdded={() => teach.save()}
+        onClose={() => setPhrase(null)}
+      />
       <AddToDictionaryDialog
         word={word}
         onAdded={(written) => {

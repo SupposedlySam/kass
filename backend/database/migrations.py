@@ -124,6 +124,8 @@ def _migrate_dictionary_entries(engine, inspector, tables: set[str]) -> None:
         _add_column(engine, "dictionary_entries", "source VARCHAR", "source")
     if "added_by" not in columns:
         _add_column(engine, "dictionary_entries", "added_by VARCHAR", "added_by")
+    if "phrase" not in columns:
+        _add_column(engine, "dictionary_entries", "phrase BOOLEAN NOT NULL DEFAULT 0", "phrase")
 
 
 # Kass was Herga (com.mrgnhnt.herga), and before that Voicebox, with bundle

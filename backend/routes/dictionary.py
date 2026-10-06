@@ -46,7 +46,12 @@ async def list_entries(db: Session = Depends(get_db)):
 async def add_entry(request: models.DictionaryEntryCreate, db: Session = Depends(get_db)):
     try:
         group = dictionary.add_group(
-            db, request.written, request.spoken, _places(request.places), match_sound=request.match_sound
+            db,
+            request.written,
+            request.spoken,
+            _places(request.places),
+            match_sound=request.match_sound,
+            phrase=request.phrase,
         )
     except dictionary.DuplicateEntryError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

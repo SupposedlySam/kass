@@ -6,7 +6,7 @@ import { usePlatform } from '@/platform/PlatformContext';
 /** Input types that take free text. */
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'tel', '']);
 
-function isEditableField(element: Element | null): element is HTMLElement {
+export function isEditableField(element: Element | null): element is HTMLElement {
   if (element instanceof HTMLTextAreaElement) return !element.readOnly && !element.disabled;
   if (element instanceof HTMLInputElement) {
     return TEXT_INPUT_TYPES.has(element.type) && !element.readOnly && !element.disabled;
@@ -21,6 +21,35 @@ function isEditableField(element: Element | null): element is HTMLElement {
 function insertIntoFocusedField(text: string): boolean {
   if (!isEditableField(document.activeElement)) return false;
   return document.execCommand('insertText', false, text);
+}
+
+/**
+ * Takes a shortcut take's text instead of the focused field: true when it
+ * was used, so the pill shows no error.
+ */
+export type DictationClaim = (take: number, text: string) => boolean;
+
+/** Newest last: the one opened last (a dialog over a page) decides first. */
+const claims: DictationClaim[] = [];
+
+/**
+ * Let a view take the text of shortcut takes aimed at Kass, before it is
+ * typed into the focused field: a phrase box fills itself from what was
+ * said, focused or not. Returns the call that lets go.
+ */
+export function claimInAppDictation(claim: DictationClaim): () => void {
+  claims.push(claim);
+  return () => {
+    const at = claims.lastIndexOf(claim);
+    if (at >= 0) claims.splice(at, 1);
+  };
+}
+
+function claimed(take: number, text: string): boolean {
+  for (let i = claims.length - 1; i >= 0; i--) {
+    if (claims[i](take, text)) return true;
+  }
+  return false;
 }
 
 /** The text selected in the focused field, or on the page. */
@@ -60,7 +89,7 @@ export function useInAppDictationInsert() {
     webview
       .listen<{ take: number; text: string }>('dictation:insert', (event) => {
         const { take, text } = event.payload;
-        const inserted = insertIntoFocusedField(text);
+        const inserted = claimed(take, text) || insertIntoFocusedField(text);
         emit('dictation:inserted', { take, inserted }).catch(() => {});
       })
       .then(keep)

@@ -11,7 +11,10 @@ An entry is one row: what to **write**, and optionally what is **said**.
 | Kind | Example | Effect |
 | --- | --- | --- |
 | Term (`spoken` empty) | `Kubernetes`, `mrgnhnt96`, `Zed` | Whisper is prompted with it, so it is heard right. A term that isn't a common word also has its capitals fixed after cleanup ("kubernetes" → "Kubernetes"). A capitalized term counts as a known name. |
-| Replacement | said `voice box` → written `Kass`; said `my work email` → `morgan@…` | After cleanup, the spoken phrase is swapped for the written text, matched case-insensitively on word boundaries. `written` is also a term. |
+| Replacement | said `voice box` → written `Kass` | After cleanup, the spoken phrase is swapped for the written text, matched case-insensitively on word boundaries. `written` is also a term. |
+| Phrase (`phrase` on) | said `insert my email` → `you@example.com`; said `sign off` → `Thanks,⏎Morgan` | A replacement whose `written` is text to insert exactly. It keeps its line breaks (each line's spaces tidied, blank lines at either end dropped) and may be up to 1,000 characters. It is never a term: not prompted to Whisper, never recased, never matched by sound. `spoken` is required. |
+
+Whatever a replacement or phrase writes is left as written: terms recase and sound-match only the text around it.
 
 Capitals are fixed only for terms that aren't common words, using `phrase_seams._common_word`. That way the term `Mark` never capitalizes the verb "mark", and `mrgnhnt96` always gets fixed. This is one general rule, with no per-term exceptions.
 
@@ -31,7 +34,7 @@ Everywhere excludes the others: choosing it clears the rest. A dictation merges 
 
 ## Storage
 
-The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `group_id`, `match_sound` (default true), `source` (null for the user, `spoken_fix`), `created_at`. There is one row per place; the rows of an entry that applies in several places share `group_id` (null: the row is its own entry, as rows from before groups are). `migrations.py` adds `group_id`, `match_sound` and `source` to an existing table. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`), so a place never holds the same word said twice; the API names the place in its 409. Matching, prompting and dictation read rows and never see groups.
+The entries live in a new table, `dictionary_entries`: `id`, `scope` (`global` / `style` / `app`), `scope_id` (null for global, else a style id or bundle id), `written`, `spoken` (nullable), `app_name` (for display, app scope only), `group_id`, `match_sound` (default true), `source` (null for the user, `spoken_fix`), `created_at`. There is one row per place; the rows of an entry that applies in several places share `group_id` (null: the row is its own entry, as rows from before groups are). `migrations.py` adds `group_id`, `match_sound`, `source`, `added_by` and `phrase` (default false) to an existing table. There's a unique constraint on (`scope`, `scope_id`, `casefold(spoken or written)`), so a place never holds the same word said twice; the API names the place in its 409. Matching, prompting and dictation read rows and never see groups.
 
 `services/dictionary.py` keeps an in-memory snapshot, like `styles.snapshot()`. Writes rebuild it. `for_app(bundle_id)` returns a resolved `Dictionary`: prompt terms in priority order, compiled replacements, and the recase set. That result is cached per (bundle id, style) until the next write. Dictation itself never reads from disk or the database.
 
@@ -59,7 +62,7 @@ Every path that runs Whisper passes it: phrase recognition (`capture_stream.reco
 ## API
 
 - `GET /dictionary`: every entry, newest first, each with its `places` (`{scope, scope_id, app_name}`).
-- `POST /dictionary`: `{written, spoken?, places, match_sound?}`. Entries come back with `match_sound` and `source` (`user` / `spoken_fix`).
+- `POST /dictionary`: `{written, spoken?, places, match_sound?, phrase?}`. Entries come back with `match_sound`, `source` (`user` / `spoken_fix`) and `phrase`. An entry stays a word or a phrase; `PATCH` doesn't change it, and refuses to clear a phrase's `spoken`.
 - `PATCH /dictionary/{id}`: `{written?, spoken?, places?, match_sound?}`; changing `places` adds and removes rows, keeping the entry's date. `DELETE /dictionary/{id}` removes it everywhere.
 - `GET /dictionary/resolved?bundle_id=`: the rows one app uses, most specific first, each with its entry's id, and which terms fit the Whisper prompt.
 
@@ -76,12 +79,21 @@ Settings gets a **Dictionary** page, next to Writing style (the canvas "Dictiona
 
 This covers only the Settings page. The capture pill doesn't change. An "Add to dictionary" action from a correction in the Captures tab is a possible follow-up, not part of this work.
 
+### Phrases
+
+The canvas "Kass Replacements", flow page.
+
+- The scope pane has a **Words | Phrases** switch (`?kind=phrases`), each with its count. Words is the page as above. Phrases has its own add form: "When I say" with a mic button → "Write exactly", a text box where ⏎ starts a new line and ⌘⏎ adds. Rows show the text with its lines.
+- **Saying the phrase.** The mic button, or the push-to-talk shortcut, fills "When I say" with the take's raw transcript (lowercase, no punctuation around it), not the cleaned text: cleanup may reword it, or swap in a phrase already in the dictionary. A shortcut take goes to the phrase box while it is focused or no field is; with another field focused ("Write exactly", say) it types there as usual. The form claims the take through `claimInAppDictation` (`useInAppDictationInsert.ts`) before the text would be typed, and answers Rust that it was inserted, so the pill shows no error. The raw transcript is the newest capture's, when that capture is the one that delivered the text; otherwise the delivered text stands in. While a take is heard the box shows that it is listening, and the hint reads "Let go of ⌘ ⌥ to fill in the phrase" with the user's own keys.
+- **Captures.** Text a phrase wrote is underlined in the transcript card, and opens what wrote it with **Edit phrase**. "What changed" counts it as a phrase, not a rewording. A phrase fired when its `spoken` is in the raw transcript and its `written` is in the delivered text.
+- **From a correction.** When a correction replaces words with other text, its change offers **Make a phrase** next to **Add to dictionary**. The dialog fills "When I say" with the words heard and "Write exactly" with the new text, notes when another phrase already writes that text, and adding it saves the correction too.
+
 ## Tests
 
 - `test_dictionary.py`: scope merge and precedence, deleting a style moves its entries, replacement boundaries and case, longest-match overlap, common-word terms left uncapitalized, 5 ms limit.
 - `test_mlx_whisper_transcribe.py`: prompt layout, and the token budget keeping terms when previous text is long.
 - `test_capture_stream_*`: a dictionary set at `set_app` reaches `recognize` and the finished text. A late app falls back to the global terms.
-- `app/tests`: the Dictionary page's add, edit and delete per scope.
+- `app/tests`: the Dictionary page's add, edit and delete per scope; phrases told apart from words, phrases made from a correction, and which phrases a capture used.
 
 ## Measured
 

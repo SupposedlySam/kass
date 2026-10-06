@@ -1,9 +1,19 @@
-import { Check, ChevronRight, CircleHelp, Copy, Pencil } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { ArrowRight, Check, ChevronRight, CircleHelp, Copy, Pencil } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
+import { type FiredPhrase, markPhrases, phraseKey } from './captureDictionary';
 import {
   EditableTranscript,
   LearnedNotice,
@@ -36,6 +46,55 @@ function Marked({ segments, mark }: { segments: DiffSegment[]; mark: 'corrected'
         </span>
       ))}
     </>
+  );
+}
+
+/**
+ * Text a dictionary phrase wrote, underlined; it opens what wrote it and a
+ * way to edit the phrase. It doesn't start editing the transcript around it.
+ */
+function PhraseMark({ text, phrase }: { text: string; phrase: FiredPhrase }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const stop = (event: React.SyntheticEvent) => event.stopPropagation();
+  const trigger = (
+    // biome-ignore lint/a11y/useSemanticElements: inline in the text, where a <button> would break its lines and selection
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={stop}
+      onKeyDown={stop}
+      title={t('captures.phrase.wroteHint', { spoken: phrase.spoken })}
+      className="cursor-pointer rounded-sm underline decoration-accent decoration-dotted decoration-2 underline-offset-[5px] hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      {text}
+    </span>
+  );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[280px]" onClick={stop}>
+        <DropdownMenuLabel className="flex items-center gap-2 pt-2 pb-1 font-normal">
+          <span className="inline-flex h-[18px] items-center rounded-full bg-accent/10 px-1.5 font-mono text-[10px] text-accent">
+            {t('captures.phrase.chip')}
+          </span>
+          <span className="text-xs text-muted-foreground">{t('captures.phrase.from')}</span>
+        </DropdownMenuLabel>
+        <div className="flex items-start gap-2 px-2 pb-2 text-[13px]">
+          <span className="shrink-0">“{phrase.spoken}”</span>
+          <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 whitespace-pre-line break-words text-muted-foreground">
+            {phrase.written}
+          </span>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={() => navigate({ to: '/settings/dictionary', search: { kind: 'phrases' } })}
+        >
+          {t('captures.phrase.edit')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -92,7 +151,16 @@ export function CopyButton({
  * teach Kass; after saving, it shows the corrected text with every change
  * marked, and editing again saves another round of corrections.
  */
-export function TranscriptCard({ refined, teach }: { refined: boolean; teach: TeachState }) {
+export function TranscriptCard({
+  refined,
+  teach,
+  phrases = [],
+}: {
+  refined: boolean;
+  teach: TeachState;
+  /** Phrases from the dictionary that wrote into Kass's text, to mark there. */
+  phrases?: FiredPhrase[];
+}) {
   const { t } = useTranslation();
   const [explained, setExplained] = useState(false);
   const aboutId = useId();
@@ -160,10 +228,19 @@ export function TranscriptCard({ refined, teach }: { refined: boolean; teach: Te
       <EditableTranscript teach={teach} className={textClass}>
         {corrected ? (
           <Marked segments={corrected} mark="corrected" />
-        ) : (
-          shown || (
-            <span className="text-base text-muted-foreground">{t('captures.snippetEmpty')}</span>
+        ) : !shown ? (
+          <span className="text-base text-muted-foreground">{t('captures.snippetEmpty')}</span>
+        ) : phrases.length ? (
+          markPhrases(shown, phrases).map((run, i) =>
+            run.phrase ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: position is the identity
+              <PhraseMark key={i} text={run.text} phrase={run.phrase} />
+            ) : (
+              run.text
+            ),
           )
+        ) : (
+          shown
         )}
       </EditableTranscript>
       {editing ? <TeachActions teach={teach} /> : learned && <LearnedNotice teach={teach} />}
@@ -213,14 +290,34 @@ function Disclosure({
  * the raw text with the words taken out struck and the words put in marked.
  * With no changes it is just a line saying so.
  */
-export function ChangesDisclosure({ raw, refined }: { raw: string; refined: string }) {
+export function ChangesDisclosure({
+  raw,
+  refined,
+  phrases = [],
+}: {
+  raw: string;
+  refined: string;
+  /** Phrases that wrote into `refined`: their changes count as phrases, not rewording. */
+  phrases?: FiredPhrase[];
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const diff = useMemo(() => diffWords(raw, refined), [raw, refined]);
   const summary = summarizeChanges(diff);
+  // A change that wrote a phrase's text is that phrase, not words reworded.
+  const written = new Set(phrases.map((phrase) => phraseKey(phrase.written)));
+  let phraseCount = 0;
+  for (const hunk of diff.hunks) {
+    if (!hunk.added || !written.has(phraseKey(hunk.added))) continue;
+    const times = hunk.count ?? 1;
+    phraseCount += times;
+    if (hunk.removed) summary.reworded -= times;
+    else summary.added -= countWords(hunk.added) * times;
+  }
   const chips = (
     [
+      ['phrase', phraseCount],
       ['removed', summary.removed],
       ['added', summary.added],
       ['reworded', summary.reworded],

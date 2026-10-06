@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { apiClient } from '@/lib/api/client';
 import type { CaptureResponse } from '@/lib/api/types';
+import { useDictionary } from '@/lib/hooks/useDictionary';
 import { useUIStore } from '@/stores/uiStore';
 import { SelectionToDictionary } from './AddToDictionary';
 import { CaptureInspector } from './CaptureInspector';
 import { CommandDetail } from './CommandDetail';
+import { firedPhrases } from './captureDictionary';
 import { RefinementReviewNotice } from './RefinementReviewNotice';
 import { useTeachCorrection } from './TeachCorrection';
 import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './TranscriptCard';
@@ -17,7 +20,8 @@ import { ChangesDisclosure, HeardDisclosure, TranscriptCard } from './Transcript
  * word, in the text or while correcting it, offers to add it to the
  * dictionary, as does each fixed word. The inspector
  * shows only while the header's details button has it open. Mount it keyed
- * by capture id so drafts reset between captures. A Command Mode rewrite
+ * by capture id so drafts reset between captures. Text a dictionary phrase
+ * wrote is marked, and counted among the changes. A Command Mode rewrite
  * has its own view: it isn't a dictation to correct.
  */
 export function CaptureDetail({ capture }: { capture: CaptureResponse }) {
@@ -39,6 +43,12 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
     reports.data,
   );
   const detailsOpen = useUIStore((s) => s.capturesDetailsOpen);
+  const dictionary = useDictionary();
+  const delivered = refined ?? raw;
+  const phrases = useMemo(
+    () => firedPhrases(raw, delivered, dictionary.data?.entries ?? []),
+    [raw, delivered, dictionary.data],
+  );
 
   return (
     <div className="flex-1 min-h-0 flex">
@@ -53,10 +63,10 @@ function DictationDetail({ capture }: { capture: CaptureResponse }) {
             <RefinementReviewNotice review={capture.refinement_review} />
           </div>
         )}
-        <TranscriptCard refined={!!refined} teach={teach} />
+        <TranscriptCard refined={!!refined} teach={teach} phrases={phrases} />
         {refined && (
           <div className="min-h-0 overflow-y-auto flex flex-col px-1">
-            <ChangesDisclosure raw={raw} refined={refined} />
+            <ChangesDisclosure raw={raw} refined={refined} phrases={phrases} />
             <HeardDisclosure raw={raw} />
           </div>
         )}

@@ -145,6 +145,19 @@
       "submit": "Add",
       "added": "Added “{{written}}” to the dictionary"
     },
+    "phrase": {
+      "make": "Make a phrase",
+      "title": "Make a phrase",
+      "description": "Kass writes this text whenever you say the phrase.",
+      "sameText": "Same text as your “{{spoken}}” phrase.",
+      "savesCorrection": "Your correction saves too.",
+      "submit": "Add phrase",
+      "added": "Added the phrase “{{spoken}}”",
+      "chip": "phrase",
+      "from": "from Dictionary",
+      "wroteHint": "Written by your “{{spoken}}” phrase",
+      "edit": "Edit phrase"
+    },
     "feedback": {
       "report": "Teach Kass",
       "description": "Edit this into what you meant: fix wrong words, drop false starts, put things in order, fix grammar. Keep your own words and every idea you said. Kass uses it as an example on your next dictations right away, and the personal model trains on it while the app is idle. Everything stays on this device. Deleting a capture removes its corrections from future training.",
@@ -402,6 +415,8 @@
     "changes": {
       "title": "What changed",
       "none": "No changes",
+      "phrase_one": "{{count}} phrase",
+      "phrase_other": "{{count}} phrases",
       "removed_one": "−{{count}} word",
       "removed_other": "−{{count}} words",
       "added_one": "+{{count}} word",
@@ -1364,7 +1379,7 @@
   },
   "dictionary": {
     "title": "Dictionary",
-    "description": "Words dictation should get right. Pick where they apply on the left.",
+    "description": "Words dictation should get right, and phrases that write something for you. Pick where they apply on the left.",
     "scope": {
       "label": "Where words apply",
       "everywhere": "Everywhere",
@@ -1379,6 +1394,11 @@
       "styleApps_zero": "No apps use it yet",
       "styleApps_one": "{{count}} app uses it",
       "styleApps_other": "{{count}} apps use it"
+    },
+    "kind": {
+      "label": "Words or phrases",
+      "words": "Words",
+      "phrases": "Phrases"
     },
     "add": {
       "say": "When I say",
@@ -1424,6 +1444,20 @@
       "from": "From {{source}}",
       "dropped_one": "{{count}} word doesn't fit in the speech model's prompt; it's still fixed after cleanup.",
       "dropped_other": "{{count}} words don't fit in the speech model's prompt; they're still fixed after cleanup."
+    },
+    "phrases": {
+      "write": "Write exactly",
+      "sayPlaceholder": "insert my email",
+      "writePlaceholder": "you@example.com",
+      "dictate": "Say the phrase",
+      "stop": "Stop",
+      "listening": "listening",
+      "hint": "Type the phrase, click the mic, or hold <keys/> to say it. The text goes in exactly as written.",
+      "hintAnother": "Click the mic or hold <keys/> to say it another way.",
+      "hintRelease": "Let go of <keys/> to fill in the phrase.",
+      "hintTyped": "Type what you say. The text goes in exactly as written.",
+      "listTitle": "Phrases in {{scope}} · {{count}}",
+      "empty": "A phrase writes text for you when you say it: an email address, a link, a sign-off. Line breaks are kept."
     }
   },
   "appLocation": {

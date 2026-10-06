@@ -182,8 +182,10 @@ const settingsDictionaryRoute = createRoute({
   path: '/dictionary',
   component: DictionaryPage,
   // `?scope=` is `style:<id>` or `app:<bundle id>`; none is everywhere.
-  validateSearch: (search: Record<string, unknown>): { scope?: string } => ({
+  // `?kind=phrases` shows phrases instead of words.
+  validateSearch: (search: Record<string, unknown>): { scope?: string; kind?: 'phrases' } => ({
     scope: typeof search.scope === 'string' ? search.scope : undefined,
+    kind: search.kind === 'phrases' ? 'phrases' : undefined,
   }),
 });
 
