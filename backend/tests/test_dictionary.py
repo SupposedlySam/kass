@@ -591,3 +591,32 @@ def test_sound_matching_stays_on_outside_the_beta(client, monkeypatch):
     added = add(client, "Meghan").json()
     client.patch(f"/dictionary/{added['id']}", json={"match_sound": False})
     assert dictionary.for_app(ZED).apply("Megan") == "Meghan"
+
+
+def test_the_app_name_is_in_a_new_dictionary_once(storage, tmp_path):
+    marker = tmp_path / "dictionary-defaulted"
+    with storage() as db:
+        dictionary.ensure_defaults(db, marker)
+        [group] = dictionary.list_groups(db)
+        assert (group.written, group.spoken, group.places) == ("Kass", None, (dictionary.Place("global"),))
+        assert dictionary.for_app(ZED).apply("Ask Cass to fix it") == "Ask Kass to fix it"
+
+        # Deleted, it stays deleted.
+        dictionary.delete_group(db, group.id)
+        dictionary.ensure_defaults(db, marker)
+        assert dictionary.list_groups(db) == []
+
+
+def test_an_existing_entry_for_the_app_name_is_left_alone(storage, tmp_path):
+    with storage() as db:
+        dictionary.add_group(db, "Kass", "Cass", [{"scope": "global"}])
+        dictionary.ensure_defaults(db, tmp_path / "dictionary-defaulted")
+        [group] = dictionary.list_groups(db)
+        assert group.spoken == "Cass"
+
+
+def test_a_word_already_said_as_the_app_name_keeps_startup_working(storage, tmp_path):
+    with storage() as db:
+        dictionary.add_group(db, "KASS-2", "kass", [{"scope": "global"}])
+        dictionary.ensure_defaults(db, tmp_path / "dictionary-defaulted")
+        assert [group.written for group in dictionary.list_groups(db)] == ["KASS-2"]

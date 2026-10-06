@@ -655,6 +655,31 @@ def add_group(
     return _group(_rows(db, group_id))
 
 
+# Words every user's dictionary starts with: the app's own name, which
+# Whisper otherwise writes "Cass" or "Kas".
+DEFAULTS = ("Kass",)
+
+
+def ensure_defaults(db, marker) -> None:
+    """Add the default words once, as global entries the user can edit or
+    delete; ``marker`` is the file recording that they were added, so a
+    deleted one stays deleted. Idempotent."""
+    from ..database.models import DictionaryEntry
+
+    if marker.exists():
+        return
+    written = {row.written.casefold() for row in db.query(DictionaryEntry.written).all()}
+    for word in DEFAULTS:
+        if word.casefold() in written:
+            continue
+        try:
+            add_group(db, word, None, [Place("global")])
+        # A full dictionary, or an entry already said that way, stays as it is.
+        except ValueError:
+            db.rollback()
+    marker.touch()
+
+
 def update_group(db, group_id: str, patch: dict) -> Group | None:
     """Change an entry's words everywhere it applies, where it applies, and
     whether it matches by sound. An entry the user edits is theirs from then on."""
