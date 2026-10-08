@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
         from .services.correction_notes import periodic_job as notes_job
         from .services.history_retention import periodic_job as retention_job
         from .services.model_improvement.manager import periodic_job
+        from .services.model_warmth import periodic_job as warmth_job
         from .services.usage_report import periodic_job as usage_job
 
         initialize()
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
             asyncio.create_task(notes_job()),
             asyncio.create_task(retention_job()),
             asyncio.create_task(usage_job()),
+            asyncio.create_task(warmth_job()),
         ]
         try:
             yield

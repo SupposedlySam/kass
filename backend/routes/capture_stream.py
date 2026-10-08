@@ -14,6 +14,7 @@ from ..database import session as database_session
 from ..services.capture_stream import StreamingCapture
 from ..services.captures import target_app, target_app_category
 from ..services.commands import MAX_SELECTION_CHARS
+from ..services.model_warmth import keep_resident
 from ..services.prosody import measure_and_save
 from ..services.refinement import load_cleanup_model, prefill_cleanup
 from ..services.settings import get_capture_settings
@@ -60,6 +61,9 @@ async def _prefill_style(session: StreamingCapture) -> None:
     """Cache the prompt of the session's style while the user speaks (docs/plans/PER_APP_STYLE.md)."""
     started = time.monotonic()
     try:
+        # Read back what macOS paged out first, off the MLX thread. Faulted
+        # in by the prefill instead, it held recognition up behind it.
+        await keep_resident("dictation started", stt=False)
         await prefill_cleanup(session.flags, session.settings.llm_model)
         logger.info("Prefilled the %s style in %.3fs", session.style.name, time.monotonic() - started)
     except Exception:
