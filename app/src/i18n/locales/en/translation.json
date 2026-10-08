@@ -15,6 +15,7 @@
     "insights": "Insights",
     "models": "Models",
     "settings": "Settings",
+    "reports": "Reports",
     "update": {
       "label": "Restart",
       "restartingLabel": "Restarting",
@@ -119,6 +120,7 @@
       "settingsTranscription": "Settings: Transcription",
       "settingsWritingStyle": "Settings: Writing style",
       "settingsLogs": "Settings: Logs",
+      "reports": "Create a report for support",
       "setup": "Open onboarding",
       "calibrate": "Run style calibration…",
       "themeLight": "Switch to light theme",
@@ -143,7 +145,8 @@
       "description": "Kass spells it this way from now on.",
       "spelling": "Correct spelling",
       "submit": "Add",
-      "added": "Added “{{written}}” to the dictionary"
+      "added": "Added “{{written}}” to the dictionary",
+      "addFailed": "Could not add it to the dictionary"
     },
     "phrase": {
       "make": "Make a phrase",
@@ -469,6 +472,35 @@
       "noDictation": "No dictation",
       "today": "today"
     }
+  },
+  "reports": {
+    "title": "Reports",
+    "intro": "When something goes wrong, make a report and send it along. It's one zip with Kass's logs, crash reports and system details. It stays on your Mac until you send it.",
+    "create": "Create report",
+    "creating": "Creating…",
+    "where": "Saved to your Downloads folder.",
+    "reveal": "Show in Finder",
+    "failed": "Couldn't create the report",
+    "revealFailed": "Couldn't show the report in Finder",
+    "copyFailed": "Couldn't copy the command",
+    "contents": {
+      "title": "What's in it",
+      "logs": "Kass's logs, including the server's from the last few days",
+      "crashes": "Crash reports macOS wrote for Kass in the last 14 days",
+      "system": "Kass's version, your macOS version, chip, memory and swap, and your model and feature settings"
+    },
+    "private": {
+      "title": "Never included",
+      "body": "Your captures and their text, recorded audio, your dictionary, writing styles, correction notes and voice training data. Your user name and your Mac's name are replaced with placeholders."
+    },
+    "command": {
+      "title": "From Terminal or an AI agent",
+      "description": "The same report, without opening Kass. It works even if Kass won't start, and prints the zip's path when it's done.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "liveLogsPrefix": "Watching a problem happen?",
+    "liveLogs": "Open the live logs"
   },
   "insights": {
     "title": "Insights",

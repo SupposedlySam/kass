@@ -67,7 +67,10 @@ export function usePaletteCommands(): PaletteCommand[] {
   ];
   // Logs come from the desktop shell; the settings rail hides them on web too.
   if (isTauri) {
-    commands.push(go('settings-logs', t('palette.cmd.settingsLogs'), '/settings/logs', settings));
+    commands.push(
+      go('settings-logs', t('palette.cmd.settingsLogs'), '/settings/logs', settings),
+      go('reports', t('palette.cmd.reports'), '/reports'),
+    );
   }
   commands.push(
     go('settings-features', t('palette.cmd.settingsFeatures'), '/settings/features', settings),

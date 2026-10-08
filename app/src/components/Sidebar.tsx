@@ -5,6 +5,7 @@ import {
   Captions,
   ChartColumn,
   CircleAlert,
+  FileArchive,
   Loader2,
   type LucideIcon,
   SlidersHorizontal,
@@ -15,11 +16,20 @@ import kassLogo from '@/assets/kass-logo.png';
 import { type ModelAlerts, useModelAlerts } from '@/lib/hooks/useModelAlerts';
 import { useUpdateCheck } from '@/lib/hooks/useUpdateCheck';
 import { cn } from '@/lib/utils/cn';
+import { usePlatform } from '@/platform/PlatformContext';
 
-const tabs: Array<{ id: string; path: string; icon: LucideIcon; labelKey: string }> = [
+const tabs: Array<{
+  id: string;
+  path: string;
+  icon: LucideIcon;
+  labelKey: string;
+  tauriOnly?: boolean;
+}> = [
   { id: 'captures', path: '/captures', icon: Captions, labelKey: 'nav.captures' },
   { id: 'insights', path: '/insights', icon: ChartColumn, labelKey: 'nav.insights' },
   { id: 'models', path: '/models', icon: Box, labelKey: 'nav.models' },
+  // The report comes from a script the desktop app runs.
+  { id: 'reports', path: '/reports', icon: FileArchive, labelKey: 'nav.reports', tauriOnly: true },
   { id: 'settings', path: '/settings', icon: SlidersHorizontal, labelKey: 'nav.settings' },
 ];
 
@@ -29,6 +39,7 @@ export function Sidebar() {
   const matchRoute = useMatchRoute();
   const modelAlerts = useModelAlerts();
   const update = useUpdateCheck();
+  const isTauri = usePlatform().metadata.isTauri;
 
   return (
     <nav
@@ -38,6 +49,7 @@ export function Sidebar() {
       <img src={kassLogo} alt="Kass" className="mb-4 h-8 w-8 object-contain" />
 
       {tabs.map((tab) => {
+        if (tab.tauriOnly && !isTauri) return null;
         const Icon = tab.icon;
         const isActive = matchRoute({ to: tab.path, fuzzy: true });
         const alerts = tab.id === 'models' ? modelAlerts : undefined;

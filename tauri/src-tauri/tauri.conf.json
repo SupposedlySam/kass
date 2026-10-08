@@ -16,7 +16,8 @@
     "macOS": {
       "frameworks": [],
       "files": {
-        "Resources/kass-server": "binaries/kass-server"
+        "Resources/kass-server": "binaries/kass-server",
+        "Resources/kass-report.sh": "../../scripts/kass-report.sh"
       },
       "minimumSystemVersion": "11.0",
       "infoPlist": "Info.plist",

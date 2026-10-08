@@ -12,6 +12,7 @@ import { CommandPalette } from '@/components/CommandPalette/CommandPalette';
 import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
 import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
 import { SetupEntry } from '@/components/Onboarding/SetupEntry';
+import { ReportsTab } from '@/components/ReportsTab/ReportsTab';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
 import { RetentionAskDialog } from '@/components/ServerTab/RetentionAskDialog';
@@ -109,6 +110,13 @@ const capturesRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { capture?: string } => ({
     capture: typeof search.capture === 'string' ? search.capture : undefined,
   }),
+});
+
+// Reports route: a zip of logs and crash reports to send (desktop only).
+const reportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reports',
+  component: ReportsTab,
 });
 
 // Insights route: usage stats, for all apps or the one picked in Captures.
@@ -226,6 +234,7 @@ const routeTree = rootRoute.addChildren([
   capturesRoute,
   insightsRoute,
   modelsRoute,
+  reportsRoute,
   settingsRoute.addChildren([
     settingsGeneralRoute,
     settingsDictationRoute,
