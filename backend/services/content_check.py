@@ -5,8 +5,9 @@ sentence, fix grammar. It must not add ideas, summarize, or leave something
 out. Three rules, by comparing words (no second model):
 
 1. What the speaker said that carries meaning must survive: every number,
-   technical term, name and spoken command, and whether they said "not".
-   Losing one rejects.
+   technical term, name and spoken command, whether they said "not", who
+   does what to whom ("you ... for me" never becomes "I ... for you"), and
+   all but a few of their other words. Losing any of it rejects.
 2. Anything the cleanup added is listed for review, never rejected on its own,
    except a "not" nobody said. Formatting such as list numbers lands here.
 3. Many added words, a cleanup that is mostly (or only) words nobody said, or
@@ -53,8 +54,26 @@ _TOKEN = re.compile(r"[+-]?\d+(?:[.,]\d+)*%?|[\w'./-]*\w")
 # content words, or this share of the transcript's, whichever is larger.
 ANSWERED_WORDS = 4
 ANSWERED_SHARE = 0.5
-# A few dropped words are normal for false starts; more gets a review.
+# A word or two dropped is normal for false starts; a larger share of a short
+# take gets a review.
 MISSING_SHARE = 0.3
+# A cleanup that leaves out more than this share of the speaker's content
+# words dropped what they said: a request, a question, a sentence. Before,
+# these were reviews (over MISSING_SHARE) or passed outright, and a review
+# pastes the cleanup, so the user had to say the sentences again. A rejected
+# cleanup pastes the transcript instead, which costs only polish. Measured on
+# 149 real dictations (one speaker): this and the "person" rule below moved
+# 15 cleanups to reject. 13 had lost content ("check for comments and see if
+# you need to reply" gone, a 13-word question cut to 5, "make sure they are"
+# turned into "are we"); 2 dropped a vague trailing clause ("and all of the
+# other type things"). The one legitimate drop left was 7% ("set up" written
+# "setup").
+DROPPED_SHARE = 0.15
+# And at least this many: a short take loses a third of its content words to
+# one dropped hedge or false start ("I think it's ready" -> "It's ready").
+DROPPED_WORDS = 2
+_FIRST_PERSON = frozenset(("i", "me", "my", "mine", "myself", "i'm", "i've", "i'll", "i'd"))
+_SECOND_PERSON = frozenset(("you", "your", "yours", "yourself", "you're", "you've", "you'll", "you'd"))
 
 
 @dataclass
@@ -199,10 +218,36 @@ def check(said: str, cleaned: str, allow_retractions: bool = False) -> Verdict:
         len(added) > len(kept_content) and (len(added) >= 2 or not kept_content)
     ):
         return Verdict("reject", reason="answered", added=added, missing=missing)
+    dropped = [t for t in missing if not retracted(t)]
+    if len(dropped) >= DROPPED_WORDS and len(dropped) > DROPPED_SHARE * len(set(content_before)):
+        return Verdict("reject", reason="dropped", added=added, missing=missing)
+    if _swapped_people(before, after):
+        return Verdict("reject", reason="person", added=added, missing=missing)
     added = sorted(set(added) | set(added_numbers))
     if added or len(missing) > MISSING_SHARE * len(set(content_before)):
         return Verdict("review", added=added, missing=missing)
     return Verdict("ok")
+
+
+def _people(tokens: list[str]) -> list[int]:
+    return [1 if t in _FIRST_PERSON else 2 for t in tokens if t in _FIRST_PERSON or t in _SECOND_PERSON]
+
+
+def _swapped_people(before: list[str], after: list[str]) -> bool:
+    """Whether a "you" became "I" and an "I" became "you" in the same places.
+
+    "so that you can pull some data for me" -> "so that I can pull some data
+    for you" keeps every word, so no other rule sees it, yet it reverses who
+    asked for what. Pronouns are compared in order; only one of each turning
+    into the other counts, so a cleanup that drops or rewords a pronoun is
+    left to the other rules. In 149 real dictations it found the one real swap
+    and nothing else.
+    """
+    said, cleaned = _people(before), _people(after)
+    if len(said) != len(cleaned):
+        return False
+    changes = {(a, b) for a, b in zip(said, cleaned, strict=True) if a != b}
+    return changes == {(1, 2), (2, 1)}
 
 
 # This many consecutive output words the speaker never said, found in an

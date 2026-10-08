@@ -24,10 +24,44 @@ def test_new_words_are_listed_for_review():
     assert (verdict.outcome, verdict.added, verdict.missing) == ("review", ["slides"], [])
 
 
-def test_dropping_much_of_what_was_said_is_reviewed():
+def test_dropping_much_of_what_was_said_is_rejected():
     verdict = check("book flights hotel and a car for the trip", "Book flights for the trip.")
-    assert verdict.outcome == "review"
-    assert verdict.missing == ["car", "hotel"]
+    assert (verdict.outcome, verdict.reason, verdict.missing) == ("reject", "dropped", ["car", "hotel"])
+
+
+def test_a_dropped_request_in_a_long_dictation_is_rejected():
+    # Under MISSING_SHARE, so this used to pass as ok and paste without the second request.
+    said = (
+        "check the build server and see how far along the release is and then look through the open pull "
+        "requests for comments and tell me if anyone is waiting on a reply from us before Friday"
+    )
+    cleaned = "Check the build server and see how far along the release is before Friday."
+    verdict = check(said, cleaned)
+    assert (verdict.outcome, verdict.reason) == ("reject", "dropped")
+    assert {"comments", "reply", "waiting"} <= set(verdict.missing)
+
+
+def test_one_dropped_hedge_in_a_short_dictation_is_not_rejected():
+    # One word is a third of this take's content; DROPPED_WORDS keeps it a review, as before.
+    assert check("I think the draft is ready", "The draft is ready.").outcome == "review"
+
+
+def test_retracted_words_do_not_count_as_dropped():
+    verdict = check("move it to the blue folder actually the green folder", "Move it to the green folder.", True)
+    assert verdict.outcome == "ok"
+
+
+def test_swapping_who_does_what_is_rejected():
+    verdict = check(
+        "can you find the API keys so that you can pull the report for me",
+        "Can you find the API keys so that I can pull the report for you?",
+    )
+    assert (verdict.outcome, verdict.reason) == ("reject", "person")
+
+
+def test_rewording_a_pronoun_is_not_a_swap():
+    assert check("can you send me the notes", "Send me the notes.").reason is None
+    assert check("I want you to send the notes", "Please send the notes.").reason is None
 
 
 def test_answering_instead_of_cleaning_is_rejected():
