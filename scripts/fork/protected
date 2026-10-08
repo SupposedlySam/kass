@@ -10,3 +10,4 @@ backend/routes/speech.py
 app/src/components/Settings/ReadAloudPage.tsx
 app/src/components/Onboarding/steps/ReadAloudStep.tsx
 docs/plans/READ_ALOUD.md
+docs/READINGS.md
