@@ -272,7 +272,7 @@ export interface RefinementReview {
   outcome: 'review' | 'reject';
   added: string[];
   missing: string[];
-  reasons: ('answered' | 'negation' | 'number' | 'technical')[];
+  reasons: ('answered' | 'dropped' | 'negation' | 'number' | 'person' | 'technical')[];
 }
 
 export interface CaptureResponse {
