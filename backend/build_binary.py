@@ -233,6 +233,9 @@ def build_server():
         args.extend(["--collect-data", package])
     for distribution in ("csvw", "segments", "rdflib", "jsonschema", "language-tags"):
         args.extend(["--copy-metadata", distribution])
+    # The adapters Kass trains and ships (services/shared_adapters.py).
+    if (backend_dir / "assets" / "shared-adapters").is_dir():
+        args.extend(["--add-data", "assets/shared-adapters:backend/assets/shared-adapters"])
 
     # Project hooks override pyinstaller-hooks-contrib's.
     args.extend(["--additional-hooks-dir", str(backend_dir / "pyinstaller_hooks")])

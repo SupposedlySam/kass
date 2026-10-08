@@ -271,6 +271,7 @@ class CaptureSettingsResponse(BaseModel):
     allow_auto_paste: bool = True
     live_text: bool = False
     voice_edits: bool = True
+    expressive: bool = True
     sound_cues: bool = True
     sound_cue_volume: float = Field(default=0.5, ge=0, le=1)
     input_device_id: str | None = Field(
@@ -295,6 +296,8 @@ class CaptureSettingsResponse(BaseModel):
     speak_naturally: bool = True
     # Send anonymous daily usage counts (services/usage_report.py).
     share_usage: bool = True
+    # Start from the adapters Kass ships (services/shared_adapters.py).
+    shared_adapters: bool = True
 
     class Config:
         from_attributes = True
@@ -314,6 +317,7 @@ class CaptureSettingsUpdate(BaseModel):
     allow_auto_paste: bool | None = None
     live_text: bool | None = None
     voice_edits: bool | None = None
+    expressive: bool | None = None
     sound_cues: bool | None = None
     sound_cue_volume: float | None = Field(default=None, ge=0, le=1)
     input_device_id: str | None = Field(
@@ -334,6 +338,7 @@ class CaptureSettingsUpdate(BaseModel):
     speak_speed: float | None = Field(default=None, ge=0.5, le=2.0)
     speak_naturally: bool | None = None
     share_usage: bool | None = None
+    shared_adapters: bool | None = None
 
 
 class TakeReportRequest(BaseModel):
@@ -754,6 +759,8 @@ class DictionaryEntryModel(BaseModel):
     match_sound: bool = True
     # "spoken_fix": added by itself when the user spelled the word aloud to fix it.
     source: Literal["user", "spoken_fix"] = "user"
+    # A phrase: ``written`` is text inserted exactly where ``spoken`` is said.
+    phrase: bool = False
 
 
 class DictionaryResponse(BaseModel):
@@ -761,14 +768,15 @@ class DictionaryResponse(BaseModel):
 
 
 class DictionaryEntryCreate(BaseModel):
-    written: str = Field(max_length=1000)
+    written: str = Field(max_length=2000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] = Field(min_length=1, max_length=100)
     match_sound: bool = True
+    phrase: bool = False
 
 
 class DictionaryEntryUpdate(BaseModel):
-    written: str | None = Field(default=None, max_length=1000)
+    written: str | None = Field(default=None, max_length=2000)
     spoken: str | None = Field(default=None, max_length=1000)
     places: list[DictionaryPlace] | None = Field(default=None, min_length=1, max_length=100)
     match_sound: bool | None = None
@@ -785,6 +793,7 @@ class ResolvedDictionaryEntry(BaseModel):
     spoken: str | None = None
     created_at: datetime | None = None
     match_sound: bool = True
+    phrase: bool = False
     # A more specific place has an entry for the same word said.
     overridden: bool = False
 

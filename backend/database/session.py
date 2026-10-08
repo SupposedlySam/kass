@@ -28,6 +28,9 @@ def init_db() -> None:
     engine = create_engine(
         f"sqlite:///{_db_path}",
         connect_args={"check_same_thread": False},
+        # A failed statement's error otherwise lists its values, which hold
+        # what the user dictated, and the logs are what users send us.
+        hide_parameters=True,
     )
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -36,11 +39,13 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
     # The preset writing styles, with the global settings moved into the default.
+    from ..services.dictionary import ensure_defaults
     from ..services.styles import ensure_styles
     from ..services.writing_style import recount_if_stale
 
     with SessionLocal() as db:
         ensure_styles(db)
+        ensure_defaults(db, _db_path.with_name("dictionary-defaulted"))
         recount_if_stale(db)
 
 

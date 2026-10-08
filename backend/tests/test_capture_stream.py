@@ -813,3 +813,76 @@ async def test_finish_keeps_the_ending_the_cleanup_chose(tmp_path, monkeypatch):
     await session.run()
     session.close()
     assert session.refined.endswith("3. Do chores")
+
+
+def expressive_session(tmp_path, monkeypatch, source="dictation", **settings):
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    start = dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le", source=source)
+    return capture_stream.StreamingCapture(start, CaptureSettingsResponse(auto_refine=True, **settings), None)
+
+
+def excited_voice():
+    from backend.backends.word_timing import Word
+    from backend.services.prosody import Frames, Voice
+
+    words = [
+        Word(word, index * 0.3, index * 0.3 + 0.3) for index, word in enumerate(["we", "finally", "shipped", "it"])
+    ]
+    return Voice(Frames(np.full(120, 220.0), np.full(120, -14.0)), words)
+
+
+async def voice_ready(session):
+    async def worked_out():
+        voice = excited_voice()
+        # "finally" drawn out.
+        return voice, [dict(word="finally", at=1, stretch=4.6)]
+
+    from backend.services.prosody import Baseline
+
+    session.baseline = Baseline((7.0, 1.0), (0.0, 1.0), (-20.0, 1.0))
+    session.voice = asyncio.create_task(worked_out())
+    await session.voice
+
+
+@pytest.mark.asyncio
+async def test_a_sentence_said_with_energy_ends_with_an_exclamation_mark(tmp_path, monkeypatch):
+    session = expressive_session(tmp_path, monkeypatch)
+    await voice_ready(session)
+    assert session.express("We finally shipped it.") == "We finallyyyy shipped it!"
+    # Only a period becomes "!"; a word the cleanup changed isn't drawn out.
+    assert session.express("Did we eventually ship it?") == "Did we eventually ship it?"
+    session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "settings"),
+    [
+        # The switch is off: measured, never written.
+        ("dictation", {"expressive": False}),
+        # Without cleanup the transcript is pasted as heard.
+        ("dictation", {"auto_refine": False}),
+        # A command's words are an instruction, not the output.
+        ("command", {}),
+    ],
+)
+async def test_the_text_keeps_its_period_unless_written_how_it_was_said(tmp_path, monkeypatch, source, settings):
+    monkeypatch.setattr(config, "_data_dir", tmp_path)
+    start = dict(type="start", protocol_version=1, sample_rate=16000, channels=1, encoding="pcm_s16le", source=source)
+    session = capture_stream.StreamingCapture(start, CaptureSettingsResponse(**{"auto_refine": True, **settings}), None)
+    await voice_ready(session)
+    assert session.express("We finally shipped it.", final=True) == "We finally shipped it."
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_the_final_text_never_waits_for_how_it_was_said(tmp_path, monkeypatch):
+    session = expressive_session(tmp_path, monkeypatch)
+    from backend.services.prosody import Baseline
+
+    session.baseline = Baseline((7.0, 1.0), (0.0, 1.0), (-20.0, 1.0))
+    never = asyncio.get_running_loop().create_future()
+    session.voice = never
+    assert session.express("We finally shipped it.", final=True) == "We finally shipped it."
+    never.cancel()
+    session.close()

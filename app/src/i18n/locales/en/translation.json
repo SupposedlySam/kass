@@ -15,6 +15,7 @@
     "insights": "Insights",
     "models": "Models",
     "settings": "Settings",
+    "reports": "Reports",
     "update": {
       "label": "Restart",
       "restartingLabel": "Restarting",
@@ -119,6 +120,7 @@
       "settingsTranscription": "Settings: Transcription",
       "settingsWritingStyle": "Settings: Writing style",
       "settingsLogs": "Settings: Logs",
+      "reports": "Create a report for support",
       "setup": "Open onboarding",
       "calibrate": "Run style calibration…",
       "themeLight": "Switch to light theme",
@@ -143,7 +145,21 @@
       "description": "Kass spells it this way from now on.",
       "spelling": "Correct spelling",
       "submit": "Add",
-      "added": "Added “{{written}}” to the dictionary"
+      "added": "Added “{{written}}” to the dictionary",
+      "addFailed": "Could not add it to the dictionary"
+    },
+    "phrase": {
+      "make": "Make a phrase",
+      "title": "Make a phrase",
+      "description": "Kass writes this text whenever you say the phrase.",
+      "sameText": "Same text as your “{{spoken}}” phrase.",
+      "savesCorrection": "Your correction saves too.",
+      "submit": "Add phrase",
+      "added": "Added the phrase “{{spoken}}”",
+      "chip": "phrase",
+      "from": "from Dictionary",
+      "wroteHint": "Written by your “{{spoken}}” phrase",
+      "edit": "Edit phrase"
     },
     "feedback": {
       "report": "Teach Kass",
@@ -406,6 +422,8 @@
     "changes": {
       "title": "What changed",
       "none": "No changes",
+      "phrase_one": "{{count}} phrase",
+      "phrase_other": "{{count}} phrases",
       "removed_one": "−{{count}} word",
       "removed_other": "−{{count}} words",
       "added_one": "+{{count}} word",
@@ -458,6 +476,35 @@
       "noDictation": "No dictation",
       "today": "today"
     }
+  },
+  "reports": {
+    "title": "Reports",
+    "intro": "When something goes wrong, make a report and send it along. It's one zip with Kass's logs, crash reports and system details. It stays on your Mac until you send it.",
+    "create": "Create report",
+    "creating": "Creating…",
+    "where": "Saved to your Downloads folder.",
+    "reveal": "Show in Finder",
+    "failed": "Couldn't create the report",
+    "revealFailed": "Couldn't show the report in Finder",
+    "copyFailed": "Couldn't copy the command",
+    "contents": {
+      "title": "What's in it",
+      "logs": "Kass's logs, including the server's from the last few days",
+      "crashes": "Crash reports macOS wrote for Kass in the last 14 days",
+      "system": "Kass's version, your macOS version, chip, memory and swap, and your model and feature settings"
+    },
+    "private": {
+      "title": "Never included",
+      "body": "Your captures and their text, recorded audio, your dictionary, writing styles, correction notes and voice training data. Your user name and your Mac's name are replaced with placeholders."
+    },
+    "command": {
+      "title": "From Terminal or an AI agent",
+      "description": "The same report, without opening Kass. It works even if Kass won't start, and prints the zip's path when it's done.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "liveLogsPrefix": "Watching a problem happen?",
+    "liveLogs": "Open the live logs"
   },
   "insights": {
     "title": "Insights",
@@ -733,6 +780,13 @@
           "description": "Keep the original recording alongside every transcript."
         }
       },
+      "sharedAdapters": {
+        "title": "Kass training",
+        "toggle": {
+          "title": "Use Kass's trained models",
+          "description": "Kass ships cleanup models it trained on made-up examples, so your text reads well from your first take. Your Mac's own training builds on them. Turn this off to use the plain models."
+        }
+      },
       "voiceTraining": {
         "title": "Voice training",
         "description": "Kass trains its speech model on your own takes, with other people talking and busy rooms mixed in, so it follows your voice when it isn't quiet. Training runs while your Mac is idle, and a new version is used only when it makes fewer mistakes.",
@@ -796,6 +850,10 @@
         "selfCorrection": {
           "title": "Remove self-corrections",
           "description": "When you change your mind mid-sentence (\"actually, no...\", \"wait, I meant...\"), drop the retracted part and keep the final intent."
+        },
+        "expressive": {
+          "title": "Write how it was said",
+          "description": "Add \"!\" when you say something with energy, and draw out a word you stretch (\"wayyy\"). Kass keeps learning from your voice and edits while this is off."
         },
         "preserveTechnical": {
           "title": "Preserve technical terms",
@@ -1420,7 +1478,7 @@
   },
   "dictionary": {
     "title": "Dictionary",
-    "description": "Words dictation should get right. Pick where they apply on the left.",
+    "description": "Words dictation should get right, and phrases that write something for you. Pick where they apply on the left.",
     "scope": {
       "label": "Where words apply",
       "everywhere": "Everywhere",
@@ -1435,6 +1493,11 @@
       "styleApps_zero": "No apps use it yet",
       "styleApps_one": "{{count}} app uses it",
       "styleApps_other": "{{count}} apps use it"
+    },
+    "kind": {
+      "label": "Words or phrases",
+      "words": "Words",
+      "phrases": "Phrases"
     },
     "add": {
       "say": "When I say",
@@ -1480,6 +1543,20 @@
       "from": "From {{source}}",
       "dropped_one": "{{count}} word doesn't fit in the speech model's prompt; it's still fixed after cleanup.",
       "dropped_other": "{{count}} words don't fit in the speech model's prompt; they're still fixed after cleanup."
+    },
+    "phrases": {
+      "write": "Write exactly",
+      "sayPlaceholder": "insert my email",
+      "writePlaceholder": "you@example.com",
+      "dictate": "Say the phrase",
+      "stop": "Stop",
+      "listening": "listening",
+      "hint": "Type the phrase, click the mic, or hold <keys/> to say it. The text goes in exactly as written.",
+      "hintAnother": "Click the mic or hold <keys/> to say it another way.",
+      "hintRelease": "Let go of <keys/> to fill in the phrase.",
+      "hintTyped": "Type what you say. The text goes in exactly as written.",
+      "listTitle": "Phrases in {{scope}} · {{count}}",
+      "empty": "A phrase writes text for you when you say it: an email address, a link, a sign-off. Line breaks are kept."
     }
   },
   "appLocation": {

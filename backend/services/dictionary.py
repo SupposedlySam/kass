@@ -3,7 +3,9 @@
 An entry is a term ("Kubernetes"), which Whisper is prompted with and which
 is written the user's way after cleanup, even where Whisper heard it a little
 wrong ("Kubernetis", "cuber netes"), or a replacement, which writes ``written``
-wherever ``spoken`` was said. An entry with ``match_sound`` off is only
+wherever ``spoken`` was said. A phrase is a replacement whose ``written`` is
+text to insert exactly ("my email" → an address, a sign-off over two lines):
+it is never a term, and nothing respells it. An entry with ``match_sound`` off is only
 prompted and recased where it is spelled exactly: a name spelled aloud to fix
 it ("Meghan") never respells another that sounds like it ("Megan"). Entries belong to every app ("global"), to a
 writing style, or to one app; a dictation merges its app's, its style's and
@@ -30,6 +32,8 @@ SCOPES = ("app", "style", "global")
 SOURCES = ("user", "spoken_fix")
 MAX_ENTRIES = 1000
 MAX_LENGTH = 200
+# What a phrase writes: an address or a sign-off, longer than a word.
+MAX_PHRASE_LENGTH = 1000
 # Whisper keeps the last 223 tokens of its prompt; terms take at most this
 # many, and the earlier text the rest.
 PROMPT_TOKENS = 64
@@ -66,6 +70,8 @@ class Entry:
     group_id: str | None = None
     # Off: never swapped in for a word that only sounds like it.
     match_sound: bool = True
+    # Text inserted exactly where ``spoken`` is said; never a term.
+    phrase: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,7 @@ class Group:
     created_at: datetime | None
     match_sound: bool = True
     source: str = "user"
+    phrase: bool = False
 
 
 def _key(written: str, spoken: str | None) -> str:
@@ -289,6 +296,7 @@ class Dictionary:
     def apply(self, text: str) -> str:
         """Replacements, then terms written the user's way.
 
+        What a replacement wrote is left as written: no term respells it.
         A term is fixed where Whisper wrote it in other capitals, and where
         it heard it a little wrong: an uncommon word spelled or sounding
         close ("Kubernetis"), or the term split into words ("cuber netes").
@@ -300,13 +308,25 @@ class Dictionary:
         if not text or not (self.replacements or self.spellings):
             return text
         replace, recase, recased, heard = self._patterns()
-        if replace is not None:
-            text = replace.sub(lambda m: self.replacements.get(_normal(m.group()), m.group()), text)
-        if recase is not None:
-            text = recase.sub(lambda m: recased.get(_normal(m.group()), m.group()), text)
-        if heard is not None:
-            text = heard.fix(text)
-        return text
+
+        def fix(part: str) -> str:
+            if recase is not None:
+                part = recase.sub(lambda m: recased.get(_normal(m.group()), m.group()), part)
+            if heard is not None:
+                part = heard.fix(part)
+            return part
+
+        if replace is None:
+            return fix(text)
+        parts: list[str] = []
+        last = 0
+        for match in replace.finditer(text):
+            written = self.replacements.get(_normal(match.group()))
+            if written is None:
+                continue
+            parts += [fix(text[last : match.start()]), written]
+            last = match.end()
+        return "".join([*parts, fix(text[last:])]) if parts else fix(text)
 
 
 EMPTY = Dictionary()
@@ -349,8 +369,9 @@ def build(resolved: list[tuple[Entry, bool]], exact_spelling: bool = True) -> Di
         if entry.spoken:
             replacements.setdefault(_normal(entry.spoken), entry.written)
     # Terms before what replacements write, which Whisper needs less: the
-    # replacement fixes those whatever Whisper hears.
-    for entry in sorted(active, key=lambda e: bool(e.spoken)):
+    # replacement fixes those whatever Whisper hears. What a phrase writes is
+    # text to insert, not a word Whisper hears or a spelling to fix.
+    for entry in sorted((e for e in active if not e.phrase), key=lambda e: bool(e.spoken)):
         written = entry.written.strip()
         if _normal(written) in spellings:
             continue
@@ -416,6 +437,7 @@ def _entry(row) -> Entry:
         created_at=row.created_at,
         group_id=row.group_id or row.id,
         match_sound=row.match_sound is not False,
+        phrase=bool(row.phrase),
     )
 
 
@@ -476,6 +498,27 @@ def _clean(text: object, what: str) -> str:
     if len(cleaned) > MAX_LENGTH:
         raise ValueError(f"{what} can be at most {MAX_LENGTH} characters")
     return cleaned
+
+
+def _clean_phrase_text(text: object) -> str:
+    """What a phrase writes: its lines kept, each without stray spaces, and
+    no blank lines at either end."""
+    if not isinstance(text, str):
+        raise ValueError("What to write can't be empty")
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    if not (cleaned := "\n".join(lines)):
+        raise ValueError("What to write can't be empty")
+    if len(cleaned) > MAX_PHRASE_LENGTH:
+        raise ValueError(f"What to write can be at most {MAX_PHRASE_LENGTH} characters")
+    return cleaned
+
+
+def _clean_written(text: object, phrase: bool) -> str:
+    return _clean_phrase_text(text) if phrase else _clean(text, "What to write")
 
 
 def _clean_spoken(spoken: object) -> str | None:
@@ -573,6 +616,7 @@ def _group(rows) -> Group:
         created_at=min((row.created_at for row in rows if row.created_at), default=None),
         match_sound=first.match_sound is not False,
         source=first.source or "user",
+        phrase=bool(first.phrase),
     )
 
 
@@ -586,6 +630,7 @@ def _row(
     match_sound: bool = True,
     source: str | None = None,
     added_by: str | None = None,
+    phrase: bool = False,
 ):
     from ..database.models import DictionaryEntry
 
@@ -600,6 +645,7 @@ def _row(
         match_sound=match_sound,
         source=source,
         added_by=added_by,
+        phrase=phrase,
         created_at=created_at or datetime.utcnow(),
     )
 
@@ -624,10 +670,15 @@ def add_group(
     match_sound: bool = True,
     source: str = "user",
     added_by: str | None = None,
+    phrase: bool = False,
 ) -> Group:
+    """``phrase``: ``written`` is text to insert where ``spoken`` is said."""
     import uuid
 
-    written, spoken, places = _clean(written, "What to write"), _clean_spoken(spoken), _places(places)
+    phrase = bool(phrase)
+    written, spoken, places = _clean_written(written, phrase), _clean_spoken(spoken), _places(places)
+    if phrase and spoken is None:
+        raise ValueError("Say what writes this phrase")
     if len(list_groups(db)) >= MAX_ENTRIES:
         raise ValueError(f"Dictionaries can hold at most {MAX_ENTRIES} entries")
     key = _key(written, spoken)
@@ -648,11 +699,37 @@ def add_group(
                 bool(match_sound),
                 None if source == "user" else source,
                 added_by,
+                phrase,
             )
         )
     db.commit()
     invalidate()
     return _group(_rows(db, group_id))
+
+
+# Words every user's dictionary starts with: the app's own name, which
+# Whisper otherwise writes "Cass" or "Kas".
+DEFAULTS = ("Kass",)
+
+
+def ensure_defaults(db, marker) -> None:
+    """Add the default words once, as global entries the user can edit or
+    delete; ``marker`` is the file recording that they were added, so a
+    deleted one stays deleted. Idempotent."""
+    from ..database.models import DictionaryEntry
+
+    if marker.exists():
+        return
+    written = {row.written.casefold() for row in db.query(DictionaryEntry.written).all()}
+    for word in DEFAULTS:
+        if word.casefold() in written:
+            continue
+        try:
+            add_group(db, word, None, [Place("global")])
+        # A full dictionary, or an entry already said that way, stays as it is.
+        except ValueError:
+            db.rollback()
+    marker.touch()
 
 
 def update_group(db, group_id: str, patch: dict) -> Group | None:
@@ -662,8 +739,10 @@ def update_group(db, group_id: str, patch: dict) -> Group | None:
     if not rows:
         return None
     current = _group(rows)
-    written = _clean(patch["written"], "What to write") if patch.get("written") is not None else current.written
+    written = _clean_written(patch["written"], current.phrase) if patch.get("written") is not None else current.written
     spoken = _clean_spoken(patch["spoken"]) if "spoken" in patch else current.spoken
+    if current.phrase and spoken is None:
+        raise ValueError("Say what writes this phrase")
     places = _places(patch["places"]) if patch.get("places") is not None else list(current.places)
     match_sound = bool(patch["match_sound"]) if patch.get("match_sound") is not None else current.match_sound
     key = _key(written, spoken)
@@ -679,7 +758,7 @@ def update_group(db, group_id: str, patch: dict) -> Group | None:
         row.match_sound, row.source, row.added_by = match_sound, None, None
         row.app_name = place.app_name or row.app_name
     for place in wanted.values():
-        db.add(_row(group_id, place, written, spoken, key, current.created_at, match_sound))
+        db.add(_row(group_id, place, written, spoken, key, current.created_at, match_sound, phrase=current.phrase))
     db.commit()
     invalidate()
     return _group(_rows(db, group_id))
@@ -800,7 +879,7 @@ def add_spelled_word(
     wanted = _normal(written)
     style_id = styles_snapshot().for_app(bundle_id).id
     for entry, overridden in resolve(list_entries(db), bundle_id, style_id):
-        if not overridden and _normal(entry.written) == wanted:
+        if not overridden and not entry.phrase and _normal(entry.written) == wanted:
             return _group(_rows(db, entry.group_id or entry.id))
     try:
         return add_group(

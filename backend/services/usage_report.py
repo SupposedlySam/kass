@@ -22,6 +22,7 @@ server never sends unless ``KASS_USAGE_REPORTS=1``, and
 """
 
 import asyncio
+import json
 import logging
 import os
 import platform
@@ -39,9 +40,9 @@ from .. import __version__
 from ..database import (
     CaptureSettings as DBCaptureSettings,
     DictionaryEntry,
-    SessionLocal,
     TakeReport,
     WritingStyle,
+    session as database_session,
 )
 from . import settings as settings_service, usage_stats
 
@@ -208,6 +209,8 @@ def build_events(db: Session, row: DBCaptureSettings, start: date, end: date) ->
 
 
 def _post(events: list[dict[str, Any]]) -> bool:
+    # Exactly what leaves the Mac (less the public API key), so anyone can check it in server.log.
+    logger.info("Sending usage to %s: %s", ENDPOINT, json.dumps(events))
     try:
         response = httpx.post(ENDPOINT, json={"api_key": API_KEY, "events": events}, timeout=15)
     except httpx.HTTPError as error:
@@ -259,7 +262,8 @@ def report(db: Session, today: date | None = None, post=_post) -> int:
 def run_once() -> None:
     if not sending_allowed():
         return
-    with SessionLocal() as db:
+    # init_db binds SessionLocal after import, so look it up when the job runs.
+    with database_session.SessionLocal() as db:
         sent = report(db)
     if sent:
         logger.info("Sent %d day(s) of usage", sent)

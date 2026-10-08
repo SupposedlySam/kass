@@ -68,6 +68,20 @@ def test_live_text_is_off_until_turned_on(tmp_path):
         assert connection.execute(text("SELECT live_text FROM capture_settings")).scalar_one() == 0
 
 
+def test_expressive_text_is_on_after_upgrading(tmp_path):
+    from sqlalchemy import create_engine, text
+
+    from backend.database.migrations import run_migrations
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE capture_settings (id INTEGER PRIMARY KEY, stt_model VARCHAR)"))
+        connection.execute(text("INSERT INTO capture_settings (id, stt_model) VALUES (1, 'turbo')"))
+    run_migrations(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT expressive FROM capture_settings")).scalar_one() == 1
+
+
 def test_installs_from_before_onboarding_skip_it(tmp_path):
     from sqlalchemy import create_engine, text
 

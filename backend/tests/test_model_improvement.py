@@ -239,13 +239,13 @@ async def test_failed_personal_adapter_retries_base_and_quarantines(storage, mon
 
     monkeypatch.setattr(manager, "active_adapter", lambda *_: "/adapter")
     quarantined = []
-    monkeypatch.setattr(manager, "quarantine_adapter", quarantined.append)
+    monkeypatch.setattr(manager, "quarantine_adapter", lambda message, path=None: quarantined.append(path))
     backend = Backend()
     text, _ = await refine_transcript("open the app", RefinementFlags(), backend_override=backend)
     assert text == "Open the app."
     assert backend.generate.await_args_list[0].kwargs["adapter_path"] == "/adapter"
     assert "adapter_path" not in backend.generate.await_args_list[1].kwargs
-    assert quarantined
+    assert quarantined == ["/adapter"]
 
 
 @pytest.mark.asyncio

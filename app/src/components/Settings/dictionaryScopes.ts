@@ -152,6 +152,18 @@ export function newEntry(
   };
 }
 
+/**
+ * The body that adds a phrase: what is said, and the text it writes with
+ * its lines kept. The server tidies each line.
+ */
+export function newPhrase(
+  spoken: string,
+  written: string,
+  places: DictionaryPlaceInput[],
+): DictionaryEntryCreate {
+  return { written: written.trim(), spoken: spoken.trim(), places, phrase: true };
+}
+
 /** What a row notes beside its word: added by a spoken fix, or fixed only where spelled exactly. */
 export type EntryNote = 'spokenFix' | 'exact' | null;
 
@@ -199,6 +211,7 @@ export interface InheritedEntry {
   id: string;
   written: string;
   spoken: string | null;
+  phrase: boolean;
 }
 
 export interface InheritedGroup {
@@ -254,7 +267,22 @@ export function inheritedForStyle(
 }
 
 function inheritedEntry(entry: InheritedEntry): InheritedEntry {
-  return { id: entry.id, written: entry.written, spoken: entry.spoken };
+  return { id: entry.id, written: entry.written, spoken: entry.spoken, phrase: entry.phrase };
+}
+
+/** Words or phrases: the Dictionary page shows one kind at a time. */
+export type EntryKind = 'words' | 'phrases';
+
+export function isKind(entry: { phrase?: boolean }, kind: EntryKind): boolean {
+  return !!entry.phrase === (kind === 'phrases');
+}
+
+/** Inherited groups with only `kind`'s entries; groups left empty are dropped. */
+export function inheritedOfKind(groups: InheritedGroup[], kind: EntryKind): InheritedGroup[] {
+  return groups.flatMap((g) => {
+    const entries = g.entries.filter((entry) => isKind(entry, kind));
+    return entries.length ? [group(g.source, g.scopeId, entries)] : [];
+  });
 }
 
 /** How long ago an entry was added: minutes or hours within a day, then its date. */

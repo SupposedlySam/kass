@@ -42,6 +42,10 @@ class CaptureSettings(Base):
     # Fix the last dictation by voice ("fix that, Morgan not Megan";
     # docs/plans/VOICE_EDITS.md).
     voice_edits = Column(Boolean, nullable=False, default=True)
+    # Write "!" and drawn-out words ("wayyy") from how something was said
+    # (docs/plans/EXPRESSIVE_DICTATION.md). Off still measures and learns;
+    # it only keeps them out of the text.
+    expressive = Column(Boolean, nullable=False, default=True)
     # Chimes when dictation starts, stops or fails, played by the desktop app.
     sound_cues = Column(Boolean, nullable=False, default=True)
     sound_cue_volume = Column(Float, nullable=False, default=0.5)
@@ -82,6 +86,8 @@ class CaptureSettings(Base):
     usage_sent_through = Column(String, nullable=True)
     # Say lists, symbols and abbreviations the way a person would (services/speakable.py).
     speak_naturally = Column(Boolean, nullable=False, default=True)
+    # Start from the adapters Kass ships (services/shared_adapters.py).
+    shared_adapters = Column(Boolean, nullable=False, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -128,6 +134,9 @@ class Capture(Base):
     # The recording was deleted once its transcript was saved (services/audio_retention.py).
     # A command run from ⌘K has no recording and is not marked.
     audio_deleted = Column(Boolean, nullable=False, default=False)
+    # JSON: how it was said, per sentence (services/prosody.py), saved after
+    # the text is delivered. None until then and for unmeasured captures.
+    prosody = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -252,7 +261,8 @@ class DictionaryEntry(Base):
     """A word or phrase dictation should get right (docs/plans/DICTIONARIES.md).
 
     A term has only ``written``; a replacement writes ``written`` where
-    ``spoken`` was said.
+    ``spoken`` was said. A phrase is a replacement whose ``written`` is text
+    to insert as it is ("my email" → an address), not a word to spell.
     """
 
     __tablename__ = "dictionary_entries"
@@ -278,4 +288,7 @@ class DictionaryEntry(Base):
     # The voice edit capture that added a spelled word; deleting that capture
     # removes the entry, unless the user has edited it since.
     added_by = Column(String, nullable=True)
+    # On: ``written`` is inserted exactly, line breaks and all, and is never
+    # a term Whisper is prompted with or that respells other words.
+    phrase = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)

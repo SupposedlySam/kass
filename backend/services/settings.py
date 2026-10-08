@@ -78,4 +78,8 @@ def update_capture_settings(db: Session, patch: dict[str, Any]) -> DBCaptureSett
     _apply_patch(row, patch)
     db.commit()
     db.refresh(row)
+    if patch.get("shared_adapters") is not None:
+        from .shared_adapters import switched
+
+        switched(row.shared_adapters)
     return row

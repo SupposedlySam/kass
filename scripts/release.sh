@@ -29,6 +29,9 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Commit or stash your changes first." >&2
   exit 1
 fi
+# A shared cleanup adapter tested with other cleanup code is ignored by the
+# app (backend/services/shared_adapters.py): retrain it before releasing.
+backend/venv/bin/python scripts/shared-adapters/publish.py --check
 git fetch --tags origin
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   echo "$tag already exists." >&2

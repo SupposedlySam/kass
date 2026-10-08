@@ -16,6 +16,7 @@ import { VoiceTrainingSection } from './VoiceTrainingSection';
 
 const P = 'settings.captures.transcription';
 const R = 'settings.captures.refinement';
+const S = 'settings.captures.sharedAdapters';
 
 /** Whisper sizes, each with the speed/accuracy note shown after its name. */
 const WHISPER_MODELS: Array<{ value: WhisperModelSize; tail: string }> = [
@@ -63,9 +64,27 @@ export function TranscriptionSettingsPage() {
   const llmModel = settings?.llm_model ?? '0.6B';
   const qwen = QWEN_MODELS.find((m) => m.value === llmModel) ?? QWEN_MODELS[0];
   const selfCorrection = settings?.self_correction ?? true;
+  const expressive = settings?.expressive ?? true;
+  const sharedAdapters = settings?.shared_adapters ?? true;
 
   return (
     <>
+      <SettingSection title={t(`${S}.title`)}>
+        <SettingRow
+          title={t(`${S}.toggle.title`)}
+          description={t(`${S}.toggle.description`)}
+          htmlFor="sharedAdapters"
+          action={
+            <Toggle
+              id="sharedAdapters"
+              checked={sharedAdapters}
+              disabled={!settings}
+              onCheckedChange={(v) => update({ shared_adapters: v })}
+            />
+          }
+        />
+      </SettingSection>
+
       <SettingSection title={t(`${P}.title`)}>
         <SettingRow
           title={t(`${P}.model.title`)}
@@ -138,6 +157,20 @@ export function TranscriptionSettingsPage() {
               id="selfCorrection"
               checked={selfCorrection}
               onCheckedChange={(v) => update({ self_correction: v })}
+              disabled={!autoRefine}
+            />
+          }
+        />
+
+        <SettingRow
+          title={t(`${R}.expressive.title`)}
+          description={t(`${R}.expressive.description`)}
+          htmlFor="expressive"
+          action={
+            <Toggle
+              id="expressive"
+              checked={expressive}
+              onCheckedChange={(v) => update({ expressive: v })}
               disabled={!autoRefine}
             />
           }

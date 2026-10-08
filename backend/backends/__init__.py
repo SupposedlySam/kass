@@ -91,12 +91,16 @@ class STTBackend(Protocol):
         previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
+        alignments: list | None = None,
     ) -> str:
         """
         Transcribe in-memory audio, as ``transcribe`` does for a file.
 
         ``samples`` is mono int16 PCM, or float audio scaled to [-1, 1], at
         ``sample_rate`` Hz. No temporary file is written.
+
+        When ``alignments`` is given, the decode's word alignment
+        (backends/word_timing.py) is appended to it, or None.
 
         Returns:
             Transcribed text

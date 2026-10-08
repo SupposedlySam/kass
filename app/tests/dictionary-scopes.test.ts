@@ -8,8 +8,11 @@ import {
   entryPlaceKeys,
   inheritedForApp,
   inheritedForStyle,
+  inheritedOfKind,
+  isKind,
   looksLikeCode,
   newEntry,
+  newPhrase,
   parseScopeKey,
   placesFromKeys,
   previewWritten,
@@ -37,8 +40,18 @@ function entry(
   places: DictionaryPlace[] = [GLOBAL],
   created_at = '2026-09-28T10:00:00',
   spoken: string | null = null,
+  phrase = false,
 ): DictionaryEntry {
-  return { id: written, written, spoken, places, created_at, match_sound: true, source: 'user' };
+  return {
+    id: written,
+    written,
+    spoken,
+    places,
+    created_at,
+    match_sound: true,
+    source: 'user',
+    phrase,
+  };
 }
 
 function resolved(
@@ -55,6 +68,7 @@ function resolved(
     app_name: null,
     created_at: '2026-09-28T10:00:00',
     match_sound: true,
+    phrase: false,
     overridden: false,
   };
 }
@@ -280,5 +294,38 @@ describe('entry note', () => {
     expect(entryNote({ ...word, match_sound: false, source: 'spoken_fix' })).toBe('spokenFix');
     // Inherited rows carry no flags.
     expect(entryNote({})).toBeNull();
+  });
+});
+
+describe('phrases', () => {
+  test('a phrase keeps the lines of what it writes, and what is said', () => {
+    expect(newPhrase(' insert my email ', '\nThanks,\nMorgan\n', [GLOBAL])).toEqual({
+      written: 'Thanks,\nMorgan',
+      spoken: 'insert my email',
+      places: [GLOBAL],
+      phrase: true,
+    });
+  });
+
+  test('words and phrases are told apart', () => {
+    const word = entry('Kass');
+    const phrase = entry('you@example.com', [GLOBAL], undefined, 'insert my email', true);
+    expect([isKind(word, 'words'), isKind(word, 'phrases')]).toEqual([true, false]);
+    expect([isKind(phrase, 'words'), isKind(phrase, 'phrases')]).toEqual([false, true]);
+  });
+
+  test('inherited groups keep one kind, and drop the groups left empty', () => {
+    const groups = inheritedForStyle(
+      [
+        entry('Kass', [GLOBAL], '2026-09-01T00:00:00'),
+        entry('you@example.com', [GLOBAL], '2026-09-02T00:00:00', 'insert my email', true),
+      ],
+      { kind: 'style', styleId: 'casual' },
+    );
+    const phrases = inheritedOfKind(groups, 'phrases');
+    expect(phrases).toHaveLength(1);
+    expect(phrases[0].entries.map((e) => e.written)).toEqual(['you@example.com']);
+    expect(phrases[0].preview).toBe('you@example.com');
+    expect(inheritedOfKind(inheritedForStyle([entry('Kass')], EVERYWHERE), 'phrases')).toEqual([]);
   });
 });

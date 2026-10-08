@@ -24,6 +24,7 @@ mod keystroke_insert;
 mod login_item;
 mod overlap;
 mod read_aloud;
+mod report;
 mod server_process;
 mod server_version;
 mod sound_cues;
@@ -1672,6 +1673,8 @@ pub fn run() {
             login_item::launch_at_login_status,
             login_item::set_launch_at_login,
             login_item::open_login_items_settings,
+            report::create_report,
+            report::reveal_report,
             deep_link::take_deep_link,
             updater::update_status,
             updater::update_channel,

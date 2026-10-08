@@ -18,7 +18,7 @@ patch_huggingface_hub_offline()
 from ..services import dictionary, speech_detect
 from ..services.mlx_thread import clear_mlx_cache, run_on_mlx_thread
 from ..services.refinement import strip_stt_artifacts
-from . import WHISPER_HF_REPOS, mlx_whisper_loader, whisper_audio
+from . import WHISPER_HF_REPOS, mlx_whisper_loader, whisper_audio, word_timing
 from .base import (
     ellipsis_token_ids,
     is_model_cached,
@@ -84,6 +84,8 @@ class MLXSTTBackend:
         self.adapter = None
         # The prompt each dictionary's terms fit into, for the loaded model.
         self._term_prompts: dict[tuple[str, ...], str] = {}
+        # The loaded model's alignment heads, for word timings (word_timing.py).
+        self.alignment_heads = None
 
     def is_loaded(self) -> bool:
         """Check if model is loaded."""
@@ -131,10 +133,12 @@ class MLXSTTBackend:
         with model_load_progress(progress_model_name, is_cached):
             model_name = WHISPER_HF_REPOS.get(model_size, f"openai/whisper-{model_size}")
             logger.info("Loading MLX Whisper model %s...", model_size)
+            model_dir = local_model_path(model_name, (".safetensors", ".bin", ".npz"))
 
             # mlx_audio.stt.load, minus imports Whisper never uses; they were
             # most of the packaged server's startup load time.
-            self.model = mlx_whisper_loader.load_whisper(local_model_path(model_name, (".safetensors", ".bin", ".npz")))
+            self.model = mlx_whisper_loader.load_whisper(model_dir)
+            self.alignment_heads = word_timing.alignment_heads(model_dir)
             if adapter:
                 try:
                     from ..services.voice_training import lora
@@ -144,7 +148,7 @@ class MLXSTTBackend:
                     logger.exception("The voice model failed to load; using plain %s", model_size)
                     from ..services.model_improvement.manager import quarantine_voice
 
-                    quarantine_voice("The trained voice model failed to load and was turned off.")
+                    quarantine_voice("The trained voice model failed to load and was turned off.", adapter)
                     self.model = mlx_whisper_loader.load_whisper(
                         local_model_path(model_name, (".safetensors", ".bin", ".npz"))
                     )
@@ -207,6 +211,7 @@ class MLXSTTBackend:
         previous_text: str | None = None,
         check_speech: bool = True,
         vocabulary: Sequence[str] = (),
+        alignments: list | None = None,
     ) -> str:
         """
         Transcribe in-memory audio to text, without a temporary file.
@@ -221,6 +226,9 @@ class MLXSTTBackend:
             check_speech: Return "" without running Whisper when no voice is
                 detected; False when the caller already checked
             vocabulary: Dictionary terms, most important first
+            alignments: When given, the decode's ``word_timing.Alignment`` is
+                appended (None when there is none), for word times computed
+                later off the MLX thread. The text is unchanged.
 
         Returns:
             Transcribed text, identical to ``transcribe`` of the same audio
@@ -236,7 +244,24 @@ class MLXSTTBackend:
             previous_text,
             check_speech,
             vocabulary,
+            alignments,
         )
+
+    def _alignment(self, harvested, result, language, samples: int):
+        """The decode's word alignment, or None (several windows, an unspaced language)."""
+        try:
+            if (language or "en") in word_timing.UNSPACED:
+                return None
+            segments = getattr(result, "segments", None) or []
+            if any(segment.get("seek", 0) for segment in segments):
+                return None
+            tokenizer = self.model.get_tokenizer(language=language or "en")
+            text_tokens = [token for segment in segments for token in segment["tokens"] if token < tokenizer.eot]
+            return word_timing.alignment(harvested, text_tokens, samples // 160, tokenizer)
+        except Exception:
+            # Timings only measure; the text never waits on or fails for them.
+            logger.exception("Couldn't keep the word alignment")
+            return None
 
     def _terms_prompt(self, tokenizer, vocabulary: Sequence[str]) -> str:
         """The terms that fit Whisper's share of the prompt, as it reads them."""
@@ -250,7 +275,7 @@ class MLXSTTBackend:
         return cached
 
     async def _transcribe(
-        self, prepare_audio, language, model_size, previous_text, check_speech=True, vocabulary=()
+        self, prepare_audio, language, model_size, previous_text, check_speech=True, vocabulary=(), alignments=None
     ) -> str:
         def _transcribe_sync():
             audio = prepare_audio()
@@ -288,7 +313,12 @@ class MLXSTTBackend:
             # Inference runs with the process's default HF_HUB_OFFLINE
             # state — see the comment in MLXTTSBackend.generate for the
             # regression this revert fixes (issue #462).
-            result = self.model.generate(audio, **decode_options)
+            if alignments is None or not self.alignment_heads:
+                result = self.model.generate(audio, **decode_options)
+            else:
+                with word_timing.harvest(self.alignment_heads) as harvested:
+                    result = self.model.generate(audio, **decode_options)
+                alignments.append(self._alignment(harvested, result, language, len(audio)))
 
             if isinstance(result, str):
                 text = result

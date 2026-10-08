@@ -107,7 +107,8 @@ def load_into(model, directory: Path):
     expected = {name for name, _ in tree_flatten(model.trainable_parameters())}
     if set(weights) != expected:
         raise ValueError("The voice adapter doesn't match this speech model")
-    model.load_weights(list(weights.items()), strict=False)
+    # The shared adapter ships in float16 to halve its size; train and merge in float32.
+    model.load_weights([(name, value.astype(mx.float32)) for name, value in weights.items()], strict=False)
 
 
 def apply(model, directory: Path):

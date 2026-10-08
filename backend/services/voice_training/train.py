@@ -129,7 +129,13 @@ def train(plan: dict, directory: Path) -> dict:
     lora.save(
         model,
         destination,
-        {"model_size": "turbo", "repo": voice["repo"], "resumed_from": voice.get("resume"), "updates": updates},
+        {
+            "model_size": "turbo",
+            "repo": voice["repo"],
+            "resumed_from": voice.get("resume"),
+            "shared": voice.get("shared"),
+            "updates": updates,
+        },
     )
     report = {
         "updates": updates,

@@ -77,8 +77,11 @@ def train_adapter(plan, directory):
     parameters = {"rank": 8, "dropout": 0.0, "scale": 16.0}
     model.freeze()
     linear_to_lora_layers(model, 4, parameters)
-    if plan.get("baseline_adapter"):
-        model.load_weights(str(Path(plan["baseline_adapter"]) / "adapters.safetensors"), strict=False)
+    # The start can differ from the model in use: a new shared adapter
+    # (manager._prepare) is the start, and the personal one stays the baseline.
+    start = plan.get("start_adapter", plan.get("baseline_adapter"))
+    if start:
+        model.load_weights(str(Path(start) / "adapters.safetensors"), strict=False)
     before = {name: mx.array(value) for name, value in tree_flatten(model.trainable_parameters())}
     mx.eval(before)
     destination = directory / "adapter"
