@@ -71,7 +71,7 @@ async def test_transcribe_array_passes_the_waveform_not_a_path(stt):
     assert kind == "array"
     expected = await run_on_mlx_thread(lambda: np.array(whisper_audio.prepare_samples(samples, 48000)))
     np.testing.assert_array_equal(audio, expected)
-    assert options == {"language": "en"}
+    assert options == {"condition_on_previous_text": False, "language": "en"}
 
 
 @pytest.mark.asyncio
@@ -87,6 +87,7 @@ async def test_transcribe_array_uses_the_same_phrase_options_as_files(stt, tmp_p
         array_options
         == file_options
         == {
+            "condition_on_previous_text": False,
             "language": "en",
             "suppress_tokens": [-1, 1131],
             "initial_prompt": "We met and",
@@ -109,7 +110,7 @@ async def test_transcribe_file_is_decoded_in_process(stt, tmp_path):
     assert kind == "array"
     expected = await run_on_mlx_thread(lambda: np.array(whisper_audio.read_audio_file(path)))
     np.testing.assert_array_equal(audio, expected)
-    assert options == {}
+    assert options == {"condition_on_previous_text": False}
 
 
 @pytest.mark.asyncio
@@ -133,6 +134,21 @@ async def test_audio_without_a_voice_never_reaches_whisper(stt, monkeypatch, tmp
     # A caller that already checked, such as a streaming dictation, skips it.
     assert await stt.transcribe_array(pcm(48000, 0.5), 48000, "en", "turbo", check_speech=False) == "hello there"
     assert len(heard) == 2
+
+
+@pytest.mark.asyncio
+async def test_long_audio_windows_are_not_prompted_with_the_windows_before(stt, tmp_path):
+    """Whisper continuing earlier windows' text ends long takes in invented words.
+
+    Every call disables it, with or without a phrase prompt: a long take that
+    falls back to full-audio recognition carries earlier text and terms too.
+    """
+    write_wav(tmp_path / "w.wav", pcm(16000, 0.5), 16000)
+
+    await stt.transcribe(str(tmp_path / "w.wav"), None, "turbo")
+    await stt.transcribe_array(pcm(16000, 0.5), 16000, "en", "turbo", previous_text="We met and")
+
+    assert [options["condition_on_previous_text"] for _, _, options in stt.model.calls] == [False, False]
 
 
 @pytest.mark.asyncio
@@ -217,4 +233,4 @@ async def test_whisper_is_prompted_with_the_terms_that_fit(stt, monkeypatch):
     (_, _, phrase), (_, _, whole) = stt.model.calls
     # 1 for the period, 2 per one-word term: two fit in 6.
     assert phrase["initial_prompt"] == "Zed, Kubernetes. we met"
-    assert whole == {"language": "en", "initial_prompt": "Zed."}
+    assert whole == {"condition_on_previous_text": False, "language": "en", "initial_prompt": "Zed."}
