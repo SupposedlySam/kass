@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from . import llm as llm_service
 from .dictation_edits import apply_dictation_edits, apply_line_breaks, apply_spoken_marks
 from .laughter import is_laughter, join_laughter
+from .mlx_thread import speculative_mlx_work
 from .spelling import join_spelling, respell
 from .spoken_case import apply_spoken_case
 from .spoken_cleanup import apply_spoken_cleanup
@@ -598,7 +599,8 @@ async def load_cleanup_model(flags: RefinementFlags, model_size: str) -> None:
         from .model_improvement.manager import active_adapter
 
         adapter_path = active_adapter(model_size, flags.to_dict())
-    await prepare(model_size, adapter_path)
+    with speculative_mlx_work():
+        await prepare(model_size, adapter_path)
 
 
 # Characters per token in the cleanup prompt, measured on Qwen3's tokenizer:
@@ -648,15 +650,17 @@ async def prefill_cleanup(flags: RefinementFlags, model_size: str) -> None:
     system_prompt, examples = _prompt(flags, True, None, None)
     key = prompt_cache_key.set(_cache_key(flags))
     try:
-        await backend.generate(
-            prompt="",
-            system=system_prompt,
-            max_tokens=1,
-            temperature=0,
-            model_size=model_size,
-            examples=examples,
-            **({"adapter_path": adapter_path} if adapter_path else {}),
-        )
+        # A recognition queued meanwhile goes first: the cleanup prefills it anyway.
+        with speculative_mlx_work():
+            await backend.generate(
+                prompt="",
+                system=system_prompt,
+                max_tokens=1,
+                temperature=0,
+                model_size=model_size,
+                examples=examples,
+                **({"adapter_path": adapter_path} if adapter_path else {}),
+            )
     finally:
         prompt_cache_key.reset(key)
 

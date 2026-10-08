@@ -13,6 +13,8 @@ transform's name runs its instruction instead of the words themselves.
 import re
 import uuid
 
+from .mlx_thread import speculative_mlx_work
+
 # Longest selection a command rewrites. Generation time grows with the output,
 # and a selection this long already takes several seconds on the larger models.
 MAX_SELECTION_CHARS = 16_000
@@ -243,14 +245,15 @@ async def prefill(selection: str, model_size: str, backend_override=None) -> Non
     release only processes the instruction.
     """
     backend = backend_override or _llm()
-    await backend.generate(
-        prompt=selection_block(selection),
-        system=build_command_prompt(),
-        max_tokens=1,
-        temperature=0,
-        model_size=model_size,
-        examples=command_examples(),
-    )
+    with speculative_mlx_work():
+        await backend.generate(
+            prompt=selection_block(selection),
+            system=build_command_prompt(),
+            max_tokens=1,
+            temperature=0,
+            model_size=model_size,
+            examples=command_examples(),
+        )
 
 
 async def rewrite(selection: str, instruction: str, model_size: str, backend_override=None) -> tuple[str, str]:
