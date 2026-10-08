@@ -1,5 +1,5 @@
 import type { DictionaryEntryCreate, DictionaryPlaceInput } from '@/lib/api/types';
-import { type DiffHunk, diffWords } from './wordDiff';
+import type { DiffHunk } from './wordDiff';
 
 /** Matches the server's limit on either side of an entry. */
 const MAX_LENGTH = 200;
@@ -58,21 +58,6 @@ function swapPhrase(text: string, written: string): string {
   const lead = text.match(/^[^\p{L}\p{N}]*/u)?.[0] ?? '';
   const trail = text.slice(lead.length).match(/[^\p{L}\p{N}]*$/u)?.[0] ?? '';
   return lead + written.trim() + trail;
-}
-
-/**
- * A correction's `draft` with the word it changed to `from` spelled `to`
- * instead, wherever it made that change, so respelling a changed word for
- * the dictionary fixes the correction too.
- */
-export function respellChange(original: string, draft: string, from: string, to: string): string {
-  return diffWords(original, draft)
-    .after.map((segment) =>
-      segment.changed && selectionPhrase(segment.text) === from
-        ? swapPhrase(segment.text, to)
-        : segment.text,
-    )
-    .join('');
 }
 
 /** `text` with the phrase selected in `start`..`end` spelled `written`, keeping the punctuation around it. */

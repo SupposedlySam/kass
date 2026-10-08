@@ -11,14 +11,15 @@ import { PERSONAL_EXAMPLES_KEY } from '@/components/WritingStyle/PersonalExample
 import { apiClient } from '@/lib/api/client';
 import type { CaptureFeedbackResponse, CaptureResponse } from '@/lib/api/types';
 import { useBetaFeature } from '@/lib/betaFeatures';
+import { useAddDictionaryEntry } from '@/lib/hooks/useDictionary';
 import { useWritingStyle, WRITING_STYLE_KEY } from '@/lib/hooks/useWritingStyle';
 import { cn } from '@/lib/utils/cn';
-import { AddToDictionaryDialog, type DictionaryWord } from './AddToDictionary';
+import type { DictionaryWord } from './AddToDictionary';
 import {
   dictionaryWord,
   type PhraseDraft,
   phraseFromHunk,
-  respellChange,
+  spellingEntry,
 } from './captureDictionary';
 import { MakePhraseDialog } from './MakePhrase';
 import { type DiffHunk, diffWords } from './wordDiff';
@@ -398,15 +399,32 @@ export function EditableTranscript({
 
 /**
  * Under an edited transcript: what this round changed, an optional note and
- * Save. Shown only once the text differs from where the round started. A changed word can go
- * straight into the dictionary, which saves the correction too, with the
- * word spelled the way it was added. Words replaced by other text can
- * become a phrase, which saves the correction too.
+ * Save. Shown only once the text differs from where the round started. A changed word goes
+ * straight into the dictionary in one click, spelled as corrected and
+ * applying everywhere, and the correction saves too. Words replaced by
+ * other text can become a phrase, which saves the correction too.
  */
 export function TeachActions({ teach }: { teach: TeachState }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const notesId = useId();
-  const [word, setWord] = useState<DictionaryWord | null>(null);
+  const add = useAddDictionaryEntry();
+  const addWord = (word: DictionaryWord) => {
+    if (add.isPending) return;
+    const body = spellingEntry(word.said, word.written);
+    add.mutate(body, {
+      onSuccess: () => {
+        toast({ title: t('captures.dictionary.added', { written: body.written }) });
+        teach.save();
+      },
+      onError: (error: Error) =>
+        toast({
+          title: t('captures.dictionary.addFailed'),
+          description: error.message,
+          variant: 'destructive',
+        }),
+    });
+  };
   const [phrase, setPhrase] = useState<PhraseDraft | null>(null);
   const hunks = useMemo(
     () => (teach.changed && teach.draft !== null ? diffWords(teach.base, teach.draft).hunks : []),
@@ -420,20 +438,12 @@ export function TeachActions({ teach }: { teach: TeachState }) {
   return (
     <div className="flex flex-col gap-3.5">
       {hunks.length > 0 && (
-        <HunkList hunks={hunks} className="space-y-0.5" onAdd={setWord} onPhrase={setPhrase} />
+        <HunkList hunks={hunks} className="space-y-0.5" onAdd={addWord} onPhrase={setPhrase} />
       )}
       <MakePhraseDialog
         phrase={phrase}
         onAdded={() => teach.save()}
         onClose={() => setPhrase(null)}
-      />
-      <AddToDictionaryDialog
-        word={word}
-        onAdded={(written) => {
-          if (!word || teach.draft === null) return;
-          teach.saveText(respellChange(teach.base, teach.draft, word.written, written));
-        }}
-        onClose={() => setWord(null)}
       />
       <div className="flex flex-col gap-1.5">
         <label htmlFor={notesId} className="text-xs text-muted-foreground">
