@@ -379,9 +379,11 @@
       "rejectedTitle": "Your words were kept instead of the cleanup",
       "reasons": {
         "answered": "The cleanup looked like a reply to what you said, not a cleanup of it.",
+        "dropped": "The cleanup left out part of what you said.",
         "negation": "The cleanup changed a \"not\" or \"never\", which can flip the meaning.",
         "name": "The cleanup left out a name you said.",
         "number": "The cleanup changed a number.",
+        "person": "The cleanup swapped who does what, like \"you\" and \"me\".",
         "technical": "The cleanup changed a technical term, like a file or variable name."
       },
       "added": "May have added: {{words}}",
