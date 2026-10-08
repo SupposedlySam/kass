@@ -258,7 +258,17 @@ class MLXSTTBackend:
             if check_speech and not speech_detect.has_speech(np.asarray(audio), whisper_audio.SAMPLE_RATE):
                 return ""
 
-            decode_options = {}
+            # Audio over 30 s is decoded in windows, and by default each window
+            # is prompted with the text of the windows before it. On the last,
+            # mostly quiet window Whisper then keeps writing that text, loops,
+            # and its temperature fallback ends the take in invented words
+            # ("…special case. 포バイバイバイ"). Measured on a real 94 s take:
+            # 3 of 3 runs ended in an invented sentence with the default, 3 of
+            # 3 ended on the last spoken word without it, no words lost. It
+            # changes nothing under 30 s, where there is one window. The cost:
+            # the initial prompt (dictionary terms, earlier text) now reaches
+            # only the first window of a long take.
+            decode_options = {"condition_on_previous_text": False}
             if language:
                 decode_options["language"] = language
             tokenizer = None
