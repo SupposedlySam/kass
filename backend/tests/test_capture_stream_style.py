@@ -121,3 +121,27 @@ def test_the_app_message_prefills_its_style(tmp_path, monkeypatch):
         assert row.style_id == "chat"
         # Saved to suggest a style for the next new app of its category.
         assert row.app_category == "public.app-category.business"
+
+
+@pytest.mark.asyncio
+async def test_the_style_prefill_waits_for_the_cleanup_model_back_in_ram(monkeypatch):
+    """Faulted back in by the prefill on the MLX thread, a cold model held recognition up."""
+    from types import SimpleNamespace
+
+    from backend.routes import capture_stream as route
+
+    calls = []
+
+    async def keep_resident(reason, llm=True, stt=True):
+        calls.append(("keep_resident", llm, stt))
+
+    async def prefill(flags, model_size):
+        calls.append(("prefill", model_size))
+
+    monkeypatch.setattr(route, "keep_resident", keep_resident)
+    monkeypatch.setattr(route, "prefill_cleanup", prefill)
+    session = SimpleNamespace(flags=None, settings=SimpleNamespace(llm_model="4B"), style=SimpleNamespace(name="Chat"))
+
+    await route._prefill_style(session)
+
+    assert calls == [("keep_resident", True, False), ("prefill", "4B")]

@@ -254,7 +254,8 @@ class DictionaryEntry(Base):
     """A word or phrase dictation should get right (docs/plans/DICTIONARIES.md).
 
     A term has only ``written``; a replacement writes ``written`` where
-    ``spoken`` was said.
+    ``spoken`` was said. A phrase is a replacement whose ``written`` is text
+    to insert as it is ("my email" → an address), not a word to spell.
     """
 
     __tablename__ = "dictionary_entries"
@@ -280,4 +281,7 @@ class DictionaryEntry(Base):
     # The voice edit capture that added a spelled word; deleting that capture
     # removes the entry, unless the user has edited it since.
     added_by = Column(String, nullable=True)
+    # On: ``written`` is inserted exactly, line breaks and all, and is never
+    # a term Whisper is prompted with or that respells other words.
+    phrase = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)

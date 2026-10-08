@@ -28,6 +28,9 @@ def init_db() -> None:
     engine = create_engine(
         f"sqlite:///{_db_path}",
         connect_args={"check_same_thread": False},
+        # A failed statement's error otherwise lists its values, which hold
+        # what the user dictated, and the logs are what users send us.
+        hide_parameters=True,
     )
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -12,6 +12,7 @@ import { CommandPalette } from '@/components/CommandPalette/CommandPalette';
 import { InsightsTab } from '@/components/InsightsTab/InsightsTab';
 import { ModelsTab } from '@/components/ModelsTab/ModelsTab';
 import { SetupEntry } from '@/components/Onboarding/SetupEntry';
+import { ReportsTab } from '@/components/ReportsTab/ReportsTab';
 import { GeneralPage } from '@/components/ServerTab/GeneralPage';
 import { LogsPage } from '@/components/ServerTab/LogsPage';
 import { RetentionAskDialog } from '@/components/ServerTab/RetentionAskDialog';
@@ -111,6 +112,13 @@ const capturesRoute = createRoute({
   }),
 });
 
+// Reports route: a zip of logs and crash reports to send (desktop only).
+const reportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reports',
+  component: ReportsTab,
+});
+
 // Insights route: usage stats, for all apps or the one picked in Captures.
 const insightsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -182,8 +190,10 @@ const settingsDictionaryRoute = createRoute({
   path: '/dictionary',
   component: DictionaryPage,
   // `?scope=` is `style:<id>` or `app:<bundle id>`; none is everywhere.
-  validateSearch: (search: Record<string, unknown>): { scope?: string } => ({
+  // `?kind=phrases` shows phrases instead of words.
+  validateSearch: (search: Record<string, unknown>): { scope?: string; kind?: 'phrases' } => ({
     scope: typeof search.scope === 'string' ? search.scope : undefined,
+    kind: search.kind === 'phrases' ? 'phrases' : undefined,
   }),
 });
 
@@ -224,6 +234,7 @@ const routeTree = rootRoute.addChildren([
   capturesRoute,
   insightsRoute,
   modelsRoute,
+  reportsRoute,
   settingsRoute.addChildren([
     settingsGeneralRoute,
     settingsDictationRoute,

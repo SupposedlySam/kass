@@ -229,3 +229,22 @@ def test_the_exact_payload_is_logged_before_sending(monkeypatch, caplog):
     logged = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("Sending usage"))
     assert json.loads(logged.split(": ", 1)[1]) == posted[0]["events"]
     assert usage_report.API_KEY not in logged
+
+
+def test_run_once_opens_the_session_init_db_bound_after_import(monkeypatch):
+    """init_db rebinds SessionLocal after this module imports it (it starts as None)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.database import session as database_session
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(database_session, "SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr(usage_report, "sending_allowed", lambda: True)
+    opened = []
+    monkeypatch.setattr(usage_report, "report", lambda db: opened.append(db) or 0)
+
+    usage_report.run_once()
+
+    assert len(opened) == 1
+    engine.dispose()

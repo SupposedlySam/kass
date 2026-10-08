@@ -34,7 +34,7 @@ def common_words(monkeypatch):
     monkeypatch.setattr(phrase_seams, "_common_word", lambda word: word.casefold() in COMMON)
 
 
-def entry(scope, written, spoken=None, scope_id=None, minutes=0, match_sound=True):
+def entry(scope, written, spoken=None, scope_id=None, minutes=0, match_sound=True, phrase=False):
     return Entry(
         f"{scope}-{written}-{spoken}",
         scope,
@@ -44,6 +44,7 @@ def entry(scope, written, spoken=None, scope_id=None, minutes=0, match_sound=Tru
         spoken,
         START + timedelta(minutes=minutes),
         match_sound=match_sound,
+        phrase=phrase,
     )
 
 
@@ -98,6 +99,30 @@ def test_the_longest_spoken_phrase_wins_where_two_overlap():
     found = merged(entry("global", "Voicebox", "voice box"), entry("global", "Voicebox app", "voice box app"))
 
     assert found.apply("the voice box app") == "the Voicebox app"
+
+
+def test_a_phrase_writes_its_text_exactly_and_is_never_a_term():
+    found = merged(
+        entry("global", "you@example.com", "insert my email", phrase=True),
+        entry("global", "Thanks,\nMorgan Hunt", "sign off", phrase=True),
+        entry("global", "Kubernetes"),
+        entry("global", "Morgan"),
+    )
+
+    assert found.apply("Send it to insert my email. Sign off.") == "Send it to you@example.com. Thanks,\nMorgan Hunt."
+    # What a phrase writes is text to insert: not prompted, not a spelling.
+    assert found.terms == ("Kubernetes", "Morgan")
+    assert found.apply("you@example.com") == "you@example.com"
+
+
+def test_what_a_replacement_wrote_is_never_respelled():
+    found = merged(
+        entry("global", "kubernetis rocks", "my motto", phrase=True),
+        entry("global", "Kubernetes"),
+    )
+
+    # The term fixes what was heard, but not what the phrase wrote.
+    assert found.apply("kubernetis says my motto") == "Kubernetes says kubernetis rocks"
 
 
 def test_terms_get_their_own_capitals_unless_they_are_common_words():
@@ -321,6 +346,7 @@ def test_the_api_adds_lists_and_rejects_the_same_word_twice(client):
         "created_at": None,
         "match_sound": True,
         "source": "user",
+        "phrase": False,
     }
 
     duplicate = add(client, "VoiceBox", "Voice Box")
@@ -331,6 +357,40 @@ def test_the_api_adds_lists_and_rejects_the_same_word_twice(client):
     in_app = add(client, "voicebox", "voice box", [{"scope": "app", "scope_id": ZED, "app_name": "Zed"}])
     assert in_app.status_code == 200
     assert [e["written"] for e in client.get("/dictionary").json()["entries"]] == ["voicebox", "Voicebox"]
+
+
+def test_the_api_adds_a_phrase_that_keeps_its_lines(client):
+    added = client.post(
+        "/dictionary",
+        json={"written": "\n Thanks,  \n\n  Morgan \n", "spoken": " sign  off ", "places": GLOBAL, "phrase": True},
+    )
+    assert added.status_code == 200
+    assert (added.json()["written"], added.json()["spoken"], added.json()["phrase"]) == (
+        "Thanks,\n\nMorgan",
+        "sign off",
+        True,
+    )
+    assert dictionary.for_app(ZED).apply("Sign off") == "Thanks,\n\nMorgan"
+    # Longer than a word may be, not than a phrase may.
+    assert (
+        client.post(
+            "/dictionary", json={"written": "x" * 900, "spoken": "long one", "places": GLOBAL, "phrase": True}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/dictionary", json={"written": "x" * 1001, "spoken": "too long", "places": GLOBAL, "phrase": True}
+        ).status_code
+        == 400
+    )
+
+    # A phrase is said: it needs what you say, and keeps it.
+    assert client.post("/dictionary", json={"written": "hi", "places": GLOBAL, "phrase": True}).status_code == 400
+    patched = client.patch(f"/dictionary/{added.json()['id']}", json={"spoken": None})
+    assert patched.status_code == 400
+    edited = client.patch(f"/dictionary/{added.json()['id']}", json={"written": "Cheers,\nMorgan"})
+    assert (edited.json()["written"], edited.json()["phrase"]) == ("Cheers,\nMorgan", True)
 
 
 def test_the_api_rejects_empty_words_and_unknown_places(client):
@@ -574,16 +634,16 @@ def test_the_migration_adds_groups_to_an_existing_dictionary():
     run_migrations(engine)
 
     columns = {c["name"] for c in inspect(engine).get_columns("dictionary_entries")}
-    assert {"group_id", "match_sound", "source"} <= columns
+    assert {"group_id", "match_sound", "source", "phrase"} <= columns
     with engine.connect() as conn:
-        # An existing entry keeps matching by sound, and is the user's.
-        assert conn.execute(text("SELECT id, group_id, match_sound, source FROM dictionary_entries")).all() == [
-            ("old", None, 1, None)
+        # An existing entry keeps matching by sound, is the user's, and is a word.
+        assert conn.execute(text("SELECT id, group_id, match_sound, source, phrase FROM dictionary_entries")).all() == [
+            ("old", None, 1, None, 0)
         ]
     make = sessionmaker(bind=engine)
     with make() as db:
         [group] = dictionary.list_groups(db)
-    assert (group.match_sound, group.source) == (True, "user")
+    assert (group.match_sound, group.source, group.phrase) == (True, "user", False)
 
 
 def test_sound_matching_stays_on_outside_the_beta(client, monkeypatch):

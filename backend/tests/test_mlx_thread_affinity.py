@@ -57,6 +57,67 @@ async def test_a_job_stuck_in_line_is_logged_with_what_held_it_up(monkeypatch, c
     assert "swap_used=" in waited[0]
 
 
+@pytest.mark.asyncio
+async def test_a_recognition_goes_ahead_of_a_queued_prefill():
+    """A style prefill is a head start; recognition queued after it must not wait behind it."""
+    from backend.services.mlx_thread import speculative_mlx_work
+
+    order = []
+    started = threading.Event()
+
+    def running():
+        started.set()
+        time.sleep(0.05)
+        order.append("running")
+
+    first = run_on_mlx_thread(running)
+    await asyncio.to_thread(started.wait)
+    with speculative_mlx_work():
+        prefills = [run_on_mlx_thread(lambda n=n: order.append(f"prefill{n}")) for n in (1, 2)]
+    transcribe = run_on_mlx_thread(lambda: order.append("transcribe"))
+    await asyncio.gather(first, *prefills, transcribe)
+
+    assert order == ["running", "transcribe", "prefill1", "prefill2"]
+
+
+@pytest.mark.asyncio
+async def test_a_speculative_job_still_runs_and_reports_errors():
+    from backend.services.mlx_thread import speculative_mlx_work
+
+    def fail():
+        raise ValueError("boom")
+
+    with speculative_mlx_work():
+        assert await run_on_mlx_thread(lambda: 7) == 7
+        with pytest.raises(ValueError, match="boom"):
+            await run_on_mlx_thread(fail)
+
+
+@pytest.mark.asyncio
+async def test_style_prefill_and_load_ahead_queue_as_speculative(monkeypatch):
+    from backend.services import mlx_thread, refinement
+    from backend.services.refinement import RefinementFlags
+
+    lanes = []
+    submit = mlx_thread._mlx_executor.submit
+
+    def record(func, *args, speculative=False):
+        lanes.append(speculative)
+        return submit(func, *args, speculative=speculative)
+
+    monkeypatch.setattr(mlx_thread._mlx_executor, "submit", record)
+    backend = MLXQwenLLMBackend()
+    _install_fakes(backend, set())
+    monkeypatch.setattr(llm_service, "get_llm_model", lambda: backend)
+    monkeypatch.setattr("backend.services.model_improvement.manager.active_adapter", lambda *_: None)
+
+    await refinement.load_cleanup_model(RefinementFlags(), "0.6B")
+    await refinement.prefill_cleanup(RefinementFlags(), "0.6B")
+    await backend.generate("a", model_size="0.6B")
+
+    assert lanes == [True, True, False]
+
+
 def _install_fakes(backend, worker_threads):
     """Replace the heavy sync internals with fakes that record their thread.
 

@@ -133,6 +133,8 @@ export interface DictionaryEntry {
   /** Off: only fixed where spelled exactly, never swapped in for a word that sounds like it. */
   match_sound: boolean;
   source: DictionarySource;
+  /** A phrase: `written` is text inserted exactly, line breaks and all, where `spoken` is said. */
+  phrase: boolean;
 }
 
 /** Who added an entry: the user, or a word they spelled aloud to fix it. Editing makes it the user's. */
@@ -149,6 +151,8 @@ export interface DictionaryEntryCreate {
   /** At least one; with `global`, the server keeps only that. */
   places: DictionaryPlaceInput[];
   match_sound?: boolean;
+  /** Needs `spoken`. */
+  phrase?: boolean;
 }
 
 export interface DictionaryEntryUpdate {
@@ -168,6 +172,7 @@ export interface ResolvedDictionaryEntry {
   app_name: string | null;
   created_at: string;
   match_sound: boolean;
+  phrase: boolean;
   overridden: boolean;
 }
 
