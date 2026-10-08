@@ -137,6 +137,9 @@ pub const VERIFY_POLL_INTERVAL: Duration = Duration::from_millis(15);
 /// Polls for words typed or pasted over the selection instead: a paste can
 /// take a few hundred milliseconds to land (`clipboard::PASTE_CONSUME`).
 const TYPED_VERIFY_POLLS: u32 = 40;
+/// Reads of the selection, [`VERIFY_POLL_INTERVAL`] apart, before words are
+/// typed over it: Electron moves it a frame or two after it is set.
+const SELECTION_POLLS: u32 = 10;
 
 /// UTF-16 length of `text`, the unit AX ranges and counts use.
 pub fn utf16_len(text: &str) -> i64 {
@@ -695,6 +698,25 @@ fn rewrite<T: AxTextTarget>(
             )),
         };
     }
+    // Typed words land wherever the selection really is: an app that took
+    // the selection without moving it would get them in the wrong place.
+    // Electron moves it a frame or two later.
+    let mut selection_polls_left = SELECTION_POLLS;
+    while typed.is_some()
+        && selects
+        && target.observe().selection != Some(replaced)
+        && selection_polls_left > 0
+    {
+        selection_polls_left -= 1;
+        sleep(VERIFY_POLL_INTERVAL);
+    }
+    if typed.is_some() && selects && target.observe().selection != Some(replaced) {
+        let _ = target.set_selection(TextRange {
+            location: owned.end(),
+            length: 0,
+        });
+        return Err(LiveError::NotApplied);
+    }
     let set_ok = match typed {
         Some(type_in) => type_in(new_part),
         None => target.set_selected_text(new_part).is_ok(),
@@ -900,6 +922,21 @@ pub fn owned_before_caret<T: AxTextTarget>(
     (owned.start >= 0 && text_in(target, owned.range()).as_deref() == Some(text)).then_some(owned)
 }
 
+/// `pid`'s focused field for the log: its role, selection and length,
+/// never its text. Blocking.
+pub fn describe_focused(pid: i32) -> String {
+    let Some(element) = macos::FocusedElement::of_app(pid) else {
+        return "no focused element".into();
+    };
+    let now = element.observe();
+    format!(
+        "{:?} selection {:?} count {:?}",
+        element.role(),
+        now.selection,
+        now.char_count
+    )
+}
+
 /// [`owned_before_caret`] in `pid`'s focused element. Blocking.
 pub fn owned_before_focused(pid: i32, bundle_id: Option<&str>, text: &str) -> Option<Owned> {
     let element = macos::FocusedElement::of_app(pid)?;
@@ -984,6 +1021,21 @@ pub fn edit_owned<T: AxTextTarget>(
     type_in: TypeIn,
     sleep: impl FnMut(Duration),
 ) -> Result<Owned, EditError> {
+    let typed = (!target.is_selected_text_settable()).then_some(type_in);
+    edit_owned_with(target, owned, before, after, writes_at_caret, typed, sleep)
+}
+
+/// [`edit_owned`], with the new words typed by `typed` when it is given and
+/// written over Accessibility when not.
+fn edit_owned_with<T: AxTextTarget>(
+    target: &T,
+    owned: &Owned,
+    before: &str,
+    after: &str,
+    writes_at_caret: bool,
+    typed: Option<TypeIn>,
+    sleep: impl FnMut(Duration),
+) -> Result<Owned, EditError> {
     if !writes_at_caret {
         return Err(EditError::Unsupported);
     }
@@ -993,7 +1045,6 @@ pub fn edit_owned<T: AxTextTarget>(
     if text == owned.text {
         return Ok(owned.clone());
     }
-    let typed = (!target.is_selected_text_settable()).then_some(type_in);
     rewrite(target, owned, now, &text, true, typed, sleep).map_err(|error| match error {
         LiveError::Edited => EditError::Changed,
         LiveError::NotApplied => EditError::NotApplied,
@@ -1013,6 +1064,65 @@ pub fn edit_focused(
     let writes = writes_at_caret(pid);
     match macos::FocusedElement::of_app(pid) {
         Some(element) => edit_owned(
+            &element,
+            owned,
+            before,
+            after,
+            writes,
+            type_in,
+            std::thread::sleep,
+        ),
+        None => Err(EditError::Changed),
+    }
+}
+
+/// A correction saved in Kass, from `before` (the take as Kass last knew
+/// it) to `after`, made in the owned take. Like [`edit_owned`], but the new
+/// words are typed only with `type_in` (the app is in front and ignores
+/// Accessibility writes), and otherwise written over `AXSelectedText` (the
+/// app may be behind Kass, where nothing may be typed).
+pub fn correct_owned<T: AxTextTarget>(
+    target: &T,
+    owned: &Owned,
+    before: &str,
+    after: &str,
+    writes_at_caret: bool,
+    type_in: Option<TypeIn>,
+    sleep: impl FnMut(Duration),
+) -> Result<Owned, EditError> {
+    if type_in.is_none() && !target.is_selected_text_settable() {
+        return Err(EditError::Unsupported);
+    }
+    // From where they differ: the take's start may have been fitted to the
+    // field (a leading space, a capital), so only its end is matched.
+    let from = common_prefix(before, after);
+    let (before, after) = (&before[from..], &after[from..]);
+    if before == after {
+        return Err(EditError::Changed);
+    }
+    edit_owned_with(
+        target,
+        owned,
+        before,
+        after,
+        writes_at_caret,
+        type_in,
+        sleep,
+    )
+}
+
+/// [`correct_owned`] in the focused element of the app with `pid`, which
+/// need not be in front unless `type_in` is given. Blocking.
+pub fn correct_focused(
+    pid: i32,
+    owned: &Owned,
+    before: &str,
+    after: &str,
+    type_in: Option<TypeIn>,
+) -> Result<Owned, EditError> {
+    let writes = writes_at_caret(pid);
+    match macos::FocusedElement::of_app(pid) {
+        Some(element) => correct_owned(
             &element,
             owned,
             before,
@@ -1798,6 +1908,11 @@ mod tests {
         ranges_unreadable: bool,
         /// Every text written with `set_selected_text`.
         written: RefCell<Vec<String>>,
+        /// Setting the selection succeeds and doesn't move it.
+        ignores_selection: bool,
+        /// Reads after setting the selection before it shows (Electron).
+        selection_lag: u32,
+        pending_sel: Cell<Option<(TextRange, u32)>>,
     }
 
     impl FakeField {
@@ -1816,6 +1931,9 @@ mod tests {
                 set_calls: Cell::new(0),
                 ranges_unreadable: false,
                 written: RefCell::new(Vec::new()),
+                ignores_selection: false,
+                selection_lag: 0,
+                pending_sel: Cell::new(None),
             }
         }
 
@@ -1865,6 +1983,14 @@ mod tests {
                     self.apply_delay_reads.set(left - 1);
                 }
             }
+            if let Some((sel, left)) = self.pending_sel.get() {
+                if left == 0 {
+                    self.pending_sel.set(None);
+                    self.sel.set(sel);
+                } else {
+                    self.pending_sel.set(Some((sel, left - 1)));
+                }
+            }
             Observation {
                 selection: Some(self.sel.get()),
                 char_count: Some(self.text.borrow().len() as i64),
@@ -1889,7 +2015,11 @@ mod tests {
             if r.location < 0 || r.location + r.length > self.text.borrow().len() as i64 {
                 return Err(-25201);
             }
-            self.sel.set(r);
+            if self.selection_lag > 0 {
+                self.pending_sel.set(Some((r, self.selection_lag)));
+            } else if !self.ignores_selection {
+                self.sel.set(r);
+            }
             Ok(())
         }
         fn string_for_range(&self, r: TextRange) -> Option<String> {
@@ -2598,6 +2728,121 @@ mod tests {
         edit(&field, &owned, TAKE, "Hi Megan, see Tuesday.").unwrap();
         assert_eq!(field.contents(), "Note: Hi Megan, see Tuesday.");
         assert_eq!(field.sel.get(), range(28, 0));
+    }
+
+    // ---- corrections saved in Kass ----
+
+    fn correct(
+        field: &FakeField,
+        owned: &Owned,
+        before: &str,
+        after: &str,
+    ) -> Result<Owned, EditError> {
+        correct_owned(field, owned, before, after, true, None, |_| {})
+    }
+
+    #[test]
+    fn a_saved_correction_changes_the_take_where_kass_left_it() {
+        let (field, owned) = after_a_take();
+        // The capture's text starts differently from the field's: only
+        // where they differ is matched.
+        let owned = correct(
+            &field,
+            &owned,
+            "hi Megan, see you Tuesday.",
+            "hi Morgan, see you Tuesday.",
+        )
+        .unwrap();
+        assert_eq!(field.contents(), "Note: Hi Morgan, see you Tuesday.");
+        assert_eq!(*field.written.borrow(), vec!["Morgan".to_string()]);
+        assert_eq!(owned.text, "Hi Morgan, see you Tuesday.");
+    }
+
+    #[test]
+    fn a_correction_leaves_a_field_the_user_changed() {
+        let (field, owned) = after_a_take();
+        field.user_types(utf16_len(&field.contents()), " Bye");
+        let fixed = TAKE.replace("Megan", "Morgan");
+        assert_eq!(
+            correct(&field, &owned, TAKE, &fixed),
+            Err(EditError::Changed)
+        );
+        assert_eq!(field.contents(), format!("Note: {TAKE} Bye"));
+        assert!(field.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_correction_is_never_typed() {
+        let (mut field, owned) = after_a_take();
+        field.settable = false;
+        let fixed = TAKE.replace("Megan", "Morgan");
+        assert_eq!(
+            correct(&field, &owned, TAKE, &fixed),
+            Err(EditError::Unsupported)
+        );
+        assert_eq!(field.contents(), format!("Note: {TAKE}"));
+    }
+
+    #[test]
+    fn a_correction_for_other_text_changes_nothing() {
+        let (field, owned) = after_a_take();
+        assert_eq!(
+            correct(&field, &owned, "Bye Megan.", "Bye Morgan."),
+            Err(EditError::Changed)
+        );
+        assert_eq!(correct(&field, &owned, TAKE, TAKE), Err(EditError::Changed));
+        assert!(field.written.borrow().is_empty());
+    }
+
+    /// [`correct_owned`] typing the new words, as in an Electron app that
+    /// ignores Accessibility writes. Returns what was typed.
+    fn correct_typed(
+        field: &FakeField,
+        owned: &Owned,
+        after: &str,
+    ) -> (Result<Owned, EditError>, Vec<String>) {
+        let typed = RefCell::new(Vec::new());
+        let type_in = |text: &str| {
+            typed.borrow_mut().push(text.to_string());
+            field.apply(text);
+            true
+        };
+        let result = correct_owned(field, owned, TAKE, after, true, Some(&type_in), |_| {});
+        (result, typed.into_inner())
+    }
+
+    #[test]
+    fn a_correction_in_front_is_typed_even_where_accessibility_says_it_writes() {
+        let (mut field, owned) = after_a_take();
+        // Electron: AXSelectedText is settable, and a write is ignored.
+        field.applies = false;
+        let (result, typed) = correct_typed(&field, &owned, &TAKE.replace("Megan", "Morgan"));
+        assert_eq!(result.unwrap().text, TAKE.replace("Megan", "Morgan"));
+        assert_eq!(typed, ["Morgan"]);
+        assert_eq!(field.set_calls.get(), 0);
+        assert_eq!(field.contents(), "Note: Hi Morgan, see you Tuesday.");
+    }
+
+    #[test]
+    fn a_correction_waits_for_a_selection_that_moves_late() {
+        let (mut field, owned) = after_a_take();
+        field.applies = false;
+        field.selection_lag = 3;
+        let fixed = TAKE.replace("Hi Megan", "Hi, Megan");
+        let (result, typed) = correct_typed(&field, &owned, &fixed);
+        assert_eq!(result.unwrap().text, fixed);
+        assert_eq!(typed, [","]);
+        assert_eq!(field.contents(), format!("Note: {fixed}"));
+    }
+
+    #[test]
+    fn nothing_is_typed_where_the_selection_did_not_move() {
+        let (mut field, owned) = after_a_take();
+        field.ignores_selection = true;
+        let (result, typed) = correct_typed(&field, &owned, &TAKE.replace("Megan", "Morgan"));
+        assert_eq!(result, Err(EditError::NotApplied));
+        assert!(typed.is_empty());
+        assert_eq!(field.contents(), format!("Note: {TAKE}"));
     }
 
     #[test]

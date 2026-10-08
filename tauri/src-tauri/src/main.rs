@@ -1206,20 +1206,20 @@ pub(crate) async fn paste_final_text_with(
         .0
 }
 
-/// [`paste_final_text_with`], and with `track` the text as owned in the
-/// field where Accessibility wrote it and it reads back, for a voice edit
-/// (docs/plans/VOICE_EDITS.md).
+/// [`paste_final_text_with`], and with `track` what is known of the text in
+/// the field, for a voice edit (docs/plans/VOICE_EDITS.md) or a correction
+/// saved in Captures (docs/plans/CORRECTIONS_IN_PLACE.md).
 pub(crate) async fn paste_final_text_tracked(
     text: String,
     focus: focus_capture::FocusSnapshot,
     prepared: Option<clipboard::ClipboardSnapshot>,
     track: bool,
-) -> (Result<bool, String>, Option<text_insert::Owned>) {
+) -> (Result<bool, String>, Tracked) {
     if focus.bundle_id.as_deref() == Some(KASS_BUNDLE_ID) {
-        return (Ok(false), None);
+        return (Ok(false), Tracked::Untracked);
     }
     if !accessibility::is_trusted() {
-        return (Err(ACCESSIBILITY_REQUIRED.into()), None);
+        return (Err(ACCESSIBILITY_REQUIRED.into()), Tracked::Untracked);
     }
 
     // Only re-activate the target when the user actually left it. When it is
@@ -1249,9 +1249,9 @@ pub(crate) async fn paste_final_text_tracked(
              copy it from Captures if it is missing."
         )
     });
-    let (report, owned) = match inserted {
+    let (report, tracked) = match inserted {
         Ok(inserted) => inserted,
-        Err(message) => return (Err(message), None),
+        Err(message) => return (Err(message), Tracked::Untracked),
     };
 
     let app = focus.bundle_id.as_deref().unwrap_or("unknown app");
@@ -1270,7 +1270,7 @@ pub(crate) async fn paste_final_text_tracked(
             Err("Could not insert the dictated text into this app. Copy it from Captures.".into())
         }
     };
-    (result, owned)
+    (result, tracked)
 }
 
 const ACCESSIBILITY_REQUIRED: &str = "Accessibility permission required for auto-paste. Open System Settings → Privacy & Security → Accessibility and enable Kass.";
@@ -1341,7 +1341,7 @@ fn run_insert_chain(
     text: &str,
     prepared: Option<clipboard::ClipboardSnapshot>,
     track: bool,
-) -> (insert_chain::Report, Option<text_insert::Owned>) {
+) -> (insert_chain::Report, Tracked) {
     let bring_front = || bring_to_front(pid);
     let in_front = |inner| insert_chain::InFront {
         inner,
@@ -1368,18 +1368,29 @@ fn run_insert_chain(
         },
     );
     // Only where Accessibility wrote it can an edit be written and checked
-    // the same way (docs/plans/VOICE_EDITS.md).
-    let by_accessibility = matches!(
-        report.delivery(),
+    // the same way (docs/plans/VOICE_EDITS.md). Keys and ⌘V land a moment
+    // later; their text is read back off this path, for a correction saved
+    // in Captures (docs/plans/CORRECTIONS_IN_PLACE.md).
+    let tracked = match report.delivery() {
+        _ if !track => Tracked::Untracked,
         insert_chain::Delivery::Inserted {
             method: insert_chain::Method::Accessibility,
             ..
-        }
-    );
-    let owned = (track && by_accessibility)
-        .then(|| text_insert::owned_before_focused(pid, bundle_id, text))
-        .flatten();
-    (report, owned)
+        } => text_insert::owned_before_focused(pid, bundle_id, text)
+            .map_or(Tracked::Untracked, Tracked::Owned),
+        insert_chain::Delivery::Inserted { .. } => Tracked::Typed(text.to_string()),
+        _ => Tracked::Untracked,
+    };
+    (report, tracked)
+}
+
+/// What Kass knows of the text a take put in the field.
+pub(crate) enum Tracked {
+    Untracked,
+    /// Written over Accessibility, and read back.
+    Owned(text_insert::Owned),
+    /// This text, as fitted, went in by keys or ⌘V.
+    Typed(String),
 }
 
 /// Type or paste `text` over the selection in `pid`'s focused field, for a
@@ -1550,6 +1561,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::UpdaterState::default())
         .manage(ServerState {
@@ -1653,6 +1665,7 @@ pub fn run() {
             dictation::dictation_stop,
             read_aloud::read_aloud_stop,
             dictation::command_run,
+            dictation::corrections::apply_correction,
             dictation::list_input_devices,
             sound_cues::configure_sound_cues,
             sound_cues::preview_sound_cue,

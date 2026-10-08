@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { invoke } from '@tauri-apps/api/core';
 import { BookPlus, Check } from 'lucide-react';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +44,7 @@ export function useTeachCorrection(
   const [notes, setNotes] = useState('');
   const [learned, setLearned] = useState<CaptureFeedbackResponse | null>(null);
   const withdraws = useBetaFeature('voice_edits');
+  const correctsInPlace = useBetaFeature('corrections_in_place');
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['capture-feedback', capture.id] });
@@ -52,9 +54,36 @@ export function useTeachCorrection(
   };
 
   const save = useMutation({
-    mutationFn: (body: { expected_text: string; notes: string; replaces?: string }) =>
-      apiClient.reportCaptureOutput(capture.id, { snapshot: capture, target, ...body }),
+    mutationFn: ({
+      before: _,
+      ...body
+    }: {
+      expected_text: string;
+      notes: string;
+      replaces?: string;
+      /** The text as shown before this fix. */
+      before: string;
+    }) => apiClient.reportCaptureOutput(capture.id, { snapshot: capture, target, ...body }),
     onSuccess: (report, body) => {
+      // Fixes the text where Kass just wrote it too, if it's still as Kass
+      // left it there (docs/plans/CORRECTIONS_IN_PLACE.md). Silent unless
+      // it changed.
+      if (correctsInPlace) {
+        invoke<string | null>('apply_correction', {
+          captureId: capture.id,
+          before: body.before,
+          after: body.expected_text,
+        })
+          .then((app) => {
+            if (app === null) return;
+            toast({
+              title: app
+                ? t('captures.teach.updatedIn', { app })
+                : t('captures.teach.updatedInApp'),
+            });
+          })
+          .catch(() => {});
+      }
       // Shown at once, before the list is fetched again.
       queryClient.setQueryData<CaptureFeedbackResponse[]>(
         ['capture-feedback', capture.id],
@@ -112,8 +141,8 @@ export function useTeachCorrection(
     if (text === original || text === base || save.isPending) return;
     save.mutate(
       replaces
-        ? { expected_text: text, notes: note, replaces }
-        : { expected_text: text, notes: note },
+        ? { expected_text: text, notes: note, replaces, before: base }
+        : { expected_text: text, notes: note, before: base },
     );
   };
   /** The text as it reads now: the edit, else the saved correction, else Kass's. */
