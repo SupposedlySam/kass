@@ -1,3 +1,9 @@
 # Upstream commits this fork records as merged without taking their changes
 # (scripts/fork/sync-upstream, FORK.md). One SHA per line, then a note.
 # Add the commit as it landed on upstream/main: the squash or merge commit.
+2b159e7c3d32b5eb9ed6b08cef7f42f2b2697c08  PR #4 (rebase-merged 2026-10-05): Revert "feat: offer Read Aloud's voice as an optional onboarding step"
+3ee85d3224f293f425dda904e3af35cc4a5380f5  PR #4 (rebase-merged 2026-10-05): Revert "docs: Read Aloud in the docs, README and Unreleased changelog"
+415f5dcd9cd8bb8fe7a0a5e932c360123c54e53a  PR #4 (rebase-merged 2026-10-05): Revert "build: bundle Kokoro and its English phonemizer in the server"
+1038490da25da5da4c4a571f27b8796645e51017  PR #4 (rebase-merged 2026-10-05): Revert "feat: read the selected text aloud with its own chord"
+e87399a01b5a9f2ea0e0483b8a66390fd5bac89e  PR #4 (rebase-merged 2026-10-05): Revert "feat: speak text with Kokoro on the server, for Read Aloud"
+afc2eb6562d21425bfb02c9457b0117ec6bd5eb5  PR #4 (rebase-merged 2026-10-05): refactor: take out what's left of Read Aloud
